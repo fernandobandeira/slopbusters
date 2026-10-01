@@ -32,11 +32,14 @@ Find out what survives a merge. On GitHub, `gh api repos/<owner>/<repo> --jq '{s
 
 ## Step 2: One PR or a stack?
 
-- **One PR** when it's one logical change. Size alone doesn't decide it: the same change across 40 files is one PR, and a bug fix plus a speedup in one file is two.
-- **A stack** when the change has parts that depend on each other and each part is a logical change on its own.
+The default is one PR. A stack costs the reviewer a context switch per layer and costs you a rebase per fix, so it has to buy more review quality than that. Decide on production lines; tests don't count. They're cheap to read once the description says what each file proves, and a big test file is a reason to write a good "where to look", not to split.
+
+- **One PR** when it's one logical change, and that's true for most changes under about 400 production lines whatever their structure. The same change across 40 files is one PR. A feature with a schema change, a provider call, and a service change is still one PR if none of those parts can be judged without the others.
+- **A stack** when the change has parts that depend on each other, and each part passes the reviewer test: *someone can approve it without opening the layer above.* A provider adapter with its own tests passes. A nullable column that nothing writes yet fails, because the review question is "what writes it?", and so does a fix that only matters because of the feature it ships with.
 - **Separate PRs, not a stack**, when the parts don't depend on each other. A stack claims an order; don't invent one.
 - **Too long a stack is its own problem.** Kernel subsystems cap a series at about 15 patches. Past five or six PRs, ship the first few and stack the rest later, because reviewers put off a long stack.
-- **Don't overdo it either.** One developer once sent 500 patches against a single file. A large PR is fine if it is still one logical change.
+- **Don't overdo it either.** One developer once sent 500 patches against a single file. A large PR is fine if it is still one logical change, and a 50-line PR that can't be reviewed alone is not a layer.
+- **Lead with the recommendation you'd defend.** If one PR is right, say so, even when the user asked you to split. If you'd accept the single PR, that is your recommendation; don't bury it under a plan you like less.
 - **Never silently split someone's branch.** Propose the layers and wait for a yes.
 
 ## Step 3: Cut and build the stack
@@ -49,7 +52,7 @@ Only when Step 2 says stack. Load these on demand:
 What never changes, whichever way you cut it:
 
 - Each layer makes one logical change you can describe in one line, and builds, lints, and passes its tests with nothing above it merged.
-- Preparation (renames, moves, cleanups) goes first and alone. Moved code is moved unchanged.
+- Preparation (renames, moves, cleanups) goes first and alone when it is big enough to review alone. Moved code is moved unchanged.
 - Capability can land before its caller. Providers, models, and contracts that nothing uses yet make the safest layers, because the only question is whether they're correct. Each one has tests of its own and names the layer that calls it.
 - Docs land with the behavior they describe.
 - Fix a problem in the layer that owns it and replay upward. Never patch around it on the top branch.

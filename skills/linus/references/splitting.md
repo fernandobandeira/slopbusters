@@ -13,7 +13,7 @@ Work from the final result, not the commit history. The series you publish is al
 
 ## 2. Cut the layers
 
-Follow the dependency direction. A typical backend change cuts like this, but let the inventory decide:
+Follow the dependency direction. These are the kinds of layer a backend change can have, bottom to top. It's a menu, not a checklist: most stacks use two or three, and a concern that only makes sense next to another one shares its layer.
 
 1. **Preparation.** Renames, moves, extractions, and cleanups that change no behavior. They go first, so a functional layer can be reverted without dragging them along.
 2. **Adapters and providers.** New calls to external systems, with fakes and tests.
@@ -25,7 +25,7 @@ Follow the dependency direction. A typical backend change cuts like this, but le
 Rules:
 
 - **Each layer gets one line.** Write the stack list before moving any code. If a line needs "and also", split it or move the extra part.
-- **Don't mix kinds of change.** A security fix, a refactor, and a reformat in one diff means the fix gets missed. Each gets its own layer.
+- **Don't mix kinds of change.** A security fix, a refactor, and a reformat in one diff means the fix gets missed. Each gets its own layer. The exception is a fix that only matters because of the feature, such as a guard for a field the feature introduces: it ships with the feature, and the description points at it.
 - **Moved code is moved unchanged.** A layer that moves code doesn't edit it. The edit goes in the next layer.
 - **Land capability before its caller.** A provider, model, or contract that nothing uses yet merges without changing behavior, so its review asks one question: is it correct? Give it tests that exercise it fully, and name the calling layer in its description ("Nothing calls them yet; layer 4 does"), so bisect can still tell a broken provider from a broken caller.
 - **Keep the layer that switches things on focused.** It wires up what is below it and adds the behavior; the capability it uses is already reviewed and tested.
@@ -36,9 +36,12 @@ Rules:
 
 ## 3. Size the stack
 
-- **Layers.** Aim for 200–700 changed production lines each. A larger layer is fine when it's one concept and has a test that reads as its spec; say so in its description. A smaller one is fine when it's genuinely one idea.
-- **Count.** Three to six layers is the sweet spot. Kernel subsystems cap a series at about 15 patches; past six PRs, ship the first few and stack the rest later.
-- **Don't overdo it.** A layer that can't be described without naming the layer above it is probably half a layer. Merge it.
+- **Count production lines only.** Tests ride with the code they cover and don't count toward a layer's size.
+- **Floor.** A layer under about 100 production lines needs a reason to exist on its own, such as a migration that must deploy ahead of its writers, or a contract change with a different audience. Otherwise fold it into the layer that uses it.
+- **Ceiling.** Past about 700 production lines, look for a seam. A larger layer is fine when it's one concept and has a test that reads as its spec; say so in its description.
+- **Count.** Two or three layers is typical. Kernel subsystems cap a series at about 15 patches; past six PRs, ship the first few and stack the rest later.
+- **The reviewer test, per layer.** Can someone approve this layer without opening the one above it? If the answer is "only once you see what calls it", merge the two.
+- **Compare against one PR.** Before proposing, write the single-PR version's "where to look" paragraph. If that paragraph already makes the change easy to review, recommend the single PR.
 
 ## 4. Propose before touching git
 
