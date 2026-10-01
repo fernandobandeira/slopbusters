@@ -1,0 +1,18 @@
+{
+  "name": "slopbusters",
+  "displayName": "Slopbusters",
+  "description": "Skills that keep AI slop out of your plans, designs, and code. Works with Claude Code, Codex, Cursor, Gemini CLI, and any Agent Skills-compatible agent.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Fernando Bandeira"
+  },
+  "homepage": "https://github.com/fernandobandeira/slopbusters",
+  "repository": "https://github.com/fernandobandeira/slopbusters",
+  "keywords": [
+    "skills",
+    "ai-slop",
+    "quality",
+    "workflows"
+  ],
+  "skills": "./skills/"
+}

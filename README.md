@@ -4,29 +4,74 @@
 
 <p align="center"><em>Who you gonna prompt?</em></p>
 
-A crew of [opencode](https://opencode.ai) agents that push back on the first idea, demand evidence, and keep AI slop out of your briefs, designs, and code.
+A library of agent skills that keep AI slop out of your plans, designs, and code. Skills follow the open [Agent Skills](https://agentskills.io/specification) format, so the same skills work in Claude Code, Codex, Cursor, Gemini CLI, opencode, and any other compatible agent.
 
-## The crew
+## Install
 
-| Agent | Role |
-|-------|------|
-| **Ana** · `analyst` | Research, brainstorming, and strategy. Challenges assumptions and grounds briefs in evidence. |
-| **Archie** · `architect` | System design and ADRs. Calls out over- and under-engineering. |
-| **Ulysses** · `ux` | User research, personas, journeys, and frontend specs. |
-| **Paul** · `pm` | Turns analyst, architect, and UX findings into PRDs, roadmaps, and epics. |
-| **Dev** · `dev` | Implements tasks autonomously with TDD and ADR compliance. |
-| **SM** · `sm-reviewer` | Verifies acceptance criteria. Focused on "done", not "perfect". |
-| **Rita** · `recruiter` | Creates new agents, skills, and subagents. |
+**Claude Code**
 
-Press **Tab** in opencode to cycle between orchestrators.
+```
+/plugin marketplace add fernandobandeira/slopbusters
+/plugin install slopbusters@slopbusters
+```
 
-## What's inside
+**Codex**
 
-- `.opencode/agents/`: agent personas and subagents (`competitive-analyzer`, `knowledge-harvester`)
-- `.opencode/skills/`: thinking toolkits (`devils-advocate`, `root-cause`, `ideation`, `role-playing`, `strategic-analysis`, `user-research`, `teacher`) plus `go-best-practices` and `react-best-practices`
-- `templates/`: document templates per role (ADRs, RFCs, PRDs, personas, pitch decks, and more), plus an `AGENTS.md` to drop into your project
+```
+codex plugin marketplace add fernandobandeira/slopbusters
+codex plugin add slopbusters@slopbusters
+```
 
-## Setup
+**Gemini CLI**
 
-1. Copy `.opencode/` into your project, or into your global opencode config.
-2. Copy `templates/AGENTS.md` to your project root and follow the setup notes at the top of the file. They cover Basic Memory and the templates path.
+```
+gemini extensions install https://github.com/fernandobandeira/slopbusters
+```
+
+**Cursor, opencode, Copilot, and everything else**
+
+```
+npx skills add fernandobandeira/slopbusters
+```
+
+or, with the GitHub CLI:
+
+```
+gh skill install fernandobandeira/slopbusters
+```
+
+Both detect which agents you have installed and copy the skills into the right place.
+
+## Skills
+
+Coming soon.
+
+## Repo layout
+
+```
+skills/<name>/SKILL.md        # every skill lives here; all agents share it
+.claude-plugin/               # Claude Code plugin + marketplace
+.codex-plugin/                # Codex plugin
+.agents/plugins/              # Codex marketplace
+.cursor-plugin/               # Cursor plugin
+gemini-extension.json         # Gemini CLI extension
+archive/                      # the original opencode agents and templates, kept for reference
+```
+
+## Writing a skill
+
+1. Create `skills/<name>/SKILL.md`. The `name` must match the folder: lowercase letters, numbers, and hyphens only.
+2. Add frontmatter with `name` and `description`. Agents read the description to decide when to use the skill, so say what it does *and* when to use it.
+3. Describe actions, not tool names ("search the codebase", not "use the Grep tool"), so the skill works in every agent.
+4. Put supporting files (scripts, references, examples) next to `SKILL.md`.
+
+```markdown
+---
+name: example-skill
+description: What this skill does. Use when the user asks for X or mentions Y.
+---
+
+# Example Skill
+
+Instructions for the agent...
+```
