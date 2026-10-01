@@ -63,7 +63,9 @@ Open questions: <anything that changes the cut>
 
 ## 5. Build the layers
 
-Start from the base and build upward. For each layer, bottom to top:
+Start from the original branch's merge-base (`git merge-base <original-branch> origin/main`), not the trunk's current tip. Copying whole files from the original branch onto a newer main undoes everything merged into those files since, without any conflict to warn you. If the layers should sit on the current main, rebase the original branch onto it first, then split.
+
+For each layer, bottom to top:
 
 1. Create the layer's branch from the one below (the base, for the first). See [stacking.md](stacking.md) for the commands.
 2. Bring over only what belongs to it:
@@ -74,7 +76,7 @@ Start from the base and build upward. For each layer, bottom to top:
 4. Commit with a changelog-quality message (SKILL.md, Step 6).
 5. Repeat for the next layer.
 
-When the top layer is done, check that nothing was lost: `git diff <original-branch> <top-branch>` should be empty, or show only the deletions you made on purpose. Explain any difference to the user.
+When the top layer is done, check that nothing was lost: `git diff <original-branch> <top-branch>` should be empty, or show only the deletions you made on purpose. Then check that nothing extra came along: `git diff --stat <base> <top-branch>` should list only the original PR's files. Explain any difference to the user.
 
 ## 6. Carry over the original PR
 

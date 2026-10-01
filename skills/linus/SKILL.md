@@ -136,6 +136,19 @@ Each layer's commits are a changelog too, and in repos that squash with commit m
 - One commit per logical step, or one per layer. Squash fixups ("address review", "fix lint", "oops") into the commit they fix.
 - Add `Fixes: <sha> ("<subject>")` when a commit fixes a bug from a known commit, if the repo uses trailers.
 
+Squash onto the branch's merge-base, never onto the trunk's current tip. `git reset --soft origin/main` keeps the branch's old tree on top of a newer main, so the PR shows every change merged since as a deletion. Squash, check, and only then push:
+
+```bash
+tip=$(git rev-parse HEAD)
+base=$(git merge-base HEAD origin/main)
+git reset --soft "$base" && git commit -F message.txt
+git diff "$tip" --quiet                      # same tree as before the squash
+git diff --stat "$base" HEAD                 # matches the PR's file list, no surprise deletions
+git push --force-with-lease
+```
+
+To move the branch onto the new main as well, rebase in a separate step after the squash, and check the diff again.
+
 ## Step 7: Check, then publish
 
 Read each description as a reviewer who opens only that PR:
