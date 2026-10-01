@@ -44,7 +44,9 @@ Both detect which agents you have installed and copy the skills into the right p
 
 ## Skills
 
-Coming soon.
+| Skill | What it does |
+|-------|--------------|
+| [`unclebob`](skills/unclebob/SKILL.md) | Clean-code review in the voice of Uncle Bob. Reviews a branch, uncommitted changes, or a PR for readability, reusability, low cognitive load, and layered "stepdown" structure where high-level functions state the business rule. Also checks Arrange-Act-Assert tests. |
 
 ## Repo layout
 
