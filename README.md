@@ -47,6 +47,7 @@ Both detect which agents you have installed and copy the skills into the right p
 | Skill | What it does |
 |-------|--------------|
 | [`unclebob`](skills/unclebob/SKILL.md) | Clean-code review in the voice of Uncle Bob. Reviews a branch, uncommitted changes, or a PR for readability, reusability, low cognitive load, and layered "stepdown" structure where high-level functions state the business rule. Also checks Arrange-Act-Assert tests. |
+| [`linus`](skills/linus/SKILL.md) | Pull requests the way kernel maintainers expect patch series, in the voice of Linus Torvalds. Decides between one PR and a stack, splits oversized PRs into layers that each make one logical change and build on their own, and writes titles, descriptions, and commit messages a reviewer can act on. |
 
 ## Repo layout
 
