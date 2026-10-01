@@ -67,6 +67,7 @@ archive/                      # the original opencode agents and templates, kept
 2. Add frontmatter with `name` and `description`. Agents read the description to decide when to use the skill, so say what it does *and* when to use it.
 3. Describe actions, not tool names ("search the codebase", not "use the Grep tool"), so the skill works in every agent.
 4. Put supporting files (scripts, references, examples) next to `SKILL.md`.
+5. Bump `version` in `.codex-plugin/plugin.json`, `.cursor-plugin/plugin.json`, and `gemini-extension.json` before releasing. Codex caches plugins by version, so installed copies keep the old skills until it changes.
 
 ```markdown
 ---
