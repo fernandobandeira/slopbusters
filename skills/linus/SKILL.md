@@ -22,11 +22,13 @@ See [references/kernel-rules.md](references/kernel-rules.md) for each rule, its 
 | Request | Job |
 |---|---|
 | "Open a PR", "publish this", a finished branch | Decide one PR or a stack (Step 2), then write it (Steps 4–6). If it's a stack, Step 3 first |
-| A PR or branch that's too big, "split this", "break this down" | Step 3: plan the layers, confirm with the user, build them, then write them |
+| A PR or branch that's too big, "split this", "break this down", "should I split this?" | Step 2 first. If it stays one PR, go straight to the audit below. If it's a stack, Step 3, then write each layer |
 | "Write / rewrite the description" or "fix my commit messages" | Steps 4–6 only. Don't restructure the code unless asked |
 | Planning work that hasn't been written yet | Step 3 up front, so the code is written layer by layer |
 
 Read the whole diff before deciding anything: `git diff <base>...HEAD --stat`, then the diff, the commits, and the ticket. Count production lines and test lines separately; tests are cheaper to review.
+
+**An existing PR always gets an audit, whatever else you were asked.** Check its title, description, and commits against Steps 4–6, and end your reply with what you'd change and an offer to do it: a rewritten title, a rewritten description, and commits collapsed into changelog-quality messages where the repo keeps them. "Keep it as one PR" is half an answer; the other half is making that one PR easy to review.
 
 Find out what survives a merge. On GitHub, `gh api repos/<owner>/<repo> --jq '{squash_merge_commit_title, squash_merge_commit_message}'` tells you whether a squash keeps the PR title and body or the commit messages. Whatever survives is the permanent changelog and must read like one.
 
