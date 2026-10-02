@@ -1,0 +1,69 @@
+# Codex, Cursor, and Gemini cache plugins by version, so a skill change
+# only reaches installed copies when the version moves. This bumps the
+# patch version whenever a push to main changes skills/ without bumping
+# it by hand. Commits pushed with GITHUB_TOKEN don't trigger workflows,
+# so the bump commit doesn't loop.
+name: Bump plugin version
+
+on:
+  push:
+    branches: [main]
+    paths: ["skills/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: bump-version
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if this push already bumped the version
+        id: check
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          manifests=".codex-plugin/plugin.json .cursor-plugin/plugin.json gemini-extension.json"
+          if [ "${{ github.event_name }}" = "push" ] \
+            && git cat-file -e "$BEFORE^{commit}" 2>/dev/null \
+            && ! git diff --quiet "$BEFORE" HEAD -- $manifests; then
+            echo "Version changed in this push; nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump the patch version in every manifest
+        if: steps.check.outputs.skip != 'true'
+        id: bump
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          files = [".codex-plugin/plugin.json", ".cursor-plugin/plugin.json", "gemini-extension.json"]
+          data = {f: json.load(open(f)) for f in files}
+          current = max(tuple(map(int, d["version"].split("."))) for d in data.values())
+          version = f"{current[0]}.{current[1]}.{current[2] + 1}"
+          for f, d in data.items():
+              d["version"] = version
+              with open(f, "w") as fh:
+                  json.dump(d, fh, indent=2)
+                  fh.write("\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"version={version}\n")
+          print(f"Bumped to {version}")
+          EOF
+
+      - name: Commit and push
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Bump plugin version to ${{ steps.bump.outputs.version }}"
+          git pull --rebase origin main
+          git push origin HEAD:main
