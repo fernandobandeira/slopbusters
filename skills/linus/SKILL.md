@@ -95,6 +95,21 @@ Layer N of M. <Context and problem: what exists today and why it isn't enough, i
 
 **Not in this stack:** <adjacent work and its ticket.> (only on the layer where a reader would ask)
 
+<details>
+<summary>Recovery cases</summary>
+
+- <What happens when the provider call succeeds but the write fails, and how a retry converges.>
+- <What stays recorded after the number expires.>
+
+</details>
+
+<details>
+<summary>Verification evidence</summary>
+
+<Commands with their output summaries, sandbox run details, screenshots.>
+
+</details>
+
 ### Stack: <feature name> ([TICKET](link))
 
 Review bottom-up. Each layer builds, lints, and tests on its own.
@@ -116,7 +131,10 @@ What makes it work:
 - **Make it self-contained.** Summarize the Slack thread or ticket discussion that led here; a link alone isn't enough. Only link things that add information the description doesn't have.
 - **"Where to look" is the most useful paragraph you'll write.** A 35-file diff where 30 files are one-line guards reviews in minutes once you say so.
 - **The stack list is identical in every PR** except for the 👉 marker. A reviewer can start from any layer, and the context survives no matter which layer they read.
-- **Collapse long detail instead of cutting it.** Verification evidence, recovery cases, and design rationale go in `<details><summary>Specific label</summary>`.
+- **The default view is for deciding.** Everything visible answers "what changed, what should I check, can this merge?" Detail that only matters once you've decided to dig (recovery cases, implementation notes, design rationale, verification evidence, migration SQL) goes behind `<details>`, never deleted. Agents read collapsed sections before implementing or reviewing; humans open them when they need to.
+- **Label every collapse so the reader can tell whether to open it.** "Recovery cases", "Design rationale", "Verification evidence", "Migration plan". Not "Details" or "More".
+- **Keep a blank line after `<summary>` and before `</details>`**, or GitHub won't render the Markdown inside.
+- **Visible lines stay short.** "**Verified:**" is one line naming the commands and test files; the output and run details go in the "Verification evidence" collapse. A review question stays visible; the analysis behind it collapses.
 
 What to leave out:
 

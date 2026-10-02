@@ -74,6 +74,23 @@ Layer 2 of 5. An event's location is a physical room today, and room booking, ca
 
 **Verified:** lint, build, test typecheck, the full unit suite, and the event and booking integration tests.
 
+<details>
+<summary>Migration plan</summary>
+
+- `ALTER TYPE "LocationKind" ADD VALUE 'video'` and `ADD VALUE 'system'` on `CanceledBy`: enum additions, no table rewrite.
+- `ALTER TABLE "Event" ALTER COLUMN "roomId" DROP NOT NULL`: metadata only.
+- `CREATE TABLE "EventVideoRoom"`: new table, no readers until layer 4.
+- Old application instances never see a `video` row, because no route creates one until layer 4 and its flag.
+
+</details>
+
+<details>
+<summary>Design rationale: two enums</summary>
+
+The database enum `LocationKind` is shared by event, resource, and booking columns, and resources and bookings can never be video. Narrowing the TypeScript type per column (`MeetingLocationKind` for events, `LocationKind` for the rest) keeps the one enum in Postgres and stops a video value from type-checking where it can't occur.
+
+</details>
+
 ### Stack: video meeting rooms ([CAL-123](https://example.com/CAL-123))
 
 Review bottom-up. Each layer builds, lints, and tests on its own.
