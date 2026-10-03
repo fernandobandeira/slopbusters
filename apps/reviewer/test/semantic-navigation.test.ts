@@ -7,6 +7,78 @@ function position(source: string, word: string, line: number) {
 }
 
 describe('virtual TypeScript symbol navigation', () => {
+  it('finds interface and method implementations in files outside the import graph', () => {
+    const contract = 'export interface Runner { run(): void }\n'
+    const files = new Map([
+      ['src/contract.ts', contract],
+      [
+        'src/runner.ts',
+        "import { Runner } from './contract'\nexport class Worker implements Runner { run() {} }\n",
+      ],
+      ['src/unrelated.ts', 'export class Other { run() {} }\n'],
+    ])
+    expect(
+      navigateTypeScript(files, {
+        path: 'src/contract.ts',
+        kind: 'implementation',
+        ...position(contract, 'Runner', 1),
+      }),
+    ).toMatchObject([{ path: 'src/runner.ts', name: 'Worker', line: 2 }])
+    expect(
+      navigateTypeScript(files, {
+        path: 'src/contract.ts',
+        kind: 'implementation',
+        ...position(contract, 'run', 1),
+      }),
+    ).toMatchObject([{ path: 'src/runner.ts', name: 'run', line: 2 }])
+  })
+  it('finds usages of constants and parameters without their declarations or shadowed names', () => {
+    const source = [
+      'const count = 1',
+      'console.log(count)',
+      'function local(count: number) { return count }',
+      'console.log(count)',
+    ].join('\n')
+    const files = new Map([['src/count.ts', source]])
+    const request = { path: 'src/count.ts', ...position(source, 'count', 1) }
+    expect(
+      navigateTypeScript(files, { ...request, kind: 'references' }).map((t) => t.line),
+    ).toEqual([1, 2, 4])
+    expect(navigateTypeScript(files, { ...request, kind: 'usages' }).map((t) => t.line)).toEqual([
+      2, 4,
+    ])
+    expect(
+      navigateTypeScript(files, {
+        path: 'src/count.ts',
+        kind: 'usages',
+        ...position(source, 'count', 3),
+      }),
+    ).toMatchObject([{ path: 'src/count.ts', name: 'count', line: 3, column: 40 }])
+  })
+  it('finds imported function usages across aliases and re-exports without definitions', () => {
+    const main = "import { exported as selected } from './index'\nselected()\n"
+    const files = new Map([
+      ['src/main.ts', main],
+      ['src/index.ts', "export { implementation as exported } from './implementation'\n"],
+      ['src/implementation.ts', 'export function implementation() {}\nimplementation()\n'],
+      ['src/other.ts', "import { implementation } from './implementation'\nimplementation()\n"],
+    ])
+    const targets = navigateTypeScript(files, {
+      path: 'src/main.ts',
+      kind: 'usages',
+      ...position(main, 'selected', 2),
+    })
+    expect(targets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'src/main.ts', line: 2 }),
+        expect.objectContaining({ path: 'src/implementation.ts', line: 2 }),
+        expect.objectContaining({ path: 'src/other.ts', line: 2 }),
+      ]),
+    )
+    expect(targets).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: 'src/implementation.ts', line: 1 })]),
+    )
+  })
   it('follows imported aliases through re-exports to the original implementation', () => {
     const main = "import { exported as selected } from './index'\nselected()\n"
     const files = new Map([

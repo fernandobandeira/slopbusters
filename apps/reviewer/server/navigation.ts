@@ -64,6 +64,8 @@ export function createSourceNavigator(project: SourceProject) {
     const origin = await project.file(pull, request.side, request.path)
     const language = sourceLanguage(request.path)
     const semantic = language === 'typescript' || language === 'javascript'
+    const searchesProject = request.kind !== 'definition'
+    const searchesDeclarations = request.kind === 'definition' || request.kind === 'implementation'
     const name = selectedWord(origin.content, request.line, request.column)
     const warnings = new Set(tree.warnings)
     if (!name) return { language, mode: semantic ? 'semantic' : 'text', targets: [], warnings: [] }
@@ -122,9 +124,9 @@ export function createSourceNavigator(project: SourceProject) {
       }
       if (config) {
         projectDirectory = posix.dirname(config) === '.' ? '' : posix.dirname(config)
-        if (request.kind === 'references' && projectDirectory)
+        if (searchesProject && projectDirectory)
           warnings.add(
-            `References are scoped to the configured project in ${projectDirectory}; other projects may contain additional usages.`,
+            `Navigation is scoped to the configured project in ${projectDirectory}; other projects may contain additional locations.`,
           )
         async function optionsFrom(path: string, depth: number): Promise<ts.CompilerOptions> {
           if (depth > 8 || visited.has(path)) return {}
@@ -180,7 +182,7 @@ export function createSourceNavigator(project: SourceProject) {
           nearby(request.path, right) - nearby(request.path, left) || left.localeCompare(right),
       )
 
-    if (request.kind === 'references' || !semantic) await loadMany(candidates)
+    if (searchesProject || !semantic) await loadMany(candidates)
     if (semantic) {
       const options: ts.CompilerOptions = {
         module: ts.ModuleKind.ESNext,
@@ -230,13 +232,13 @@ export function createSourceNavigator(project: SourceProject) {
     }
 
     warnings.add(
-      request.kind === 'definition'
-        ? 'Possible definitions are matched by syntax and name. Type and scope resolution is unavailable for this language.'
+      searchesDeclarations
+        ? `Possible ${request.kind === 'implementation' ? 'implementations' : 'definitions'} are matched by syntax and name. Type and scope resolution is unavailable for this language.`
         : 'These are source matches, not semantic references; unrelated symbols can share the same name.',
     )
     const targets: NavigationTarget[] = []
     for (const [path, file] of revisions) {
-      if (request.kind === 'definition') {
+      if (searchesDeclarations) {
         for (const symbol of file.symbols) {
           if (
             symbol.name

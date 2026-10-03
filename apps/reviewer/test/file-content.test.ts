@@ -238,6 +238,36 @@ describe('file context API', () => {
         sha: pull.headSha,
         symbols: [{ name: 'helper', kind: 'function' }],
       })
+      for (const kind of ['definition', 'implementation', 'references', 'usages']) {
+        const navigation = await fetch(`${server.url}/api/pulls/${pull.id}/navigation`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            side: DiffSide.right,
+            path: 'src/helper.ts',
+            line: 1,
+            column: 17,
+            kind,
+          }),
+        })
+        expect(navigation.status).toBe(200)
+        const result = await navigation.json()
+        expect(result.mode).toBe('semantic')
+        if (kind === 'usages') expect(result.targets).toEqual([])
+        else expect(result.targets).toMatchObject([{ path: 'src/helper.ts', name: 'helper' }])
+      }
+      const invalid = await fetch(`${server.url}/api/pulls/${pull.id}/navigation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          side: DiffSide.right,
+          path: 'src/helper.ts',
+          line: 1,
+          column: 17,
+          kind: 'unknown',
+        }),
+      })
+      expect(invalid.status).toBe(400)
     } finally {
       await server.close()
       rmSync(directory, { recursive: true, force: true })

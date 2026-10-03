@@ -12,6 +12,7 @@ import { organizePull } from './organize'
 import { getAppStatus } from './toolStatus'
 import { fetchDiscussions, replyToThread } from './discussions'
 import { createSourceNavigator } from './navigation'
+import { navigationKinds } from '../shared/navigation'
 import { createFileContentLoader, createSourceProjectLoader } from './fileContent'
 import { configureSourceAssetsDirectory } from './treeSymbols'
 
@@ -150,7 +151,7 @@ export async function startReviewerServer(
         path: z.string().min(1).max(2000),
         line: z.number().int().positive().max(1_000_000),
         column: z.number().int().positive().max(1_000_000),
-        kind: z.enum(['definition', 'references']),
+        kind: z.enum(navigationKinds),
       })
       .strict()
       .parse(request.body)

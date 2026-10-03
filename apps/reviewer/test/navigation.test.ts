@@ -24,6 +24,40 @@ const request: NavigationRequest = {
 }
 
 describe('revision source navigation', () => {
+  it('loads the project for implementations and usages, and uses the selected revision', async () => {
+    const loader = project({
+      'src/contract.ts': 'export interface Runner { run(): void }',
+      'src/worker.ts':
+        "import { Runner } from './contract'\nexport class Worker implements Runner { run() {} }",
+      'src/value.ts': 'export const count = 1\nconsole.log(count)',
+      'src/other.ts': "import { count } from './value'\nconsole.log(count)",
+    })
+    const navigate = createSourceNavigator(loader)
+    const implementations = await navigate(fixturePull(), {
+      ...request,
+      side: DiffSide.left,
+      path: 'src/contract.ts',
+      line: 1,
+      column: 18,
+      kind: 'implementation',
+    })
+    expect(implementations.targets).toMatchObject([{ path: 'src/worker.ts', name: 'Worker' }])
+    expect(loader.file.mock.calls.every((call) => call[1] === DiffSide.left)).toBe(true)
+    const usages = await navigate(fixturePull(), {
+      ...request,
+      path: 'src/value.ts',
+      line: 1,
+      column: 14,
+      kind: 'usages',
+    })
+    expect(usages.targets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'src/other.ts', line: 2 }),
+        expect.objectContaining({ path: 'src/value.ts', line: 2 }),
+      ]),
+    )
+    expect(usages.targets.some((t) => t.path === 'src/value.ts' && t.line === 1)).toBe(false)
+  })
   it('loads imported related files at the same saved side and resolves the actual definition', async () => {
     const loader = project({
       'src/use.ts': "import { run } from './service'\nrun()",

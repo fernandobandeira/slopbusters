@@ -79,18 +79,6 @@
 .source-context-navigation > span:first-child {
   flex: 1;
 }
-.source-context-navigation button {
-  font-size: 12px;
-  cursor: pointer;
-  color: var(--foreground);
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-.source-context-navigation button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
 .source-context-body {
   display: flex;
   flex: 1;
@@ -134,6 +122,41 @@
 .source-context-warnings {
   font-size: 11px;
   color: var(--muted-foreground);
+}
+.symbol-context-positioner {
+  z-index: 100;
+}
+.symbol-context-menu {
+  min-width: 210px;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 5px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  box-shadow: 0 8px 28px #0004;
+  font-size: 12px;
+  outline: none;
+}
+.symbol-context-name {
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.symbol-context-menu [role='menuitem'] {
+  padding: 7px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  outline: none;
+}
+.symbol-context-menu [role='menuitem'][data-highlighted] {
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
 @media (max-width: 700px) {
   .source-context-body {

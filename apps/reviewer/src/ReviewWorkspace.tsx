@@ -29,6 +29,9 @@ import { diffItems } from './diffItems'
 import { displayPullWithContext, CONTEXT_STEP, MAX_CONTEXT } from './displayContext'
 import { useFileContext } from './useFileContext'
 import { SourceContextDialog } from './SourceContextDialog'
+import { useSymbolContextMenu } from './useSymbolContextMenu'
+import type { SymbolSelection } from './symbolSelection'
+import type { NavigationKind } from '../shared/navigation'
 import { annotateDiscussions, discussionGroup, type LineDiscussion } from './discussions'
 import { InlineDiscussion, ThreadDiscussion } from './InlineDiscussion'
 import { DiscussionsTray } from './DiscussionsTray'
@@ -94,7 +97,14 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
   const fileContext = useFileContext(pull.id)
   const loadFileContext = fileContext.load
   const [contextLines, setContextLines] = useState(() => new Map<string, number>())
-  const [sourceFileId, setSourceFileId] = useState<string>()
+  const [sourceSelection, setSourceSelection] = useState<
+    SymbolSelection & { kind: NavigationKind }
+  >()
+  const sourceFileId = sourceSelection?.fileId
+  const symbolMenu = useSymbolContextMenu((kind, symbol) => {
+    setSourceSelection({ ...symbol, kind })
+    if (symbol.fileId) void fileContext.load(symbol.fileId).catch(() => {})
+  })
   const [searchParams, setSearchParams] = useSearchParams()
   const unviewedOnly = searchParams.get('unviewed') === '1'
   const view = readReviewView(searchParams)
@@ -724,7 +734,6 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
                             {fileContext.isLoading(file.id) ? 'Loading…' : `+${CONTEXT_STEP} context`}
                           </button>
                           {(contextLines.get(file.id) ?? 0) > 0 && <button type="button" onClick={() => setContextLines((values) => { const next = new Map(values); next.delete(file.id); return next })}>Reset</button>}
-                          <button type="button" onClick={() => { setSourceFileId(file.id); void fileContext.load(file.id).catch(() => {}) }}>Browse source</button>
                         <label className="file-viewed">
                           <input
                             type="checkbox"
@@ -792,6 +801,13 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
                       // Pierre owns filenames inside its shadow root; its render callback keeps
                       // their controls aligned with the current virtualized item and collapse state.
                       onPostRender: (node, _instance, _phase, context) => {
+                        const file = pull.files.find((file) => file.id === context.item.id)
+                        if (file)
+                          symbolMenu.bind(node, {
+                            path: file.path,
+                            previousPath: file.previousPath,
+                            fileId: file.id,
+                          })
                         const filename = node.shadowRoot?.querySelector<HTMLElement>('[data-title]')
                         if (!filename) return
                         filename.setAttribute('role', 'button')
@@ -810,6 +826,8 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
                       themeType: resolvedTheme,
                       diffStyle: split ? 'split' : 'unified',
                       overflow: 'wrap',
+                      // Request token coordinates for symbol context menus.
+                      onTokenClick: () => {},
                       enableLineSelection: true,
                       enableGutterUtility: true,
                       onLineNumberClick: (props, context) => {
@@ -997,7 +1015,19 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
         filter={inboxFilter}
         onClose={() => setStackOpen(false)}
       />
-      <SourceContextDialog key={`${pull.id}/${sourceFileId ?? ''}`} pull={pull} fileId={sourceFileId} content={sourceFileId ? fileContext.contents.get(sourceFileId) : undefined} error={sourceFileId ? fileContext.error(sourceFileId) : undefined} onRetry={() => { if (sourceFileId) void fileContext.load(sourceFileId).catch(() => {}) }} onClose={() => setSourceFileId(undefined)} />
+      {symbolMenu.menu}
+      <SourceContextDialog
+        key={`${pull.id}/${sourceFileId ?? ''}/${sourceSelection?.side}/${sourceSelection?.line}/${sourceSelection?.column}/${sourceSelection?.kind}`}
+        pull={pull}
+        fileId={sourceFileId}
+        initialSelection={sourceSelection}
+        content={sourceFileId ? fileContext.contents.get(sourceFileId) : undefined}
+        error={sourceFileId ? fileContext.error(sourceFileId) : undefined}
+        onRetry={() => {
+          if (sourceFileId) void fileContext.load(sourceFileId).catch(() => {})
+        }}
+        onClose={() => setSourceSelection(undefined)}
+      />
       <PullStatusDialog
         url={statusOpen ? pull.url : undefined}
         status={pullStatus.status}

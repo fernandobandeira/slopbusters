@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { CodeViewHandle } from '@pierre/diffs/react'
-import type { TokenEventBase } from '@pierre/diffs'
-import type { NavigationResult } from '../shared/navigation'
+import { navigationLabels, type NavigationKind, type NavigationResult } from '../shared/navigation'
+import { clickedSymbol, type SymbolSelection } from './symbolSelection'
+import { useSymbolContextMenu } from './useSymbolContextMenu'
 import type { PullFileContent, RevisionFileContent, SourceTree } from '../shared/fileContent'
 import { DiffSide, type PullRequest } from '../shared/types'
 import {
@@ -19,6 +20,7 @@ import './sourceContext.css'
 interface Props {
   pull: PullRequest
   fileId?: string
+  initialSelection?: SymbolSelection & { kind: NavigationKind }
   content?: PullFileContent
   error?: string
   onRetry: () => void
@@ -29,40 +31,36 @@ interface SourceVisit {
   line: number
 }
 
-function clickedToken(props: TokenEventBase, event: MouseEvent) {
-  const owner = props.tokenElement.ownerDocument
-  const root = props.tokenElement.getRootNode()
-  const caret = owner.caretPositionFromPoint(event.clientX, event.clientY, {
-    shadowRoots: root instanceof ShadowRoot ? [root] : [],
-  })
-  let offset = 0
-  if (caret && props.tokenElement.contains(caret.offsetNode)) {
-    const range = owner.createRange()
-    range.selectNodeContents(props.tokenElement)
-    range.setEnd(caret.offsetNode, caret.offset)
-    offset = range.toString().length
-  }
-  return {
-    line: props.lineNumber,
-    column: props.lineCharStart + offset + 1,
-    text: props.tokenText.trim(),
-  }
-}
-
-export function SourceContextDialog({ pull, fileId, content, error, onRetry, onClose }: Props) {
+export function SourceContextDialog({
+  pull,
+  fileId,
+  initialSelection,
+  content,
+  error,
+  onRetry,
+  onClose,
+}: Props) {
   const { themeId, resolvedTheme } = useReviewerTheme()
   const viewer = useRef<CodeViewHandle<undefined, undefined>>(null)
-  const [side, setSide] = useState<'old' | 'new'>('new')
-  const [line, setLine] = useState('1')
+  const [side, setSide] = useState<'old' | 'new'>(
+    initialSelection?.side === DiffSide.left ? 'old' : 'new',
+  )
+  const [line, setLine] = useState(String(initialSelection?.line ?? 1))
   const [visits, setVisits] = useState<SourceVisit[]>([])
   const [tree, setTree] = useState<SourceTree>()
   const [search, setSearch] = useState('')
   const [browse, setBrowse] = useState(false)
   const [busy, setBusy] = useState(false)
   const [sourceError, setSourceError] = useState('')
-  const [token, setToken] = useState<{ line: number; column: number; text: string }>()
+  const [token, setToken] = useState<{ line: number; column: number; text: string } | undefined>(
+    initialSelection,
+  )
   const [navigation, setNavigation] = useState<NavigationResult>()
+  const [navigationKind, setNavigationKind] = useState<NavigationKind>(
+    initialSelection?.kind ?? 'definition',
+  )
   const requestVersion = useRef(0)
+  const initialStarted = useRef(false)
   const savedRevision = content?.[side] ?? content?.old ?? content?.new
   const revision = visits.at(-1)?.file ?? savedRevision
   const actualSide = savedRevision === content?.old ? DiffSide.left : DiffSide.right
@@ -72,6 +70,7 @@ export function SourceContextDialog({ pull, fileId, content, error, onRetry, onC
   )
   const targetLine =
     visits.at(-1)?.line ??
+    initialSelection?.line ??
     (actualSide === DiffSide.right ? initialLine?.newLine : initialLine?.oldLine) ??
     1
   const sourceId = revision ? `${revision.sha}:${revision.path}` : ''
@@ -123,6 +122,7 @@ export function SourceContextDialog({ pull, fileId, content, error, onRetry, onC
   useEffect(
     () => () => {
       requestVersion.current++
+      initialStarted.current = false
     },
     [],
   )
@@ -144,12 +144,13 @@ export function SourceContextDialog({ pull, fileId, content, error, onRetry, onC
       if (version === requestVersion.current) setBusy(false)
     }
   }
-  async function navigate(kind: 'definition' | 'references', selection = token) {
+  async function navigate(kind: NavigationKind, selection = token) {
     if (!revision || !selection) return
     const version = ++requestVersion.current
     setBusy(true)
     setSourceError('')
     setNavigation(undefined)
+    setNavigationKind(kind)
     try {
       const result = await api<NavigationResult>(
         `/pulls/${encodeURIComponent(pull.id)}/navigation`,
@@ -164,13 +165,30 @@ export function SourceContextDialog({ pull, fileId, content, error, onRetry, onC
           }),
         },
       )
-      if (version === requestVersion.current) setNavigation(result)
+      if (version !== requestVersion.current) return
+      setNavigation(result)
+      if (kind === 'definition' && result.targets.length === 1) {
+        const target = result.targets[0]!
+        await openSource(target.path, target.line)
+      }
     } catch (failure) {
       if (version === requestVersion.current) setSourceError(message(failure))
     } finally {
       if (version === requestVersion.current) setBusy(false)
     }
   }
+  const symbolMenu = useSymbolContextMenu((kind, selected) => {
+    setToken(selected)
+    void navigate(kind, selected)
+  })
+  const navigateInitial = useEffectEvent(() => {
+    if (initialSelection) void navigate(initialSelection.kind, initialSelection)
+  })
+  useEffect(() => {
+    if (!savedRevision || !initialSelection || initialStarted.current) return
+    initialStarted.current = true
+    navigateInitial()
+  }, [savedRevision, initialSelection])
   return (
     <Dialog
       open={Boolean(fileId)}
@@ -182,8 +200,8 @@ export function SourceContextDialog({ pull, fileId, content, error, onRetry, onC
         <DialogHeader>
           <DialogTitle>{revision?.path ?? file?.path ?? 'Source'}</DialogTitle>
           <DialogDescription>
-            Explore this review's saved source. Select a symbol for definitions or references;
-            return to the diff to comment.
+            Right-click a symbol for definitions, implementations, references, or usages; return to
+            the diff to comment.
           </DialogDescription>
         </DialogHeader>
         {(error || sourceError) && (
@@ -277,27 +295,13 @@ export function SourceContextDialog({ pull, fileId, content, error, onRetry, onC
                 Back to diff
               </button>
             </div>
-            <div className="source-context-navigation">
+            <div className="source-context-navigation" role="status">
               <span>
                 {token
-                  ? `${token.text} · ${token.line}:${token.column}`
-                  : 'Select a code token or Cmd/Ctrl-click for its definition.'}
+                  ? `${navigationLabels[navigationKind]} · ${token.text}`
+                  : 'Right-click a symbol to navigate.'}
               </span>
-              <button
-                type="button"
-                disabled={!token || busy}
-                onClick={() => void navigate('definition')}
-              >
-                Go to definition
-              </button>
-              <button
-                type="button"
-                disabled={!token || busy}
-                onClick={() => void navigate('references')}
-              >
-                Find references
-              </button>
-              {busy && <span role="status">Loading…</span>}
+              {busy && <span>Loading…</span>}
             </div>
             {tree?.warnings.length || navigation?.warnings.length ? (
               <div className="source-context-warnings">
@@ -340,9 +344,12 @@ export function SourceContextDialog({ pull, fileId, content, error, onRetry, onC
                   themeType: resolvedTheme,
                   overflow: 'wrap',
                   enableLineSelection: true,
+                  onPostRender: (node) =>
+                    symbolMenu.bind(node, { path: revision.path, side: actualSide }),
                   onLineNumberClick: (props) => setLine(String(props.lineNumber)),
                   onTokenClick: (props, event) => {
-                    const selected = clickedToken(props, event)
+                    const selected = clickedSymbol(props, event)
+                    if (!selected) return
                     setToken(selected)
                     if (event.metaKey || event.ctrlKey) void navigate('definition', selected)
                   },
@@ -351,8 +358,10 @@ export function SourceContextDialog({ pull, fileId, content, error, onRetry, onC
               {navigation && (
                 <aside className="source-context-targets">
                   <strong>
-                    {navigation.mode === 'semantic' ? 'Source locations' : 'Text matches'} ·{' '}
-                    {navigation.targets.length}
+                    {navigation.mode === 'semantic'
+                      ? navigationLabels[navigationKind]
+                      : 'Source matches'}{' '}
+                    · {navigation.targets.length}
                   </strong>
                   {!navigation.targets.length && <p>No locations found.</p>}
                   {navigation.targets.map((target, index) => (
@@ -374,6 +383,7 @@ export function SourceContextDialog({ pull, fileId, content, error, onRetry, onC
             </div>
           </>
         )}
+        {symbolMenu.menu}
       </DialogPopup>
     </Dialog>
   )

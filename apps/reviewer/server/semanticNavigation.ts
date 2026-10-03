@@ -1,12 +1,12 @@
 import { posix } from 'node:path'
 import ts from 'typescript'
-import type { NavigationTarget } from '../shared/navigation'
+import type { NavigationKind, NavigationTarget } from '../shared/navigation'
 
 interface SemanticRequest {
   path: string
   line: number
   column: number
-  kind: 'definition' | 'references'
+  kind: NavigationKind
 }
 
 const root = '/review'
@@ -122,18 +122,31 @@ export function navigateTypeScript(
     const definitions = (service.getDefinitionAtPosition(fileName, position) ?? []).filter(
       (definition) => definition.kind !== ts.ScriptElementKind.alias,
     )
+    const references = () => [
+      ...(service.findReferences(fileName, position) ?? []),
+      // Resolve import aliases to include uses across the project.
+      ...definitions.flatMap(
+        (definition) =>
+          service.findReferences(definition.fileName, definition.textSpan.start) ?? [],
+      ),
+    ]
     const occurrences =
       request.kind === 'definition'
         ? definitions
-        : [
-            ...(service.findReferences(fileName, position) ?? []),
-            // Searching an import alias alone only finds that local alias's uses.
-            // Search its resolved declaration too to include references across the project.
-            ...definitions.flatMap(
-              (definition) =>
-                service.findReferences(definition.fileName, definition.textSpan.start) ?? [],
-            ),
-          ].flatMap((symbol) => symbol.references)
+        : request.kind === 'implementation'
+          ? (service.getImplementationAtPosition(fileName, position) ?? [])
+          : references().flatMap((symbol) =>
+              request.kind === 'usages'
+                ? symbol.references.filter(
+                    (reference) =>
+                      !reference.isDefinition &&
+                      !(
+                        reference.fileName === symbol.definition.fileName &&
+                        reference.textSpan.start === symbol.definition.textSpan.start
+                      ),
+                  )
+                : symbol.references,
+            )
     const targets = new Map<string, NavigationTarget>()
     for (const occurrence of occurrences) {
       const targetName = virtualName(occurrence.fileName)
