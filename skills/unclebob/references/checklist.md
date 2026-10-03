@@ -2,6 +2,12 @@
 
 Use this as a thinking aid, not a form to fill in. Report only what you actually find.
 
+## Repository rules
+
+- [ ] Did you read every `AGENTS.md`, `CLAUDE.md`, or `CONTRIBUTING` file on the path to each changed file, and the lint config? Their rules outrank everything below.
+- [ ] Does the diff break one of those rules? That is a must-fix, cited by file and rule, whatever your own taste says.
+- [ ] Does the diff contain hunks the change didn't need (reworded comments, reordered lines, renames nobody asked for)? They cost the reviewer time to prove nothing changed.
+
 ## Readability and the onion
 
 - [ ] Does each entry point (handler, controller, use case, public method) read like the business rule, in a handful of well-named steps?
@@ -11,7 +17,10 @@ Use this as a thinking aid, not a form to fill in. Report only what you actually
 - [ ] Is there over-fragmentation? One-line wrappers whose name repeats the body, or call chains you have to jump through five files to follow.
 - [ ] Do names reveal intent? Functions are verbs that say what they do, booleans read as questions (`isExpired`, `hasAccess`), and collections are plural.
 - [ ] Are there names that lie, such as a `get` that mutates, a `validate` that also saves, or a `user` that is actually an ID?
+- [ ] Does the diff introduce a word the codebase doesn't use for an idea the codebase already names? Search for the concept; point at the existing term and where it lives.
+- [ ] Are two adjacent names one word apart with different meanings (`replacedById` next to `replacementId`)? Rename so the call site can't confuse them.
 - [ ] Do comments explain *why*, not *what*? A comment explaining what a block does is usually a function name waiting to be extracted.
+- [ ] Does every branch, guard, or ordering that exists for a non-obvious reason either carry that reason in a function name or in a one-line *why* comment? If a reviewer would ask "why is this here?", the answer belongs in the code.
 
 ## Reusability
 
@@ -52,4 +61,7 @@ Use this as a thinking aid, not a form to fill in. Report only what you actually
 - [ ] Is there logic in tests (loops, conditionals, computed expectations)? Tests should be straight-line and obvious.
 - [ ] Is the Arrange phase noisy? Suggest builders, factories, or fixtures, and reuse the ones that already exist.
 - [ ] Do assertions check observable behavior (return values, state, emitted events) instead of implementation details (private calls, exact mock call counts that don't matter)?
+- [ ] Could the assertion pass if the code ignored the input? An expected value equal to what the fixture or stored state already holds proves nothing; use a value the system could not have produced on its own.
+- [ ] Does a component, form, or handler that dispatches to several variants have one test per variant it can reach?
+- [ ] Is a control case (the path that should *not* fail) its own test with its own name, rather than a line inside the failure test?
 - [ ] Are tests independent of each other and of execution order?

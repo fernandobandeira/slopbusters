@@ -39,7 +39,9 @@ The diff alone is not enough. For each meaningful change:
 
 - Read the full function or file around the changed lines, not only the hunk.
 - Read the PR description, commit messages, or ask what the change is for if the intent is unclear.
+- **Read the repository's own rules first.** Every `AGENTS.md`, `CLAUDE.md`, or `CONTRIBUTING` file from the root down to each changed path, plus the lint config. Those rules outrank this checklist and your taste. A violation of one is a must-fix, cited by file and rule, even when you would have let it pass.
 - **Search the codebase for existing helpers, utilities, and patterns** that do what the new code does. Reusability findings must be backed by a real file and symbol, not a guess.
+- **Search for the words, too.** When the diff introduces a term, look for the concept it names elsewhere in the codebase. If the codebase already has a word for it, that is the word.
 - Look at how neighboring code is written. Recommend the codebase's own conventions over your personal taste.
 
 Skip generated files, lockfiles, vendored code, and pure formatting changes.
@@ -52,13 +54,19 @@ Read [references/checklist.md](references/checklist.md) for the full checklist, 
 
 But do not shred code into one-line functions that hide nothing. A function earns its existence by naming an idea. If the name is just the body restated, inline it.
 
+When a branch, guard, or ordering exists for a reason the code cannot show, first try a function whose name carries that reason. When no name can carry it, a one-line comment saying *why* belongs on the branch. A reviewer asking "why is this here?" is a comment that should have been written.
+
 **Reusability.** Flag duplicated logic within the diff and against existing code. Point to the exact existing function to reuse. Suggest extracting a shared abstraction when the same idea appears a third time, or when two copies would clearly need to change together. Two similar-looking pieces of code with different reasons to change are not duplication.
 
 **Cognitive load.** Flag deep nesting (prefer guard clauses and early returns), long functions, more than about three parameters, boolean flag parameters, mixed abstraction levels, clever one-liners, magic numbers and strings, and names that lie or mumble (`data`, `handle`, `process`, `tmp`, `flag`).
 
+**Vocabulary.** A term that appears nowhere else in the codebase is a flag. The codebase already has a word for most ideas, and a second word for the same idea costs every reader a translation and every search a miss. Name the existing term and where it is used. Also flag a name that is one letter or one word away from a neighbor meaning something else; adjacent near-synonyms get confused at the call site.
+
 **Patterns.** Praise and recommend patterns that remove complexity (polymorphism instead of growing switch statements, dependency injection at boundaries, pure functions for business rules, value objects instead of primitive obsession). Flag over-engineering just as hard: interfaces with one implementation and no test seam, factories for one class, layers that only forward calls.
 
 **Tests.** New behavior needs tests. Each test should follow Arrange-Act-Assert, with the three phases visually separated, one behavior per test, a name that states the behavior, no branching logic, and assertions on observable behavior rather than implementation details.
+
+Two failures hide in tests that look complete. An expected value that equals what the fixture or stored state already holds would pass if the code ignored the input entirely; the expected value must be one the system could not have produced on its own. And a component, form, or handler that dispatches to several variants needs one test per variant it can reach, not one test for the variant the author happened to run.
 
 ## Step 4: Report
 
