@@ -84,10 +84,12 @@ Follow the repo's PR template if there is one, and put this inside its "describe
 
 Write every line for the reviewer: the person who has to decide whether this merges. Each sentence either explains why a choice was made or points at where their attention should go. If a sentence does neither, it is for someone else, and it leaves.
 
+Then use the least content that does the job. The description arrives next to the diff, and the reviewer is about to read the code; the code already tells its own story, so don't tell it again. Say what the code can't: the reason, the constraint, the thing that should look unchanged, the place to look first. A reviewer who can skim the description in a minute and spend the rest on the code is the goal. One that restates the diff trains them to skip descriptions.
+
 ```markdown
 Layer N of M. <Context and problem: what exists today and why it isn't enough, in a sentence or two.> <Solution: what this layer does about it, in plain language.> <What it doesn't do yet and which layer does.> <What should be unchanged, and that this is the main question.>
 
-- **<Area>.** <What changed there and why, one or two sentences.>
+- **<Area>.** <Why it changed this way, and what the diff can't show. One or two sentences. Not a list of what was added; they'll see that.>
 - **<Area>.** ...
 
 **Where to look.** <The file that holds the behavior. Which files are plumbing, type updates, or one-line guards that can be skimmed.>
@@ -155,7 +157,7 @@ What to leave out:
 - Sandbox IDs, local database names, dates, pass counts, exit codes, and logs from every run. One line naming what was verified, plus a collapsed section if the evidence matters.
 - Full stack traces. Trim them to the lines that show the call chain.
 - Hedges on every sentence. State your confidence once.
-- Restating the title, the diff, or the ticket.
+- Restating the title, the diff, or the ticket. A bullet that lists the functions a file gained tells the reviewer nothing they won't see thirty seconds later in the code. Keep the sentence that says why; drop the one that says what.
 
 ## Step 6: Commit messages
 
@@ -186,6 +188,7 @@ Read each description as a reviewer who opens only that PR:
 - The title and first sentence say what this layer does and why
 - They know what should be unchanged and which file to read first
 - They can tell from the description alone why each non-obvious choice was made, without asking
+- Nothing in it is something they would learn from the diff anyway; it reads in a minute and leaves the rest of their time for the code
 - Every review question points them somewhere worth their time, or the section is absent
 - The layer builds, lints, and passes its tests with nothing above it merged
 - Each layer's production line count is measured, not estimated, and sits inside the floor, ceiling and balance rules in splitting.md. A thin bottom layer under a fat middle one is re-cut here, not explained away in the description
