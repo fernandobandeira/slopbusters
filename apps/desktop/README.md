@@ -10,7 +10,8 @@ The application and packaged icons use the existing `assets/slopbusters.png`
 logo. Electron Builder converts this PNG into each platform's native icon format.
 
 Electron starts the local API in its main process using its embedded Node runtime
-and SQLite. The renderer is sandboxed and receives no Node or filesystem bridge.
+and SQLite. The renderer is sandboxed and receives a narrow bridge for application
+updates. It has no Node or filesystem access.
 Review data lives in `reviewer.sqlite` under Electron's `userData` directory
 (`~/Library/Application Support/Slopbusters` on macOS). Each launch uses an
 available loopback port. GitHub and AI tools continue using your terminal's
@@ -23,7 +24,8 @@ theme persistence across app restarts. It uses a temporary data directory and
 removes it afterward. A synthetic source fixture checks context expansion,
 source browsing, definitions and references in the real renderer without
 contacting a provider. The test also loads a bundled Python grammar through
-WebAssembly. Linux CI needs a display server, for example `xvfb-run -a
+WebAssembly. Smoke runs isolate CLI checks from your installed tools and account.
+Linux CI needs a display server, for example `xvfb-run -a
 pnpm desktop:smoke`.
 
 Closing the window or quitting waits for review changes to reach SQLite. If a

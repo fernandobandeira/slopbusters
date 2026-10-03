@@ -1,10 +1,11 @@
-const { app, BrowserWindow, dialog, Menu, session, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } = require('electron')
 const { execFile } = require('node:child_process')
 const { readFileSync } = require('node:fs')
 const { homedir } = require('node:os')
 const { basename, delimiter, isAbsolute, join } = require('node:path')
 const { promisify } = require('node:util')
 const { startReviewerServer } = require('../../reviewer/server/app.ts')
+const { createUpdates } = require('./updates.cjs')
 
 const smoke = process.argv.includes('--smoke-test')
 const smokeArgument = (name) => process.argv.find((value) => value.startsWith(`${name}=`))?.slice(name.length + 1)
@@ -20,6 +21,8 @@ let server
 let mainWindow
 let stopping = false
 let quitting = false
+let installing = false
+let updates
 const confirmedWindows = new WeakSet()
 const pendingFlushes = new WeakMap()
 
@@ -120,6 +123,7 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true,
+      preload: join(__dirname, 'preload.cjs'),
     },
   })
   const contents = mainWindow.webContents
@@ -155,8 +159,8 @@ async function createWindow() {
 
 async function verifySmoke(window) {
   smokeStage('runtime-check')
-  // This runs only in the explicitly requested test mode; production exposes no
-  // bridge or IPC API to the renderer.
+  // These runtime assertions run only in explicitly requested test mode.
+  // Production exposes only the narrow application-update IPC bridge.
   const { DatabaseSync } = require('node:sqlite')
   const sqlite = new DatabaseSync(':memory:')
   const value = sqlite.prepare('SELECT 42 AS answer').get().answer
@@ -195,6 +199,7 @@ async function verifySmoke(window) {
     return { title: document.title, theme: preferences.theme, renderer: Boolean(document.querySelector('.app-shell main')) };
   })()`)
   const contextResult = phase === 'write' ? await require('./context-smoke.cjs').verifyContextRenderer(window) : {}
+  await verifyUpdateFooter(window)
   smokeStage('renderer-verified')
   if (phase === 'write') await window.webContents.executeJavaScript(`(() => {
     const originalFlush = globalThis.slopbustersFlushReviews;
@@ -214,9 +219,75 @@ async function verifySmoke(window) {
   console.log(JSON.stringify({ smoke: phase, electron: process.versions.electron, sqlite: true, sourceParsers: true, sandbox: window.webContents.getLastWebPreferences().sandbox, closeInputBlocked: true, ...contextResult, ...result }))
 }
 
+async function verifyUpdateFooter(window) {
+  const bridgeAvailable = await window.webContents.executeJavaScript(
+    'typeof window.reviewerDesktop?.getUpdateState === "function"',
+  )
+  if (!bridgeAvailable) throw new Error('The desktop update bridge did not load.')
+  for (const [state, label] of [
+    [{ status: 'available', version: '99.0.0' }, 'Update available · 99.0.0'],
+    [{ status: 'downloading', version: '99.0.0', percent: 42 }, 'Downloading 42%'],
+    [{ status: 'downloaded', version: '99.0.0' }, 'Restart to update'],
+  ]) {
+    window.webContents.send('reviewer:update-state', state)
+    await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+      const deadline = Date.now() + 10000;
+      const timer = setInterval(() => {
+        if (document.querySelector('.app-update')?.textContent.includes(${JSON.stringify(label)})) {
+          clearInterval(timer); resolve(true);
+        } else if (Date.now() > deadline) {
+          clearInterval(timer); reject(new Error('The update footer did not show the expected state.'));
+        }
+      }, 50);
+    })`)
+  }
+  window.webContents.send('reviewer:update-state', { status: 'disabled' })
+  smokeStage('update-footer-verified')
+}
+
+function registerUpdateHandlers() {
+  const handle = (channel, action) => ipcMain.handle(channel, (event) => {
+    if (event.sender !== mainWindow?.webContents || !event.senderFrame ||
+        event.senderFrame !== event.sender.mainFrame || !isAppLocation(event.senderFrame.url))
+      throw new Error('Update actions must originate from the review window.')
+    return action()
+  })
+  handle('reviewer:update-state', () => updates.state())
+  handle('reviewer:update-check', () => updates.check())
+  handle('reviewer:update-download', () => updates.download())
+  handle('reviewer:update-install', async () => {
+    if (updates.state().status !== 'downloaded' || !mainWindow || installing || stopping) return
+    const window = mainWindow
+    const { response } = await dialog.showMessageBox(window, {
+      type: 'question', buttons: ['Restart and install', 'Cancel'], defaultId: 0, cancelId: 1,
+      message: `Install Slopbusters ${updates.state().version} and restart?`,
+      detail: 'Your review will be saved first. Running organization tasks will be interrupted.',
+    })
+    if (response !== 0 || !(await confirmSaved(window))) return
+    if (updates.state().status !== 'downloaded') {
+      if (!window.isDestroyed()) window.setEnabled(true)
+      return
+    }
+    // Squirrel's install must not be cancelled by the async quit handshake.
+    // The handshake has already flushed SQLite and blocked further edits.
+    installing = true
+    quitting = true
+    try { updates.install() }
+    catch (error) {
+      installing = false
+      quitting = false
+      if (!window.isDestroyed()) window.setEnabled(true)
+      throw error
+    }
+  })
+}
+
 async function start() {
   smokeStage('starting')
   await restoreCommandPath()
+  // Smoke fixtures exercise the local app without querying the developer's
+  // authenticated GitHub account or waiting for external CLI network requests.
+  if (smoke) process.env.PATH = join(app.getPath('userData'), 'no-installed-tools')
   smokeStage('path-ready')
   if (process.platform === 'darwin') app.dock?.setIcon(join(__dirname, 'icon.png'))
   const appSession = session.fromPartition('persist:slopbusters')
@@ -230,6 +301,19 @@ async function start() {
     port: 0,
   })
   smokeStage('server-ready')
+  updates = createUpdates({
+    updater: require('electron-updater').autoUpdater,
+    enabled: app.isPackaged && process.platform === 'darwin' && !smoke,
+    publish: (state) => {
+      if (state.status === 'error' && installing) {
+        installing = false
+        quitting = false
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setEnabled(true)
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('reviewer:update-state', state)
+    },
+  })
+  registerUpdateHandlers()
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { role: 'fileMenu' },
@@ -259,6 +343,10 @@ if (!app.requestSingleInstanceLock()) {
     else mainWindow.show()
   })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+  app.on('will-quit', () => {
+    updates?.dispose()
+    if (installing) void server?.close().catch((error) => console.error('Reviewer shutdown failed:', error.message))
+  })
   app.on('before-quit', (event) => {
     if (quitting || !server) return
     event.preventDefault()

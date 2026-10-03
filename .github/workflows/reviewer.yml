@@ -11,6 +11,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/reviewer.yml'
+      - '.github/workflows/reviewer-release.yml'
   push:
     branches: [main]
     paths:
@@ -22,6 +23,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/reviewer.yml'
+      - '.github/workflows/reviewer-release.yml'
 
 permissions:
   contents: read

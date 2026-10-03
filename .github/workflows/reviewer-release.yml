@@ -1,0 +1,106 @@
+name: Release reviewer for Mac
+
+on:
+  push:
+    tags: ["reviewer-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing reviewer tag, for example reviewer-v0.1.0"
+        required: true
+        type: string
+
+concurrency:
+  group: reviewer-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      REVIEWER_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Validate release version and signing credentials
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          const { version } = JSON.parse(readFileSync('apps/desktop/package.json', 'utf8'));
+          if (!/^\d+\.\d+\.\d+$/.test(version) || process.env.REVIEWER_TAG !== `reviewer-v${version}`) {
+            throw new Error('Use a reviewer-vX.Y.Z tag matching apps/desktop/package.json.');
+          }
+          for (const key of ['CSC_LINK', 'CSC_KEY_PASSWORD', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) {
+            if (!process.env[key]) throw new Error(`Missing GitHub Actions secret: ${key}`);
+          }
+          JS
+          git merge-base --is-ancestor HEAD origin/main
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - name: Build, sign, and notarize Apple Silicon app
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_FOR_PULL_REQUEST: "false"
+        run: pnpm --dir apps/desktop dist --mac --arm64 --publish never --config.forceCodeSigning=true
+      - name: Verify signature, notarization, and packaged startup
+        run: |
+          app='apps/desktop/release/mac-arm64/Slopbusters.app'
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv --verbose=4 "$app" 2>&1 | grep -q 'Authority=Developer ID Application:'
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+          node apps/desktop/scripts/smoke.mjs --executable="$PWD/$app/Contents/MacOS/Slopbusters"
+          test -s apps/desktop/release/latest-mac.yml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reviewer-mac-arm64
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest-mac.yml
+          if-no-files-found: error
+      - name: Publish release and update feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$REVIEWER_TAG" --json isDraft >/dev/null 2>&1; then
+            test "$(gh release view "$REVIEWER_TAG" --json isDraft --jq .isDraft)" = true || {
+              echo 'This version is already published. Release a new version instead.'
+              exit 1
+            }
+          else
+            gh release create "$REVIEWER_TAG" --verify-tag --draft \
+              --title "Slopbusters Review ${REVIEWER_TAG#reviewer-v}" --generate-notes
+          fi
+          gh release upload "$REVIEWER_TAG" apps/desktop/release/*.dmg \
+            apps/desktop/release/*.zip apps/desktop/release/*.blockmap \
+            apps/desktop/release/latest-mac.yml --clobber
+          gh release edit "$REVIEWER_TAG" --draft=false --latest

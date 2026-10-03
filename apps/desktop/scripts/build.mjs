@@ -33,13 +33,14 @@ await cp(resolve(parserNoticesDirectory, 'SOURCE_PARSER_NOTICES.txt'), resolve(d
 await cp(resolve(parserNoticesDirectory, 'sources.json'), resolve(destination, 'SOURCE_PARSER_ASSETS.json'))
 await cp(resolve(parserNoticesDirectory, 'README.md'), resolve(destination, 'SOURCE_PARSER_PROVENANCE.md'))
 await build({
-  entryPoints: [resolve(directory, 'src/main.cjs')],
-  outfile: resolve(destination, 'main.cjs'),
+  entryPoints: [resolve(directory, 'src/main.cjs'), resolve(directory, 'src/preload.cjs')],
+  outdir: destination,
+  outExtension: { '.js': '.cjs' },
   bundle: true,
   platform: 'node',
   format: 'cjs',
   target: 'node24',
-  external: ['electron', 'node:*'],
+  external: ['electron', 'electron-updater', 'node:*'],
   legalComments: 'eof',
 })
 await cp(resolve(directory, '../reviewer/dist'), resolve(destination, 'renderer'), {
@@ -49,10 +50,6 @@ await cp(resolve(directory, '../reviewer/LICENSE'), resolve(destination, 'LICENS
 await cp(
   resolve(directory, '../reviewer/THIRD_PARTY_NOTICES.md'),
   resolve(destination, 'REVIEWER_THIRD_PARTY_NOTICES.md'),
-)
-await cp(
-  resolve(directory, '../../THIRD_PARTY_NOTICES.md'),
-  resolve(destination, 'THIRD_PARTY_NOTICES.md'),
 )
 // electron-builder removes the archive's top-level notices from the app bundle.
 // Preserve them in our app resources, including Chromium's complete notices.

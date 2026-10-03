@@ -1,8 +1,11 @@
 node_modules/
 dist/
 release/
+*.p12
+*.p8
 .data/
 .reference/
+.signing/
 *.tsbuildinfo
 .env*
 .DS_Store

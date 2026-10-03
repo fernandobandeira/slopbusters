@@ -26,7 +26,7 @@ CI indicators and merge readiness show which PRs need attention. Open their deta
 
 `pnpm build` builds the desktop app; `pnpm desktop:start` opens it and `pnpm desktop:pack` creates a local application bundle. `pnpm dev` still runs the browser UI at http://localhost:4310; `pnpm start` serves its last build at http://localhost:4311. See the [desktop guide](apps/desktop/README.md) and [reviewer guide](apps/reviewer/README.md) for details. The UI currently reviews GitHub pull requests; the skills below also cover issues, plans, specs, and PR preparation.
 
-The diff viewer and UI components include MIT-licensed code from [T3 Code](https://github.com/pingdotgg/t3code). Its copyright and license notices are preserved in source and builds. See [third-party notices](THIRD_PARTY_NOTICES.md) and the [port and publication review](docs/reviewer-port.md) for source provenance and license scope.
+The diff viewer and UI components include MIT-licensed code from [T3 Code](https://github.com/pingdotgg/t3code). Its copyright and license notices are preserved in source and builds. See [the app's notices](apps/reviewer/THIRD_PARTY_NOTICES.md) and the [port and publication review](docs/reviewer-port.md) for source provenance and license scope.
 
 ## Install
 

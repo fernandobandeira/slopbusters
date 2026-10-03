@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { UpdateButton } from './UpdateButton'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { inboxPath, readRoute, reviewPath, routeMatchesPull } from './routes'
 import {
@@ -604,6 +605,7 @@ export function App() {
           </DialogPopup>
         </Dialog>
       </div>
+      <UpdateButton />
     </div>
   )
 }

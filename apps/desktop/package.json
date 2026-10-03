@@ -10,11 +10,12 @@
   "scripts": {
     "dev": "pnpm build && pnpm start",
     "build": "pnpm --dir ../reviewer build && node scripts/build.mjs",
-    "start": "electron .",
+    "start": "node scripts/start.mjs",
     "pack": "pnpm build && electron-builder --dir",
     "dist": "pnpm build && electron-builder",
     "test": "node scripts/smoke.mjs",
-    "smoke": "pnpm build && pnpm test"
+    "smoke": "pnpm build && pnpm test",
+    "test:updates": "node --test scripts/updates.test.cjs"
   },
   "devDependencies": {
     "electron": "44.4.2",
@@ -27,8 +28,28 @@
     "directories": { "output": "release" },
     "files": ["dist/**", "package.json"],
     "asar": true,
-    "mac": { "icon": "dist/icon.png", "category": "public.app-category.developer-tools", "target": ["dmg", "zip"] },
+    "mac": {
+      "icon": "dist/icon.png",
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "notarize": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
     "win": { "icon": "dist/icon.png", "target": ["nsis"] },
-    "linux": { "icon": "dist/icon.png", "category": "Development", "target": ["AppImage"] }
+    "linux": { "icon": "dist/icon.png", "category": "Development", "target": ["AppImage"] },
+    "publish": {
+      "provider": "github",
+      "owner": "fernandobandeira",
+      "repo": "slopbusters"
+    },
+    "artifactName": "Slopbusters-${version}-${arch}.${ext}"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
   }
 }

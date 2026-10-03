@@ -149,6 +149,16 @@ pre {
   height: 100dvh;
   overflow: hidden;
 }
+.desktop-update-footer {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--sidebar);
+}
+.app-update {
+  color: var(--primary);
+}
 .app-shell {
   display: flex;
   flex: 1;

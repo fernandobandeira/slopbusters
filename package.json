@@ -12,7 +12,7 @@
     "build": "pnpm --dir apps/desktop build",
     "start": "pnpm --dir apps/reviewer start",
     "lint": "pnpm --dir apps/reviewer lint",
-    "test": "pnpm --dir apps/reviewer test",
+    "test": "pnpm --dir apps/reviewer test && pnpm --dir apps/desktop test:updates",
     "desktop:dev": "pnpm --dir apps/desktop dev",
     "desktop:start": "pnpm --dir apps/desktop start",
     "desktop:pack": "pnpm --dir apps/desktop pack",

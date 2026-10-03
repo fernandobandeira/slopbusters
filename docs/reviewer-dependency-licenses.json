@@ -1815,6 +1815,14 @@
       "homepage": "https://github.com/Kilian/electron-to-chromium#readme"
     },
     {
+      "name": "electron-updater",
+      "versions": [
+        "6.8.9"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/electron-userland/electron-builder"
+    },
+    {
       "name": "electron-winstaller",
       "versions": [
         "5.4.0"
@@ -2868,6 +2876,22 @@
       "name": "lodash",
       "versions": [
         "4.18.1"
+      ],
+      "license": "MIT",
+      "homepage": "https://lodash.com/"
+    },
+    {
+      "name": "lodash.escaperegexp",
+      "versions": [
+        "4.1.2"
+      ],
+      "license": "MIT",
+      "homepage": "https://lodash.com/"
+    },
+    {
+      "name": "lodash.isequal",
+      "versions": [
+        "4.5.0"
       ],
       "license": "MIT",
       "homepage": "https://lodash.com/"
@@ -4404,6 +4428,14 @@
       ],
       "license": "MIT",
       "homepage": "https://github.com/rxaviers/async-pool#readme"
+    },
+    {
+      "name": "tiny-typed-emitter",
+      "versions": [
+        "2.1.0"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/binier/tiny-typed-emitter#readme"
     },
     {
       "name": "tinybench",

@@ -16,4 +16,4 @@ The local theme hook supplies the selected app and diff theme; the worker pool a
 
 The temporary `.reference/t3code` checkout from Review Room was excluded from this port and is not required to run the app. The repository README credits T3 Code, and production builds preserve its full license in `T3_CODE_LICENSE.txt`. Slopbusters is an independent project, not an official T3 product.
 
-The app was ported from Review Room commit `06af2d76d8a1ad71dab48a23a783a208c7b88361`. The original MIT copyright notice is retained in [LICENSE](LICENSE). See the repository's [third-party notices](../../THIRD_PARTY_NOTICES.md) for other dependencies and license scope.
+The app was ported from Review Room commit `06af2d76d8a1ad71dab48a23a783a208c7b88361`. The original MIT copyright notice is retained in [LICENSE](LICENSE). Packaged builds include dependency license texts in `DEPENDENCY_LICENSES.txt`, alongside Electron and Chromium notices.
