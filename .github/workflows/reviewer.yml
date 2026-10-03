@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -44,10 +44,4 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
-      - name: Configure Electron sandbox
-        working-directory: apps/desktop
-        run: |
-          electron_sandbox="$(node -p "require('node:path').join(require('node:path').dirname(require.resolve('electron/package.json')), 'dist', 'chrome-sandbox')")"
-          sudo chown root "$electron_sandbox"
-          sudo chmod 4755 "$electron_sandbox"
-      - run: xvfb-run -a pnpm --dir apps/desktop test
+      - run: pnpm --dir apps/desktop test
