@@ -50,12 +50,13 @@ The default is one PR. A stack costs the reviewer a context switch per layer and
 
 Only when Step 2 says stack. Load these on demand:
 
-- **[references/splitting.md](references/splitting.md)** before you plan anything: inventory the change, cut the layers in dependency order, size the stack, propose it to the user, build each layer, and carry over the original PR's review threads.
+- **[references/splitting.md](references/splitting.md)** before you plan anything: inventory the change, cut the layers in dependency order, size the stack, propose it to the user, build each layer, re-plan when the scope changes under it, and carry over the original PR's review threads.
 - **[references/stacking.md](references/stacking.md)** before you run any git or GitHub command: choosing the tool, `gh stack` workflows and recovery, and plain git with `--update-refs` when there's no stacking tool.
 
 What never changes, whichever way you cut it:
 
 - Each layer makes one logical change you can describe in one line, and builds, lints, and passes its tests with nothing above it merged.
+- Layers are cut by what a reviewer can judge alone, not by architectural tier. A provider, a table and the repository that stores what the provider parses are one layer when none of them can be judged without the others. Size is checked twice: estimated when the stack is planned, measured on the real diffs before anything is published.
 - Preparation (renames, moves, cleanups) goes first and alone when it is big enough to review alone. Moved code is moved unchanged.
 - Capability can land before its caller. Providers, models, and contracts that nothing uses yet make the safest layers, because the only question is whether they're correct. Each one has tests of its own and names the layer that calls it.
 - A schema or contract change explains itself in the layer that makes it, even when the code that needs it lands later. "The column becomes nullable" is a fact that earns a "why?"; "the column becomes nullable because a push payment has no payer details at creation" is the same fact with the question already answered. Put the reason in the description and, where the repo has a place for it, next to the field.
@@ -181,6 +182,7 @@ Read each description as a reviewer who opens only that PR:
 - They know what should be unchanged and which file to read first
 - Every review question is one only a human can answer
 - The layer builds, lints, and passes its tests with nothing above it merged
+- Each layer's production line count is measured, not estimated, and sits inside the floor, ceiling and balance rules in splitting.md. A thin bottom layer under a fat middle one is re-cut here, not explained away in the description
 - The stack list matches across every PR, with the marker on the right line
 - Whatever survives the merge reads as a changelog
 - Nothing in it narrates how the work happened
@@ -196,6 +198,7 @@ Show the plan and drafts first unless the user asked you to publish. Opening PRs
 - **A question that doesn't lead to a code change leads to a code comment or a line in the description**, so the next reviewer doesn't have to ask it again.
 - **Disagree with reasons.** If the reviewer misread the code, explain what it does. If more people start agreeing with them, reconsider.
 - **Fix the layer that owns the problem** and replay the layers above it.
+- **A scope change re-plans the stack.** When a decision removes or guts a layer, don't just close it: re-cut and re-size what remains in one pass, renumber once, and say in the closed PR which decision killed it. Splitting.md section 6 has the steps.
 - **A nit on one layer is a nit on every layer.** When a reviewer corrects a term, a pattern, or a rule, search the whole stack for the same thing and fix it everywhere before the next layer goes up. The same correction from a second reviewer on a later PR is the one they both remember.
 - **Keep the description current and self-contained.** Never write "see previous version". Report what changed since the last review in a PR comment after you push ("v2: made the column nullable; moved the guard into layer 2"), not in the description, the same way the kernel puts version notes below the `---` line so they never reach the permanent log.
 - **Don't push a new round while a discussion is still open**, unless the reviewer asks for it.
