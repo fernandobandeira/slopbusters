@@ -129,6 +129,7 @@ What makes it work:
 
 - **Lead with the problem.** Convince the reviewer there's a problem worth their time before you describe the fix.
 - **Name what should not change.** "No route can create a video event yet, so in-person behavior should be unchanged" tells the reviewer exactly what to check.
+- **A review question is a question.** It ends in a question mark and only a human can answer it. A note that isn't a question doesn't go in the list, however true it is; "the migration was edited in place" is a message to the two people with a stale dev database, not a review question, and it tells every other reader the author stopped thinking about who reads the description.
 - **Decisions are not review questions.** A review question asks; a decision tells. Every call the ticket left open goes under "Decisions" with the alternative you rejected ("email is optional in the form, like phone; making it required would block requests the ticket doesn't block"), so the reviewer argues with a sentence instead of discovering the choice in code. For anything users will see, settle it with product before opening the PR and summarize the outcome, since a reviewer finding it first costs a round trip either way.
 - **Show a contract instead of describing it.** For an API or event change, include an example payload with a short comment on each state.
 - **Draw races.** For a race or ordering problem, draw a two-column timeline of who does what, in order.
@@ -147,7 +148,8 @@ What to leave out:
 
 - "This PR…", "This change…", "I…". Write imperative descriptions of what the code now does.
 - Process narration: CI repairs, earlier attempts, corrections to earlier reports, which model reviewed it, session history.
-- Sandbox IDs, local database names, and logs from every run. One line of what was verified, plus a collapsed section if the evidence matters.
+- Housekeeping for people who already have the branch checked out: a migration edited in place, a dev database that needs a reset, stale stack metadata, what moved between layers during a restructure. Tell them in a PR comment or a message; the description is for the reviewer and the changelog, and neither cares.
+- Sandbox IDs, local database names, dates, pass counts, exit codes, and logs from every run. One line naming what was verified, plus a collapsed section if the evidence matters.
 - Full stack traces. Trim them to the lines that show the call chain.
 - Hedges on every sentence. State your confidence once.
 - Restating the title, the diff, or the ticket.
