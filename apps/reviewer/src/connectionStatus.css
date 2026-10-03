@@ -1,0 +1,97 @@
+.connection-status {
+  padding: 10px 5px 0;
+}
+.connection-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 2px;
+  font-size: 11px;
+  color: var(--foreground);
+}
+.connection-account:hover {
+  text-decoration: none;
+}
+.connection-account a:hover,
+a.connection-account:hover .connection-account-name {
+  text-decoration: underline;
+}
+.connection-avatar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+.connection-avatar-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted-foreground);
+  background: var(--surface);
+}
+.connection-account-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connection-providers {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+}
+.provider-connection {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 10px;
+}
+.provider-connection[data-state='unavailable'] {
+  opacity: 0.5;
+}
+.provider-connection[data-state='signed-out'] {
+  color: var(--warning);
+}
+.provider-connection[data-state='installed'] {
+  color: var(--muted-foreground);
+}
+@media (max-width: 800px) {
+  .connection-providers {
+    gap: 4px;
+  }
+  .provider-connection {
+    padding: 5px 4px;
+    gap: 4px;
+  }
+}
+@media (max-width: 600px) {
+  .connection-status {
+    padding-inline: 0;
+  }
+  .connection-account {
+    justify-content: center;
+  }
+  .connection-account-name,
+  .provider-connection-name {
+    display: none;
+  }
+  .connection-providers {
+    flex-direction: column;
+    gap: 5px;
+  }
+  .provider-connection {
+    padding: 5px 3px;
+    border: 0;
+    background: transparent;
+  }
+}

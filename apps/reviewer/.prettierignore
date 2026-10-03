@@ -1,0 +1,6 @@
+.reference
+.data
+dist
+node_modules
+src/vendor
+pnpm-lock.yaml

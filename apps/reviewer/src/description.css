@@ -1,0 +1,207 @@
+.pull-description {
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.pull-description > :first-child {
+  margin-top: 0;
+}
+.pull-description > :last-child {
+  margin-bottom: 0;
+}
+.pull-description h1,
+.pull-description h2,
+.pull-description h3,
+.pull-description h4,
+.pull-description h5,
+.pull-description h6 {
+  font-weight: 650;
+  line-height: 1.3;
+  margin: 1.8em 0 0.7em;
+  color: var(--foreground);
+}
+.pull-description h1 {
+  font-size: 1.65em;
+}
+.pull-description h2 {
+  font-size: 1.35em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.4em;
+}
+.pull-description h3 {
+  font-size: 1.15em;
+}
+.pull-description h4,
+.pull-description h5,
+.pull-description h6 {
+  font-size: 1em;
+}
+.pull-description p,
+.pull-description ul,
+.pull-description ol,
+.pull-description blockquote,
+.pull-description .description-code-block,
+.pull-description .description-table-scroll {
+  margin: 0 0 1.1em;
+}
+.pull-description ul {
+  list-style: disc;
+  padding-left: 1.7em;
+}
+.pull-description ol {
+  list-style: decimal;
+  padding-left: 1.7em;
+}
+.pull-description li {
+  margin: 0.3em 0;
+}
+.pull-description li > ul,
+.pull-description li > ol {
+  margin-bottom: 0;
+}
+.pull-description li > p {
+  margin-bottom: 0.45em;
+}
+.pull-description .contains-task-list {
+  list-style: none;
+  padding-left: 0.25em;
+}
+.pull-description .task-list-item input {
+  accent-color: var(--primary);
+  margin-right: 0.6em;
+  vertical-align: middle;
+}
+.pull-description a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pull-description a:hover {
+  color: var(--foreground);
+}
+.pull-description blockquote {
+  border-left: 3px solid var(--primary);
+  padding: 0.15em 1em;
+  color: var(--muted-foreground);
+}
+.pull-description blockquote > :last-child {
+  margin-bottom: 0;
+}
+.pull-description hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.8em 0;
+}
+.pull-description :not(pre) > code {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-recessed);
+  padding: 0.12em 0.35em;
+  font-size: 0.88em;
+  white-space: break-spaces;
+}
+.pull-description .description-code-block {
+  background: var(--surface-recessed);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.pull-description .description-code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  padding: 7px 12px;
+  font-size: 11px;
+}
+.pull-description .description-code-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 4px;
+  padding: 2px 4px;
+  color: inherit;
+  cursor: pointer;
+}
+.pull-description .description-code-toolbar button:hover {
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+.pull-description pre {
+  margin: 0;
+  padding: 14px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.pull-description pre code {
+  font: inherit;
+}
+.pull-description .description-table-scroll {
+  overflow-x: auto;
+}
+.pull-description table {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 13px;
+}
+.pull-description th,
+.pull-description td {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.pull-description th {
+  background: var(--surface-recessed);
+  font-weight: 600;
+}
+.pull-description tbody tr:nth-child(even) {
+  background: var(--surface-recessed);
+}
+.pull-description .description-image-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.pull-description [data-footnotes] {
+  margin-top: 2em;
+  border-top: 1px solid var(--border);
+  padding-top: 1em;
+  font-size: 12px;
+}
+.pull-description-empty {
+  color: var(--muted-foreground);
+  font-size: 14px;
+}
+
+.pull-description img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 10px 0;
+}
+.pull-description details {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+.pull-description summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: disclosure-closed;
+}
+.pull-description details[open] > summary {
+  list-style: disclosure-open;
+  margin-bottom: 12px;
+}
+.pull-description details > :last-child {
+  margin-bottom: 0;
+}

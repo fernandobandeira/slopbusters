@@ -1,0 +1,45 @@
+name: Review app
+
+on:
+  pull_request:
+    paths:
+      - 'apps/reviewer/**'
+      - 'apps/desktop/**'
+      - 'scripts/write-distribution-notices.mjs'
+      - 'scripts/reviewer-license-inventory.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/reviewer.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/reviewer/**'
+      - 'apps/desktop/**'
+      - 'scripts/write-distribution-notices.mjs'
+      - 'scripts/reviewer-license-inventory.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/reviewer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+      - run: xvfb-run -a pnpm --dir apps/desktop test

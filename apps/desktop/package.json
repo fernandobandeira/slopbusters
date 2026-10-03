@@ -1,0 +1,34 @@
+{
+  "name": "@slopbusters/desktop",
+  "productName": "Slopbusters",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Slopbusters desktop code review workspace.",
+  "author": "Fernando Bandeira",
+  "license": "MIT",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "dev": "pnpm build && pnpm start",
+    "build": "pnpm --dir ../reviewer build && node scripts/build.mjs",
+    "start": "electron .",
+    "pack": "pnpm build && electron-builder --dir",
+    "dist": "pnpm build && electron-builder",
+    "test": "node scripts/smoke.mjs",
+    "smoke": "pnpm build && pnpm test"
+  },
+  "devDependencies": {
+    "electron": "44.4.2",
+    "electron-builder": "26.15.6",
+    "esbuild": "0.28.2"
+  },
+  "build": {
+    "appId": "dev.slopbusters.reviewer",
+    "productName": "Slopbusters",
+    "directories": { "output": "release" },
+    "files": ["dist/**", "package.json"],
+    "asar": true,
+    "mac": { "icon": "dist/icon.png", "category": "public.app-category.developer-tools", "target": ["dmg", "zip"] },
+    "win": { "icon": "dist/icon.png", "target": ["nsis"] },
+    "linux": { "icon": "dist/icon.png", "category": "Development", "target": ["AppImage"] }
+  }
+}

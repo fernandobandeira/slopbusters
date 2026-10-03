@@ -1,0 +1,226 @@
+.stack-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--info) 30%, var(--border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--background) 92%, var(--info));
+  color: color-mix(in srgb, var(--foreground) 55%, var(--info));
+  font: 10px/1.4 var(--font-sans);
+  white-space: nowrap;
+}
+button.stack-badge:hover {
+  border-color: var(--info);
+  background: color-mix(in srgb, var(--background) 84%, var(--info));
+}
+.stack-position {
+  font-variant-numeric: tabular-nums;
+}
+.stack-dialog {
+  width: min(800px, calc(100vw - 32px));
+  max-width: 800px;
+}
+.stack-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+.stack-dialog-body {
+  padding: 0 16px 20px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.stack-dialog-tools {
+  display: flex;
+  flex-shrink: 0;
+  padding: 4px;
+}
+.stack-dialog-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 16px;
+}
+.stack-message,
+.stack-warning,
+.stack-derived {
+  margin: 0 8px 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+}
+.stack-warning {
+  margin-top: 12px;
+  color: var(--warning);
+}
+.stack-derived {
+  font-size: 11px;
+}
+.stack-retry {
+  padding: 0 8px;
+}
+.stack-retry .stack-warning {
+  margin-inline: 0;
+}
+.stack-chain {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.stack-layer {
+  position: relative;
+  isolation: isolate;
+  border-radius: 7px;
+}
+.stack-layer::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 23px;
+  top: 29px;
+  bottom: -14px;
+  width: 2px;
+  background: var(--border);
+}
+.stack-layer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+  min-width: 0;
+}
+.stack-layer-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  padding: 10px 0 10px 12px;
+  min-width: 0;
+  border-radius: inherit;
+}
+.stack-layer-link:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+.stack-layer-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.stack-layer-current {
+  background: var(--surface-selected);
+}
+.stack-layer-current::before {
+  content: '';
+  position: absolute;
+  inset: 6px auto 6px 0;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--info);
+}
+.stack-node {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+.stack-node svg {
+  background: var(--popover);
+}
+.stack-layer-current .stack-node svg {
+  background: var(--surface-selected);
+}
+.stack-layer-content {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+}
+.stack-layer-readiness {
+  position: relative;
+  margin: 0 10px 10px 46px;
+  padding: 8px 24px 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.stack-status-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--muted-foreground);
+}
+.stack-status-close:hover {
+  background: var(--surface-hover);
+}
+.stack-layer-title {
+  display: -webkit-box;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.6;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stack-pr-number {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.stack-state-open {
+  color: var(--success);
+}
+.stack-state-closed {
+  color: var(--destructive);
+}
+.stack-state-merged {
+  color: var(--info);
+}
+.stack-base {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 12px 0;
+  min-width: 0;
+}
+.stack-base code {
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.stack-base-label {
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+@media (max-width: 600px) {
+  .stack-dialog {
+    width: 100%;
+  }
+  .stack-layer-row {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .stack-layer-row > .pull-status-icons {
+    margin: 0 0 6px 46px;
+  }
+  .stack-layer-link {
+    flex-basis: 100%;
+  }
+}
