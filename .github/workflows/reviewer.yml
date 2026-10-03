@@ -41,13 +41,13 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Configure Electron sandbox
-        working-directory: apps/desktop
-        run: |
-          electron_sandbox="$(node -p "require('node:path').join(require('node:path').dirname(require('electron')), 'chrome-sandbox')")"
-          sudo chown root "$electron_sandbox"
-          sudo chmod 4755 "$electron_sandbox"
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      - name: Configure Electron sandbox
+        working-directory: apps/desktop
+        run: |
+          electron_sandbox="$(node -p "require('node:path').join(require('node:path').dirname(require.resolve('electron/package.json')), 'dist', 'chrome-sandbox')")"
+          sudo chown root "$electron_sandbox"
+          sudo chmod 4755 "$electron_sandbox"
       - run: xvfb-run -a pnpm --dir apps/desktop test
