@@ -14,6 +14,7 @@ What you believe:
 3. **The series is not your history.** Nobody cares how you got there. Take the final result and cut it into pieces that make sense.
 4. **The changelog is permanent.** Someone will read it in five years with no memory of this week. Write it for them.
 5. **Reviewer time is the scarce resource.** A small series gets reviewed today. A big one waits until someone finds a free afternoon, which is never.
+6. **The reviewer is the audience.** The description exists so someone with less context and less time than you can judge the change: what it does, why this way and not another, and where the risk sits. Give them the reasoning, not a summary of the diff; they have the diff.
 
 See [references/kernel-rules.md](references/kernel-rules.md) for each rule, its source in the kernel docs, and how it maps to GitHub.
 
@@ -81,6 +82,8 @@ What never changes, whichever way you cut it:
 
 Follow the repo's PR template if there is one, and put this inside its "describe your changes" section. Write the paragraphs in this order: context, problem, solution.
 
+Write every line for the reviewer: the person who has to decide whether this merges. Each sentence either explains why a choice was made or points at where their attention should go. If a sentence does neither, it is for someone else, and it leaves.
+
 ```markdown
 Layer N of M. <Context and problem: what exists today and why it isn't enough, in a sentence or two.> <Solution: what this layer does about it, in plain language.> <What it doesn't do yet and which layer does.> <What should be unchanged, and that this is the main question.>
 
@@ -89,8 +92,8 @@ Layer N of M. <Context and problem: what exists today and why it isn't enough, i
 
 **Where to look.** <The file that holds the behavior. Which files are plumbing, type updates, or one-line guards that can be skimmed.>
 
-**Review questions**
-- <A specific question that needs a human's judgment.>
+**Review questions** (only when there is something to ask)
+- <Where you want more of the reviewer's time than the diff alone would earn: a choice you're unsure of, a risk only a human can weigh.>
 - <Two or three at most.>
 
 **Decisions:** <Each judgment call the ticket left open, the choice made, and the alternative rejected. One line each.>
@@ -129,7 +132,7 @@ What makes it work:
 
 - **Lead with the problem.** Convince the reviewer there's a problem worth their time before you describe the fix.
 - **Name what should not change.** "No route can create a video event yet, so in-person behavior should be unchanged" tells the reviewer exactly what to check.
-- **A review question is a question.** It ends in a question mark and only a human can answer it. A note that isn't a question doesn't go in the list, however true it is; "the migration was edited in place" is a message to the two people with a stale dev database, not a review question, and it tells every other reader the author stopped thinking about who reads the description.
+- **Review questions steer attention. They are not a slot to fill.** Each one names a place where the reviewer should spend more time than the diff alone would earn: a choice you're not sure of, a race you believe you handled, a trade-off a human has to weigh. It ends in a question mark and only a human can answer it. A statement that isn't a question doesn't belong there, however true; "the migration was edited in place" is a message to the two people with a stale dev database. And a layer with nothing to ask has no section at all. An invented question costs the reviewer the time to work out that it was rhetorical, and teaches them to skip the real ones.
 - **Decisions are not review questions.** A review question asks; a decision tells. Every call the ticket left open goes under "Decisions" with the alternative you rejected ("email is optional in the form, like phone; making it required would block requests the ticket doesn't block"), so the reviewer argues with a sentence instead of discovering the choice in code. For anything users will see, settle it with product before opening the PR and summarize the outcome, since a reviewer finding it first costs a round trip either way.
 - **Show a contract instead of describing it.** For an API or event change, include an example payload with a short comment on each state.
 - **Draw races.** For a race or ordering problem, draw a two-column timeline of who does what, in order.
@@ -182,7 +185,8 @@ Read each description as a reviewer who opens only that PR:
 
 - The title and first sentence say what this layer does and why
 - They know what should be unchanged and which file to read first
-- Every review question is one only a human can answer
+- They can tell from the description alone why each non-obvious choice was made, without asking
+- Every review question points them somewhere worth their time, or the section is absent
 - The layer builds, lints, and passes its tests with nothing above it merged
 - Each layer's production line count is measured, not estimated, and sits inside the floor, ceiling and balance rules in splitting.md. A thin bottom layer under a fat middle one is re-cut here, not explained away in the description
 - The stack list matches across every PR, with the marker on the right line
