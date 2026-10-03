@@ -6,6 +6,7 @@ export type UpdateState = {
 }
 
 export type DesktopBridge = {
+  platform: string
   getUpdateState(): Promise<UpdateState>
   onUpdateState(listener: (state: UpdateState) => void): () => void
   checkForUpdates(): Promise<void>

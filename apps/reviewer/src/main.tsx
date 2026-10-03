@@ -7,6 +7,9 @@ import './style.css'
 
 const root = document.getElementById('root')
 if (!root) throw new Error('Missing application root')
+if (window.reviewerDesktop) {
+  document.documentElement.dataset.desktopPlatform = window.reviewerDesktop.platform
+}
 createRoot(root).render(
   <StrictMode>
     <BrowserRouter>

@@ -115,6 +115,10 @@ async function createWindow() {
     minHeight: 600,
     show: false,
     title: 'Slopbusters',
+    ...(process.platform === 'darwin' ? {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 16, y: 26 },
+    } : {}),
     icon: join(__dirname, 'icon.png'),
     backgroundColor: '#111214',
     webPreferences: {
@@ -173,6 +177,10 @@ async function verifySmoke(window) {
   const phase = smokeArgument('--smoke-phase')
   const isolation = window.webContents.getLastWebPreferences()
   if (!isolation.sandbox || !isolation.contextIsolation || isolation.nodeIntegration) throw new Error('The renderer must remain sandboxed and isolated from Node.')
+  if (process.platform === 'darwin') {
+    const controls = window.getWindowButtonPosition()
+    if (controls?.x !== 16 || controls?.y !== 26) throw new Error('The macOS window controls must use the custom title bar position.')
+  }
   const result = await window.webContents.executeJavaScript(`(async () => {
     if (typeof require !== 'undefined') throw new Error('Node was exposed to the renderer.');
     const deadline = Date.now() + 10000;
@@ -181,6 +189,10 @@ async function verifySmoke(window) {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     if (document.title !== 'Slopbusters') throw new Error('The desktop app title is incorrect.');
+    const titlebar = document.querySelector('.app-titlebar');
+    if (!titlebar || titlebar.getBoundingClientRect().top !== 0 || getComputedStyle(titlebar).webkitAppRegion !== 'drag') throw new Error('The app title bar must be draggable and occupy the top of the window.');
+    if (document.documentElement.dataset.desktopPlatform !== window.reviewerDesktop?.platform) throw new Error('The title bar platform was not exposed by the isolated preload.');
+    if (window.reviewerDesktop?.platform === 'darwin' && parseFloat(getComputedStyle(titlebar).paddingLeft) < 80) throw new Error('The title bar overlaps the native macOS controls.');
     const read = async () => {
       const response = await fetch('/api/preferences');
       if (!response.ok) throw new Error('Preferences API did not load.');
@@ -196,7 +208,7 @@ async function verifySmoke(window) {
     const preferences = await read();
     const expectedTheme = ${JSON.stringify(phase)} === 'write' ? 'solarized-dark' : 'nord';
     if (preferences.theme !== expectedTheme) throw new Error('The theme did not persist across desktop launches.');
-    return { title: document.title, theme: preferences.theme, renderer: Boolean(document.querySelector('.app-shell main')) };
+    return { title: document.title, theme: preferences.theme, titlebar: true, renderer: Boolean(document.querySelector('.app-shell main')) };
   })()`)
   const contextResult = phase === 'write' ? await require('./context-smoke.cjs').verifyContextRenderer(window) : {}
   await verifyUpdateFooter(window)

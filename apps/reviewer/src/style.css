@@ -149,6 +149,66 @@ pre {
   height: 100dvh;
   overflow: hidden;
 }
+.app-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  min-height: 72px;
+  padding: 4px 18px 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+:root[data-desktop-platform='darwin'] .app-titlebar {
+  padding-left: 88px;
+}
+.app-titlebar :is(button, a, input, select, textarea, [role='button']) {
+  -webkit-app-region: no-drag;
+}
+.app-titlebar-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.app-titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.app-titlebar-brand img {
+  object-fit: contain;
+}
+.app-page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 14px;
+}
+.app-page-title h1 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 550;
+}
+.app-titlebar .review-chrome {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+.app-titlebar .review-toolbar {
+  padding-right: 0;
+}
 .desktop-update-footer {
   flex-shrink: 0;
   min-height: 34px;
@@ -173,27 +233,6 @@ pre {
   padding: 20px 13px 12px;
   display: flex;
   flex-direction: column;
-}
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0 4px 24px;
-}
-.brand strong {
-  font-size: 14px;
-  letter-spacing: -0.3px;
-}
-.brand-symbol {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-}
-.brand-symbol img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
 }
 .repo-picker {
   width: 100%;
@@ -257,19 +296,6 @@ pre {
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-.inbox-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border);
-  padding: 12px 24px;
-}
-.inbox-topbar > span {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 12px;
 }
 .inbox-content {
   padding: 52px clamp(20px, 5vw, 84px);
@@ -497,6 +523,86 @@ pre {
   flex: 1;
   min-width: 0;
   min-height: 0;
+}
+.organization-back {
+  margin-left: 20px;
+  flex-shrink: 0;
+}
+.organization-empty-state {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 32px 20px;
+  text-align: center;
+}
+.organization-empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 380px;
+  margin: auto;
+}
+.organization-empty-icon {
+  color: var(--muted-foreground);
+}
+.organization-empty-content h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 550;
+}
+.organization-empty-content p,
+.organization-empty-content > span {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.organization-providers {
+  display: flex;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+}
+.organization-provider {
+  position: relative;
+  cursor: pointer;
+}
+.organization-provider input {
+  position: absolute;
+  opacity: 0;
+}
+.organization-provider > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 140px;
+  min-height: 64px;
+  padding: 12px;
+  border: 1px solid var(--input);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.organization-provider input:checked + span {
+  border-color: var(--primary);
+  background: var(--accent);
+}
+.organization-provider input:focus-visible + span {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.organization-provider input:disabled + span {
+  opacity: 0.5;
+  cursor: default;
+}
+.organization-provider small {
+  flex-basis: 100%;
+  color: var(--muted-foreground);
+  font-size: 10px;
 }
 .review-navigation {
   display: flex;
@@ -944,12 +1050,6 @@ pre {
     width: 170px;
     padding-inline: 8px;
   }
-  .brand {
-    gap: 6px;
-  }
-  .brand strong {
-    font-size: 12px;
-  }
   .group-sidebar {
     width: 160px;
   }
@@ -990,10 +1090,6 @@ pre {
   .app-sidebar {
     width: 56px;
   }
-  .brand {
-    justify-content: center;
-  }
-  .brand strong,
   .repo-picker span,
   .repo-picker > svg:last-child,
   .sidebar-label,
@@ -1289,5 +1385,11 @@ pre {
 @media (max-width: 600px) {
   .settings-section {
     padding: 18px;
+  }
+}
+
+@media (max-width: 800px) {
+  .app-titlebar-brand strong {
+    display: none;
   }
 }

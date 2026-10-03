@@ -41,6 +41,10 @@ async function verifyContextRenderer(window) {
     try {
       history.pushState({},'', '/repos/example/demo/pulls/1?revision='+pull.id);dispatchEvent(new PopStateEvent('popstate'));
       await wait(() => button('+20 context'), 'Review workspace did not load context controls');
+      if (!document.querySelector('.app-titlebar .compact-review-header') || document.querySelectorAll('.review-chrome').length !== 1) throw new Error('The PR header must occupy the app title bar exactly once');
+      for (const action of document.querySelectorAll('.app-titlebar button')) {
+        if (getComputedStyle(action).webkitAppRegion !== 'no-drag') throw new Error('Title bar actions must remain clickable');
+      }
       await wait(() => !button('+20 context').disabled, 'Exact context did not become ready');
       const view=await wait(() => document.querySelector('.viewer'), 'Diff viewer missing');
       await wait(() => codeText(view).includes('first selected change'), 'Selected hunk did not render');

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { UpdateButton } from './UpdateButton'
+import { AppTitleBar } from './AppTitleBar'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { inboxPath, readRoute, reviewPath, routeMatchesPull } from './routes'
 import {
@@ -44,6 +45,7 @@ const filters: { id: InboxFilter; label: string }[] = [
 ]
 
 export function App() {
+  const [titlebarTarget, setTitlebarTarget] = useState<HTMLDivElement | null>(null)
   const [status, setStatus] = useState<AppStatus>()
   const [repositories, setRepositories] = useState<Repository[]>([])
   const location = useLocation()
@@ -272,15 +274,36 @@ export function App() {
     filter === 'mine' ? inboxSections(visible) : [{ id: 'all', label: '', pulls: visible }]
   return (
     <div className="app-frame">
+      <AppTitleBar contentRef={setTitlebarTarget}>
+        {!pull && (
+          <div className="app-page-title">
+            <h1>
+              {route.kind === 'settings'
+                ? 'Settings'
+                : route.kind === 'not-found'
+                  ? 'Page not found'
+                  : route.kind === 'pull'
+                    ? `PR #${route.number}`
+                    : repository || 'Your repositories'}
+            </h1>
+            {route.kind === 'inbox' && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setError('')
+                  setRefresh((value) => value + 1)
+                }}
+              >
+                Refresh
+              </Button>
+            )}
+          </div>
+        )}
+      </AppTitleBar>
       <div className="app-shell">
         {route.kind !== 'pull' && (
           <aside className="app-sidebar">
-            <div className="brand">
-              <div className="brand-symbol">
-                <img src="/slopbusters.png" alt="" aria-hidden="true" />
-              </div>
-              <strong>Slopbusters</strong>
-            </div>
             <Button variant="outline" className="repo-picker" onClick={() => setPicker(true)}>
               <GitBranch size={15} />
               <span>{repository || 'Choose a repository'}</span>
@@ -344,6 +367,7 @@ export function App() {
               onReload={() => void reloadPull()}
               reloading={reloading}
               inboxUrl={inboxPath(repository, filter)}
+              titlebarTarget={titlebarTarget}
             />
           ) : route.kind === 'settings' ? (
             <SettingsPage inboxUrl={inboxPath(repository, filter)} />
@@ -364,22 +388,6 @@ export function App() {
             </div>
           ) : (
             <>
-              <div className="inbox-topbar">
-                <span>
-                  <GitBranch size={14} />
-                  {repository || 'Your repositories'}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setError('')
-                    setRefresh((value) => value + 1)
-                  }}
-                >
-                  Refresh
-                </Button>
-              </div>
               <div className="inbox-content">
                 <div className="eyebrow">YOUR REVIEW WORKSPACE</div>
                 <h1>Pull requests</h1>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import { Link, useSearchParams } from 'react-router'
 import { readReviewView, updateReviewView, type ReviewView } from './routes'
@@ -33,6 +34,7 @@ import { annotateDiscussions, discussionGroup, type LineDiscussion } from './dis
 import { InlineDiscussion, ThreadDiscussion } from './InlineDiscussion'
 import { DiscussionsTray } from './DiscussionsTray'
 import { CompactReviewHeader } from './CompactReviewHeader'
+import { OrganizationEmptyState } from './OrganizationEmptyState'
 import { useReviewDraft } from './useReviewDraft'
 import { usePullUpdates } from './usePullUpdates'
 import { usePullStack } from './usePullStack'
@@ -69,6 +71,7 @@ interface Props {
   onReload: () => void
   reloading: boolean
   inboxUrl: string
+  titlebarTarget?: HTMLElement | null
 }
 const eventLabels: Record<ReviewEvent, string> = {
   COMMENT: 'Comment',
@@ -76,7 +79,15 @@ const eventLabels: Record<ReviewEvent, string> = {
   APPROVE: 'Approve',
 }
 
-export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, inboxUrl }: Props) {
+export function ReviewWorkspace({
+  pull,
+  onUpdate,
+  status,
+  onReload,
+  reloading,
+  inboxUrl,
+  titlebarTarget,
+}: Props) {
   const { draft, setDraft, ready: draftReady, error: storageError, flush } = useReviewDraft(pull)
   const updates = usePullUpdates(pull)
   const { stack, summary: stackSummary } = usePullStack(pull)
@@ -132,7 +143,7 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
     return () => clearTimeout(timer)
   }, [copied])
 
-  const groups = pull.groups
+  const groups = grouped ? pull.groups : []
   const selected =
     groups.find((group) => group.id === view.groupId) ??
     groups.find((group) => !groupIsViewed(group, draft, pull)) ??
@@ -164,7 +175,10 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
     const sections = sectionIds(fileId)
     return sections.length > 0 && sections.every((id) => viewedHunks.has(id))
   }
-  const displayPull = useMemo(() => displayPullWithContext(pull, fileContext.contents, contextLines), [pull, fileContext.contents, contextLines])
+  const displayPull = useMemo(
+    () => displayPullWithContext(pull, fileContext.contents, contextLines),
+    [pull, fileContext.contents, contextLines],
+  )
   useEffect(() => {
     for (const fileId of visibleGroup?.fileIds ?? []) void loadFileContext(fileId).catch(() => {})
   }, [visibleGroup, loadFileContext])
@@ -184,7 +198,15 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
           }
         })
       : []
-  }, [pull, displayPull, fileContext.contents, visibleGroup, selected, collapseOverrides, draft.viewedHunkIds])
+  }, [
+    pull,
+    displayPull,
+    fileContext.contents,
+    visibleGroup,
+    selected,
+    collapseOverrides,
+    draft.viewedHunkIds,
+  ])
   const annotated = useMemo(
     () =>
       annotateDiscussions({
@@ -420,199 +442,214 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
         )}
       </div>
     )
-  return (
-    <div className="review-workspace">
-      <aside className="group-sidebar" aria-label="Review navigation">
-        <div className="review-navigation">
-          <Link
-            className="back-to-inbox"
-            to={inboxUrl}
-            onClick={(event) => {
-              if (submitting) {
-                event.preventDefault()
-                setNotice('Wait for your review to finish submitting before leaving.')
-              }
+  const reviewHeader = (
+    <div className="review-chrome">
+      {!grouped && (
+        <Link className="back-to-inbox organization-back" to={inboxUrl}>
+          <ArrowLeft size={14} />
+          Back to inbox
+        </Link>
+      )}
+      <CompactReviewHeader
+        pull={pull}
+        onDescription={() => setDescriptionOpen(true)}
+        onReload={() => void reloadReview()}
+        hasUpdates={
+          updates.hasUpdates ||
+          Boolean(pullStatus.status && pullHasUpdates(pull, pullStatus.status))
+        }
+        updateCheckError={updates.error}
+        stack={stackSummary}
+        onStack={() => setStackOpen(true)}
+        status={pullStatus.status}
+        statusError={pullStatus.error}
+        onStatus={(section) => {
+          setStatusSection(section)
+          setStatusOpen(true)
+        }}
+        reloading={reloading}
+        organizing={organizing || submitting}
+      />
+      {grouped && (
+        <div className="review-toolbar">
+          {groups.length > 0 && (
+            <Button size="xs" variant="ghost" onClick={() => changeView({ split: !split })}>
+              {split ? 'Unified' : 'Split'}
+            </Button>
+          )}
+          {groups.length > 0 && (
+            <Button
+              size="xs"
+              variant={unviewedOnly ? 'secondary' : 'ghost'}
+              aria-pressed={unviewedOnly}
+              onClick={() => {
+                const next = new URLSearchParams(searchParams)
+                if (unviewedOnly) next.delete('unviewed')
+                else next.set('unviewed', '1')
+                setSearchParams(next)
+              }}
+            >
+              {unviewedOnly ? 'Show all diffs' : 'Unviewed only'}
+            </Button>
+          )}
+          <span className="push-right" />
+          <Button
+            size="sm"
+            variant={discussionTray ? 'secondary' : 'ghost'}
+            onClick={() => {
+              setDiscussionTray(!discussionTray)
             }}
           >
-            <ArrowLeft size={14} />
-            Back to inbox
-          </Link>
-          {groups.length > 0 && (
-            <div className="group-navigation-title">
-              <span>{grouped ? 'Groups' : 'Files'}</span>
-              <button
-                className="regenerate-icon"
-                aria-label="Regenerate groups"
-                title="Regenerate groups"
-                aria-expanded={showRegenerate}
-                disabled={organizing}
-                onClick={() => setShowRegenerate((previous) => !previous)}
-              >
-                <RotateCw size={13} className={organizing ? 'animate-spin' : undefined} />
-              </button>
-            </div>
+            <MessageSquare size={14} />
+            Discussions {discussions ? discussions.threads.length + draft.comments.length : '…'}
+          </Button>
+          {hasFeedback && (
+            <Button
+              className="copy-feedback"
+              size="sm"
+              variant="outline"
+              disabled={copied}
+              aria-live="polite"
+              onClick={() => void copyFeedback()}
+            >
+              {copied ? <Check size={13} /> : <Copy size={13} />}
+              {copied ? 'Copied' : 'Copy feedback'}
+            </Button>
           )}
-          {(!grouped || showRegenerate || organizing) && (
-            <div className="organize-controls">
-              <select
-                aria-label="Coding provider"
-                value={provider}
-                onChange={(event) => setProvider(event.target.value as Provider)}
-              >
-                <option value={Provider.codex} disabled={status && !status.codex.available}>
-                  Codex
-                </option>
-                <option value={Provider.claude} disabled={status && !status.claude.available}>
-                  Claude Code
-                </option>
-              </select>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={organizing || (status && !status[provider].available)}
-                onClick={() => void organize()}
-              >
-                {organizing ? (
-                  <LoaderCircle size={13} className="animate-spin" />
-                ) : (
-                  <Plus size={13} />
-                )}
-                {organizing ? 'Organizing…' : grouped ? 'Regenerate' : 'Organize changes'}
-              </Button>
-              {grouped && !organizing && (
-                <Button size="xs" variant="ghost" onClick={() => setShowRegenerate(false)}>
-                  Cancel
-                </Button>
-              )}
-              {job && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() =>
-                    void api(`/jobs/${job}`, { method: 'DELETE' }).catch((error) =>
-                      setError(message(error)),
-                    )
-                  }
-                >
-                  Cancel
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="group-list">
-          {groups.map((group) => {
-            const done = groupIsViewed(group, draft, pull)
-            const totals = groupChangeTotals(pull, group)
-            return (
-              <button
-                className={`group-row ${selected?.id === group.id ? 'selected' : ''}`}
-                data-reviewed={done ? true : undefined}
-                key={group.id}
-                onClick={() => changeView({ groupId: group.id })}
-              >
-                <div className="group-row-top">
-                  {done ? (
-                    <Check size={13} className="green group-viewed" aria-label="Viewed" />
-                  ) : (
-                    <span className={`priority ${group.priority.toLowerCase()}`}>
-                      {group.priority}
-                    </span>
-                  )}
-                  <strong>{group.title}</strong>
-                </div>
-                <span className="group-change-stats muted">
-                  <span>
-                    {group.fileIds.length} {group.fileIds.length === 1 ? 'file' : 'files'}
-                  </span>
-                  <span className="green">+{totals.additions}</span>
-                  <span className="red">−{totals.deletions}</span>
-                </span>
-              </button>
-            )
-          })}
-          {grouped && !groups.length && <p className="empty-small muted">No changes to review.</p>}
-        </div>
-      </aside>
-      <div className="review-content">
-        <div className="review-chrome">
-          <CompactReviewHeader
-            pull={pull}
-            onDescription={() => setDescriptionOpen(true)}
-            onReload={() => void reloadReview()}
-            hasUpdates={
-              updates.hasUpdates ||
-              Boolean(pullStatus.status && pullHasUpdates(pull, pullStatus.status))
-            }
-            updateCheckError={updates.error}
-            stack={stackSummary}
-            onStack={() => setStackOpen(true)}
-            status={pullStatus.status}
-            statusError={pullStatus.error}
-            onStatus={(section) => {
-              setStatusSection(section)
-              setStatusOpen(true)
+          <Button
+            size="sm"
+            disabled={Boolean(submitted)}
+            onClick={() => {
+              setError('')
+              setSubmitOpen(true)
             }}
-            reloading={reloading}
-            organizing={organizing || submitting}
-          />
-          <div className="review-toolbar">
-            {groups.length > 0 && (
-              <Button size="xs" variant="ghost" onClick={() => changeView({ split: !split })}>
-                {split ? 'Unified' : 'Split'}
-              </Button>
-            )}
-            {groups.length > 0 && (
-              <Button
-                size="xs"
-                variant={unviewedOnly ? 'secondary' : 'ghost'}
-                aria-pressed={unviewedOnly}
-                onClick={() => {
-                  const next = new URLSearchParams(searchParams)
-                  if (unviewedOnly) next.delete('unviewed')
-                  else next.set('unviewed', '1')
-                  setSearchParams(next)
-                }}
-              >
-                {unviewedOnly ? 'Show all diffs' : 'Unviewed only'}
-              </Button>
-            )}
-            <span className="push-right" />
-            <Button
-              size="sm"
-              variant={discussionTray ? 'secondary' : 'ghost'}
-              onClick={() => {
-                setDiscussionTray(!discussionTray)
-              }}
-            >
-              <MessageSquare size={14} />
-              Discussions {discussions ? discussions.threads.length + draft.comments.length : '…'}
-            </Button>
-            {hasFeedback && (
-              <Button
-                className="copy-feedback"
-                size="sm"
-                variant="outline"
-                disabled={copied}
-                aria-live="polite"
-                onClick={() => void copyFeedback()}
-              >
-                {copied ? <Check size={13} /> : <Copy size={13} />}
-                {copied ? 'Copied' : 'Copy feedback'}
-              </Button>
-            )}
-            <Button
-              size="sm"
-              disabled={Boolean(submitted)}
-              onClick={() => {
-                setError('')
-                setSubmitOpen(true)
-              }}
-            >
-              {submitted ? 'Submitted' : 'Submit review'}
-            </Button>
-          </div>
+          >
+            {submitted ? 'Submitted' : 'Submit review'}
+          </Button>
         </div>
+      )}
+    </div>
+  )
+  return (
+    <div className="review-workspace">
+      {grouped && (
+        <aside className="group-sidebar" aria-label="Review navigation">
+          <div className="review-navigation">
+            <Link
+              className="back-to-inbox"
+              to={inboxUrl}
+              onClick={(event) => {
+                if (submitting) {
+                  event.preventDefault()
+                  setNotice('Wait for your review to finish submitting before leaving.')
+                }
+              }}
+            >
+              <ArrowLeft size={14} />
+              Back to inbox
+            </Link>
+            {groups.length > 0 && (
+              <div className="group-navigation-title">
+                <span>Groups</span>
+                <button
+                  className="regenerate-icon"
+                  aria-label="Regenerate groups"
+                  title="Regenerate groups"
+                  aria-expanded={showRegenerate}
+                  disabled={organizing}
+                  onClick={() => setShowRegenerate((previous) => !previous)}
+                >
+                  <RotateCw size={13} className={organizing ? 'animate-spin' : undefined} />
+                </button>
+              </div>
+            )}
+            {(showRegenerate || organizing) && (
+              <div className="organize-controls">
+                <select
+                  aria-label="Coding provider"
+                  value={provider}
+                  onChange={(event) => setProvider(event.target.value as Provider)}
+                >
+                  <option value={Provider.codex} disabled={status && !status.codex.available}>
+                    Codex
+                  </option>
+                  <option value={Provider.claude} disabled={status && !status.claude.available}>
+                    Claude Code
+                  </option>
+                </select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={organizing || (status && !status[provider].available)}
+                  onClick={() => void organize()}
+                >
+                  {organizing ? (
+                    <LoaderCircle size={13} className="animate-spin" />
+                  ) : (
+                    <Plus size={13} />
+                  )}
+                  {organizing ? 'Organizing…' : 'Regenerate'}
+                </Button>
+                {grouped && !organizing && (
+                  <Button size="xs" variant="ghost" onClick={() => setShowRegenerate(false)}>
+                    Cancel
+                  </Button>
+                )}
+                {job && (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() =>
+                      void api(`/jobs/${job}`, { method: 'DELETE' }).catch((error) =>
+                        setError(message(error)),
+                      )
+                    }
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="group-list">
+            {groups.map((group) => {
+              const done = groupIsViewed(group, draft, pull)
+              const totals = groupChangeTotals(pull, group)
+              return (
+                <button
+                  className={`group-row ${selected?.id === group.id ? 'selected' : ''}`}
+                  data-reviewed={done ? true : undefined}
+                  key={group.id}
+                  onClick={() => changeView({ groupId: group.id })}
+                >
+                  <div className="group-row-top">
+                    {done ? (
+                      <Check size={13} className="green group-viewed" aria-label="Viewed" />
+                    ) : (
+                      <span className={`priority ${group.priority.toLowerCase()}`}>
+                        {group.priority}
+                      </span>
+                    )}
+                    <strong>{group.title}</strong>
+                  </div>
+                  <span className="group-change-stats muted">
+                    <span>
+                      {group.fileIds.length} {group.fileIds.length === 1 ? 'file' : 'files'}
+                    </span>
+                    <span className="green">+{totals.additions}</span>
+                    <span className="red">−{totals.deletions}</span>
+                  </span>
+                </button>
+              )
+            })}
+            {grouped && !groups.length && (
+              <p className="empty-small muted">No changes to review.</p>
+            )}
+          </div>
+        </aside>
+      )}
+      <div className="review-content">
+        {titlebarTarget ? createPortal(reviewHeader, titlebarTarget) : reviewHeader}
         {storageError && (
           <div className="error-banner" role="alert">
             {storageError}
@@ -673,199 +710,264 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
           </div>
         ))}
         <div className="review-body">
-          <section className="code-panel" aria-label="Code changes">
-            {selected ? (
-              <>
-                {transfers.length > 0 && (
-                  <div className="transfers">
-                    {transfers.map((transfer) => (
-                      <details key={transfer.id}>
-                        <summary>
-                          <Badge variant={transfer.kind === 'moved' ? 'info' : 'secondary'}>
-                            {transfer.kind}
-                          </Badge>
-                          <code>
-                            {transfer.fromPath}:{transfer.fromLine}
-                          </code>
-                          <ArrowRight size={12} />
-                          <code>
-                            {transfer.toPath}:{transfer.toLine}
-                          </code>
-                          <span className="muted">{transfer.lineCount} unchanged lines</span>
-                        </summary>
-                        <pre>{transfer.text}</pre>
-                      </details>
-                    ))}
-                  </div>
-                )}
-                {items.length ? (
-                  <StyledDiffCodeView
-                    key={selected.id}
-                    className="viewer"
-                    viewerRef={viewerRef}
-                    items={annotated.items}
-                    renderHeaderPrefix={(item) => (
-                      <button
-                        type="button"
-                        className="file-collapse-toggle"
-                        aria-label={`${item.collapsed ? 'Expand' : 'Collapse'} ${item.type === 'diff' ? item.fileDiff.name : item.file.name}`}
-                        aria-expanded={!item.collapsed}
-                        title={item.collapsed ? 'Expand file' : 'Collapse file'}
-                        onClick={() => setFileCollapsed(item.id, !item.collapsed)}
-                      >
-                        {item.collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      </button>
-                    )}
-                    renderHeaderMetadata={(item) => {
-                      const file = pull.files.find((file) => file.id === item.id)
-                      return file ? (
-                        <div className="file-context-actions">
-                          <button type="button" disabled={fileContext.isLoading(file.id) || file.coverage !== 'complete' || (contextLines.get(file.id) ?? 0) >= MAX_CONTEXT} title={fileContext.error(file.id) ?? 'Expand unchanged lines around these sections'} onClick={() => void fileContext.load(file.id).then(() => setContextLines((values) => new Map(values).set(file.id, Math.min(MAX_CONTEXT, (values.get(file.id) ?? 0) + CONTEXT_STEP)))).catch(() => {})}>
-                            {fileContext.isLoading(file.id) ? 'Loading…' : `+${CONTEXT_STEP} context`}
-                          </button>
-                          {(contextLines.get(file.id) ?? 0) > 0 && <button type="button" onClick={() => setContextLines((values) => { const next = new Map(values); next.delete(file.id); return next })}>Reset</button>}
-                          <button type="button" onClick={() => { setSourceFileId(file.id); void fileContext.load(file.id).catch(() => {}) }}>Browse source</button>
-                        <label className="file-viewed">
-                          <input
-                            type="checkbox"
-                            aria-label={`Viewed ${file.path}`}
-                            checked={fileSectionsViewed(file.id)}
-                            onChange={() => toggleFile(file.id)}
-                          />
-                          Viewed
-                        </label>
-                        </div>
-                      ) : null
-                    }}
-                    renderAnnotation={(annotation) => (
-                      <InlineDiscussion
-                        discussion={annotation.metadata}
-                        body={body}
-                        onBodyChange={setBody}
-                        onSave={saveComment}
-                        onCancel={() => setEditor(null)}
-                        onEdit={editComment}
-                        onDelete={deleteComment}
-                        onReply={postReply}
-                        submitted={Boolean(submitted)}
-                      />
-                    )}
-                    renderGutterUtility={(getHoveredLine, item) => (
-                      <button
-                        className="line-comment-add"
-                        aria-label="Comment on hovered line"
-                        onClick={() => {
-                          const hovered = getHoveredLine()
-                          if (!hovered || !('side' in hovered)) return
-                          commentOnLine({
-                            fileId: item.id,
-                            line: hovered.lineNumber,
-                            side: hovered.side === 'deletions' ? DiffSide.left : DiffSide.right,
-                          })
-                        }}
-                      >
-                        <Plus size={13} />
-                      </button>
-                    )}
-                    renderCodeViewFooter={
-                      annotated.unplaced.length
-                        ? () => (
-                            <div className="unplaced-discussions">
-                              <h3>Other discussions on these files</h3>
-                              <p className="muted">
-                                These discussions refer to outdated code or lines outside the
-                                displayed sections.
-                              </p>
-                              {annotated.unplaced.map((thread) => (
-                                <div key={thread.id}>
-                                  <div className="discussion-location">
-                                    {thread.path}:{thread.line ?? thread.originalLine ?? 'file'}
-                                  </div>
-                                  <ThreadDiscussion thread={thread} onReply={postReply} />
-                                </div>
-                              ))}
-                            </div>
-                          )
-                        : undefined
+          {!grouped ? (
+            <OrganizationEmptyState
+              provider={provider}
+              status={status}
+              organizing={organizing}
+              onProviderChange={setProvider}
+              onOrganize={() => void organize()}
+              onCancel={
+                job
+                  ? () => {
+                      void api(`/jobs/${job}`, { method: 'DELETE' }).catch((error) =>
+                        setError(message(error)),
+                      )
                     }
-                    options={{
-                      // Pierre owns filenames inside its shadow root; its render callback keeps
-                      // their controls aligned with the current virtualized item and collapse state.
-                      onPostRender: (node, _instance, _phase, context) => {
-                        const filename = node.shadowRoot?.querySelector<HTMLElement>('[data-title]')
-                        if (!filename) return
-                        filename.setAttribute('role', 'button')
-                        filename.tabIndex = 0
-                        filename.setAttribute('aria-expanded', String(!context.item.collapsed))
-                        filename.title = context.item.collapsed ? 'Expand file' : 'Collapse file'
-                        filename.onclick = () =>
-                          setFileCollapsed(context.item.id, !context.item.collapsed)
-                        filename.onkeydown = (event) => {
-                          if (event.key !== 'Enter' && event.key !== ' ') return
-                          event.preventDefault()
-                          setFileCollapsed(context.item.id, !context.item.collapsed)
-                        }
-                      },
-                      theme: themeId,
-                      themeType: resolvedTheme,
-                      diffStyle: split ? 'split' : 'unified',
-                      overflow: 'wrap',
-                      enableLineSelection: true,
-                      enableGutterUtility: true,
-                      onLineNumberClick: (props, context) => {
-                        if (props.type === 'diff-line' && context.type === 'diff')
-                          commentOnLine({
-                            fileId: context.item.id,
-                            line: props.lineNumber,
-                            side:
-                              props.annotationSide === 'deletions' ? DiffSide.left : DiffSide.right,
-                          })
-                      },
-                      onLineClick: (props, context) => {
-                        if (props.type === 'diff-line' && context.type === 'diff')
-                          commentOnLine({
-                            fileId: context.item.id,
-                            line: props.lineNumber,
-                            side:
-                              props.annotationSide === 'deletions' ? DiffSide.left : DiffSide.right,
-                          })
-                      },
-                    }}
-                  />
-                ) : (
-                  <div className="empty-state">
-                    <strong>
-                      {unviewedOnly &&
-                      viewedCount === selectedHunks.length &&
-                      selectedHunks.length > 0
-                        ? 'All diff sections in this group are viewed'
-                        : 'No text patch in this group'}
-                    </strong>
-                    <span className="muted">
-                      Binary files and pure renames may have no line changes.
-                    </span>
-                    <a href={`${pull.url}/files`} target="_blank" rel="noreferrer">
-                      Inspect files on GitHub
-                    </a>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="empty-state">
-                <strong>
-                  {grouped
-                    ? 'Choose a group to read its changes.'
-                    : 'Organize changes to start reviewing'}
-                </strong>
-                {!grouped && (
-                  <span className="muted">
-                    Choose a coding provider in the sidebar to create groups.
-                  </span>
-                )}
-              </div>
-            )}
-          </section>
-          {discussionTray && (
+                  : undefined
+              }
+            />
+          ) : (
+            <section className="code-panel" aria-label="Code changes">
+              {selected ? (
+                <>
+                  {transfers.length > 0 && (
+                    <div className="transfers">
+                      {transfers.map((transfer) => (
+                        <details key={transfer.id}>
+                          <summary>
+                            <Badge variant={transfer.kind === 'moved' ? 'info' : 'secondary'}>
+                              {transfer.kind}
+                            </Badge>
+                            <code>
+                              {transfer.fromPath}:{transfer.fromLine}
+                            </code>
+                            <ArrowRight size={12} />
+                            <code>
+                              {transfer.toPath}:{transfer.toLine}
+                            </code>
+                            <span className="muted">{transfer.lineCount} unchanged lines</span>
+                          </summary>
+                          <pre>{transfer.text}</pre>
+                        </details>
+                      ))}
+                    </div>
+                  )}
+                  {items.length ? (
+                    <StyledDiffCodeView
+                      key={selected.id}
+                      className="viewer"
+                      viewerRef={viewerRef}
+                      items={annotated.items}
+                      renderHeaderPrefix={(item) => (
+                        <button
+                          type="button"
+                          className="file-collapse-toggle"
+                          aria-label={`${item.collapsed ? 'Expand' : 'Collapse'} ${item.type === 'diff' ? item.fileDiff.name : item.file.name}`}
+                          aria-expanded={!item.collapsed}
+                          title={item.collapsed ? 'Expand file' : 'Collapse file'}
+                          onClick={() => setFileCollapsed(item.id, !item.collapsed)}
+                        >
+                          {item.collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      )}
+                      renderHeaderMetadata={(item) => {
+                        const file = pull.files.find((file) => file.id === item.id)
+                        return file ? (
+                          <div className="file-context-actions">
+                            <button
+                              type="button"
+                              disabled={
+                                fileContext.isLoading(file.id) ||
+                                file.coverage !== 'complete' ||
+                                (contextLines.get(file.id) ?? 0) >= MAX_CONTEXT
+                              }
+                              title={
+                                fileContext.error(file.id) ??
+                                'Expand unchanged lines around these sections'
+                              }
+                              onClick={() =>
+                                void fileContext
+                                  .load(file.id)
+                                  .then(() =>
+                                    setContextLines((values) =>
+                                      new Map(values).set(
+                                        file.id,
+                                        Math.min(
+                                          MAX_CONTEXT,
+                                          (values.get(file.id) ?? 0) + CONTEXT_STEP,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                  .catch(() => {})
+                              }
+                            >
+                              {fileContext.isLoading(file.id)
+                                ? 'Loading…'
+                                : `+${CONTEXT_STEP} context`}
+                            </button>
+                            {(contextLines.get(file.id) ?? 0) > 0 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setContextLines((values) => {
+                                    const next = new Map(values)
+                                    next.delete(file.id)
+                                    return next
+                                  })
+                                }
+                              >
+                                Reset
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSourceFileId(file.id)
+                                void fileContext.load(file.id).catch(() => {})
+                              }}
+                            >
+                              Browse source
+                            </button>
+                            <label className="file-viewed">
+                              <input
+                                type="checkbox"
+                                aria-label={`Viewed ${file.path}`}
+                                checked={fileSectionsViewed(file.id)}
+                                onChange={() => toggleFile(file.id)}
+                              />
+                              Viewed
+                            </label>
+                          </div>
+                        ) : null
+                      }}
+                      renderAnnotation={(annotation) => (
+                        <InlineDiscussion
+                          discussion={annotation.metadata}
+                          body={body}
+                          onBodyChange={setBody}
+                          onSave={saveComment}
+                          onCancel={() => setEditor(null)}
+                          onEdit={editComment}
+                          onDelete={deleteComment}
+                          onReply={postReply}
+                          submitted={Boolean(submitted)}
+                        />
+                      )}
+                      renderGutterUtility={(getHoveredLine, item) => (
+                        <button
+                          className="line-comment-add"
+                          aria-label="Comment on hovered line"
+                          onClick={() => {
+                            const hovered = getHoveredLine()
+                            if (!hovered || !('side' in hovered)) return
+                            commentOnLine({
+                              fileId: item.id,
+                              line: hovered.lineNumber,
+                              side: hovered.side === 'deletions' ? DiffSide.left : DiffSide.right,
+                            })
+                          }}
+                        >
+                          <Plus size={13} />
+                        </button>
+                      )}
+                      renderCodeViewFooter={
+                        annotated.unplaced.length
+                          ? () => (
+                              <div className="unplaced-discussions">
+                                <h3>Other discussions on these files</h3>
+                                <p className="muted">
+                                  These discussions refer to outdated code or lines outside the
+                                  displayed sections.
+                                </p>
+                                {annotated.unplaced.map((thread) => (
+                                  <div key={thread.id}>
+                                    <div className="discussion-location">
+                                      {thread.path}:{thread.line ?? thread.originalLine ?? 'file'}
+                                    </div>
+                                    <ThreadDiscussion thread={thread} onReply={postReply} />
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          : undefined
+                      }
+                      options={{
+                        // Pierre owns filenames inside its shadow root; its render callback keeps
+                        // their controls aligned with the current virtualized item and collapse state.
+                        onPostRender: (node, _instance, _phase, context) => {
+                          const filename =
+                            node.shadowRoot?.querySelector<HTMLElement>('[data-title]')
+                          if (!filename) return
+                          filename.setAttribute('role', 'button')
+                          filename.tabIndex = 0
+                          filename.setAttribute('aria-expanded', String(!context.item.collapsed))
+                          filename.title = context.item.collapsed ? 'Expand file' : 'Collapse file'
+                          filename.onclick = () =>
+                            setFileCollapsed(context.item.id, !context.item.collapsed)
+                          filename.onkeydown = (event) => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return
+                            event.preventDefault()
+                            setFileCollapsed(context.item.id, !context.item.collapsed)
+                          }
+                        },
+                        theme: themeId,
+                        themeType: resolvedTheme,
+                        diffStyle: split ? 'split' : 'unified',
+                        overflow: 'wrap',
+                        enableLineSelection: true,
+                        enableGutterUtility: true,
+                        onLineNumberClick: (props, context) => {
+                          if (props.type === 'diff-line' && context.type === 'diff')
+                            commentOnLine({
+                              fileId: context.item.id,
+                              line: props.lineNumber,
+                              side:
+                                props.annotationSide === 'deletions'
+                                  ? DiffSide.left
+                                  : DiffSide.right,
+                            })
+                        },
+                        onLineClick: (props, context) => {
+                          if (props.type === 'diff-line' && context.type === 'diff')
+                            commentOnLine({
+                              fileId: context.item.id,
+                              line: props.lineNumber,
+                              side:
+                                props.annotationSide === 'deletions'
+                                  ? DiffSide.left
+                                  : DiffSide.right,
+                            })
+                        },
+                      }}
+                    />
+                  ) : (
+                    <div className="empty-state">
+                      <strong>
+                        {unviewedOnly &&
+                        viewedCount === selectedHunks.length &&
+                        selectedHunks.length > 0
+                          ? 'All diff sections in this group are viewed'
+                          : 'No text patch in this group'}
+                      </strong>
+                      <span className="muted">
+                        Binary files and pure renames may have no line changes.
+                      </span>
+                      <a href={`${pull.url}/files`} target="_blank" rel="noreferrer">
+                        Inspect files on GitHub
+                      </a>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="empty-state">
+                  <strong>Choose a group to read its changes.</strong>
+                </div>
+              )}
+            </section>
+          )}
+          {grouped && discussionTray && (
             <DiscussionsTray
               pull={pull}
               draft={draft}
@@ -997,7 +1099,17 @@ export function ReviewWorkspace({ pull, onUpdate, status, onReload, reloading, i
         filter={inboxFilter}
         onClose={() => setStackOpen(false)}
       />
-      <SourceContextDialog key={`${pull.id}/${sourceFileId ?? ''}`} pull={pull} fileId={sourceFileId} content={sourceFileId ? fileContext.contents.get(sourceFileId) : undefined} error={sourceFileId ? fileContext.error(sourceFileId) : undefined} onRetry={() => { if (sourceFileId) void fileContext.load(sourceFileId).catch(() => {}) }} onClose={() => setSourceFileId(undefined)} />
+      <SourceContextDialog
+        key={`${pull.id}/${sourceFileId ?? ''}`}
+        pull={pull}
+        fileId={sourceFileId}
+        content={sourceFileId ? fileContext.contents.get(sourceFileId) : undefined}
+        error={sourceFileId ? fileContext.error(sourceFileId) : undefined}
+        onRetry={() => {
+          if (sourceFileId) void fileContext.load(sourceFileId).catch(() => {})
+        }}
+        onClose={() => setSourceFileId(undefined)}
+      />
       <PullStatusDialog
         url={statusOpen ? pull.url : undefined}
         status={pullStatus.status}

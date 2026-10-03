@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('reviewerDesktop', {
+  platform: process.platform,
   getUpdateState: () => ipcRenderer.invoke('reviewer:update-state'),
   checkForUpdates: () => ipcRenderer.invoke('reviewer:update-check'),
   downloadUpdate: () => ipcRenderer.invoke('reviewer:update-download'),
