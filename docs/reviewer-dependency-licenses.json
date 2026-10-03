@@ -4761,6 +4761,14 @@
       "homepage": "https://vitest.dev"
     },
     {
+      "name": "vscode-jsonrpc",
+      "versions": [
+        "8.2.1"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/Microsoft/vscode-languageserver-node#readme"
+    },
+    {
       "name": "web-namespaces",
       "versions": [
         "2.0.1"

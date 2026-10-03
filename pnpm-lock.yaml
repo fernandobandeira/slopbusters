@@ -83,6 +83,9 @@ importers:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
+      vscode-jsonrpc:
+        specifier: 8.2.1
+        version: 8.2.1
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -3092,6 +3095,10 @@ packages:
         optional: true
       jsdom:
         optional: true
+
+  vscode-jsonrpc@8.2.1:
+    resolution: {integrity: sha512-kdjOSJ2lLIn7r1rtrMbbNCHjyMPfRnowdKjBQ+mGq6NAW5QY2bEZC/khaC5OR8svbbjvLEaIXkOq45e2X9BIbQ==}
+    engines: {node: '>=14.0.0'}
 
   web-namespaces@2.0.1:
     resolution: {integrity: sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ==}
@@ -6501,6 +6508,8 @@ snapshots:
       '@types/node': 26.6.4
     transitivePeerDependencies:
       - msw
+
+  vscode-jsonrpc@8.2.1: {}
 
   web-namespaces@2.0.1: {}
 

@@ -15,6 +15,8 @@ import { fetchDiscussions, replyToThread } from './discussions'
 import { createSourceNavigator } from './navigation'
 import { createFileContentLoader, createSourceProjectLoader } from './fileContent'
 import { configureSourceAssetsDirectory } from './treeSymbols'
+import { LanguageServers } from './languageServers'
+import { LanguageServerNavigation } from './lspNavigation'
 
 export interface ReviewerServerOptions {
   dataDirectory: string
@@ -34,7 +36,9 @@ export async function startReviewerServer(
   const checkRevision = createRevisionChecker()
   const loadFileContent = createFileContentLoader()
   const sourceProject = createSourceProjectLoader()
-  const navigateSource = createSourceNavigator(sourceProject)
+  const languageServers = new LanguageServers(options.dataDirectory)
+  let languageNavigation = new LanguageServerNavigation(sourceProject, languageServers)
+  let navigateSource = createSourceNavigator(sourceProject, languageNavigation)
   const app = express()
   let ownOrigin = ''
   app.disable('x-powered-by')
@@ -86,6 +90,14 @@ export async function startReviewerServer(
   const jobs = new Map<string, Job>()
 
   app.get('/api/preferences', (_request, response) => response.json(store.getPreferences()))
+  app.get('/api/language-servers', async (_request, response) => response.json(await languageServers.statuses()))
+  app.put('/api/language-servers', async (request, response) => {
+    await languageServers.save(request.body)
+    await languageNavigation.close()
+    languageNavigation = new LanguageServerNavigation(sourceProject, languageServers)
+    navigateSource = createSourceNavigator(sourceProject, languageNavigation)
+    response.json(await languageServers.statuses())
+  })
   app.put('/api/preferences', (request, response) => {
     const preferences = preferencesSchema.parse(request.body)
     response.json(store.savePreferences(preferences))
@@ -324,9 +336,11 @@ export async function startReviewerServer(
       closing ??= new Promise<void>((resolve, reject) => {
         for (const job of jobs.values()) job.controller.abort()
         server.close((error) => {
-          store.close()
-          if (error) reject(error)
-          else resolve()
+          void languageNavigation.close().then(() => {
+            store.close()
+            if (error) reject(error)
+            else resolve()
+          }, reject)
         })
         server.closeIdleConnections()
       })

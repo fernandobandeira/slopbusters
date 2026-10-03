@@ -4,6 +4,8 @@ import { dirname, resolve } from 'node:path'
 import type { SourceSymbol } from '../shared/sourceSymbols'
 import { getSourceSymbols } from './sourceSymbols'
 import type { NavigationTarget } from '../shared/navigation'
+import { sourceLanguage } from '../shared/languages'
+export { sourceLanguage } from '../shared/languages'
 
 let sourceAssetsDirectory: string | undefined
 let initialized: Promise<void> | undefined
@@ -27,33 +29,9 @@ function assetsDirectory(): string {
   throw new Error('Bundled source parsers could not be located.')
 }
 
-export function sourceLanguage(path: string): string {
-  const extension = path.split('.').at(-1)?.toLowerCase() ?? ''
-  if (['ts', 'tsx', 'mts', 'cts'].includes(extension)) return 'typescript'
-  if (['js', 'jsx', 'mjs', 'cjs'].includes(extension)) return 'javascript'
-  const extensions: Record<string, string> = {
-    py: 'python',
-    pyi: 'python',
-    go: 'go',
-    rs: 'rust',
-    java: 'java',
-    rb: 'ruby',
-    rake: 'ruby',
-    php: 'php',
-    cs: 'c_sharp',
-    c: 'cpp',
-    h: 'cpp',
-    cc: 'cpp',
-    cpp: 'cpp',
-    cxx: 'cpp',
-    hpp: 'cpp',
-    sh: 'bash',
-    bash: 'bash',
-    ps1: 'powershell',
-    psm1: 'powershell',
-  }
-  return extensions[extension] ?? 'text'
-}
+const grammarLanguages = new Set([
+  'python', 'go', 'rust', 'java', 'ruby', 'php', 'c_sharp', 'cpp', 'c', 'bash', 'powershell',
+])
 
 const classNodes = new Set([
   'class_definition',
@@ -105,14 +83,14 @@ async function withSyntaxTree<T>(
   read: (root: Node) => T,
 ): Promise<T | undefined> {
   const language = sourceLanguage(path)
-  if (language === 'text' || content.length > 500_000) return undefined
+  if (!grammarLanguages.has(language) || content.length > 500_000) return undefined
   const directory = assetsDirectory()
   initialized ??= Parser.init({ locateFile: (file) => resolve(directory, file) })
   await initialized
   let grammar = languages.get(language)
   if (!grammar) {
     grammar = Language.load(
-      resolve(directory, `tree-sitter-${language === 'c_sharp' ? 'c-sharp' : language}.wasm`),
+      resolve(directory, `tree-sitter-${language === 'c_sharp' ? 'c-sharp' : language === 'c' ? 'cpp' : language}.wasm`),
     )
     languages.set(language, grammar)
   }

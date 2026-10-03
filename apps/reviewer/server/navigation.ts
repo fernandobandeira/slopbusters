@@ -5,6 +5,7 @@ import type { PullRequest } from '../shared/types'
 import type { createSourceProjectLoader } from './fileContent'
 import { getSyntaxIdentifierLocations, sourceLanguage } from './treeSymbols'
 import { navigateTypeScript } from './semanticNavigation'
+import type { LanguageServerNavigation } from './lspNavigation'
 
 type SourceProject = ReturnType<typeof createSourceProjectLoader>
 const virtualRoot = '/review/'
@@ -52,7 +53,7 @@ function plainMatches(path: string, content: string, name: string): NavigationTa
 }
 
 /** Loads a bounded, immutable virtual project; reviewed packages and configuration are never run. */
-export function createSourceNavigator(project: SourceProject) {
+export function createSourceNavigator(project: SourceProject, languageServers?: LanguageServerNavigation) {
   const active = new Map<string, Promise<NavigationResult>>()
   const cache = new Map<string, NavigationResult>()
 
@@ -67,6 +68,11 @@ export function createSourceNavigator(project: SourceProject) {
     const name = selectedWord(origin.content, request.line, request.column)
     const warnings = new Set(tree.warnings)
     if (!name) return { language, mode: semantic ? 'semantic' : 'text', targets: [], warnings: [] }
+    if (!semantic && languageServers) {
+      const result = await languageServers.navigate(pull, request)
+      if (result?.mode === 'semantic') return result
+      for (const warning of result?.warnings ?? []) warnings.add(warning)
+    }
     const available = new Set(tree.paths)
     const files = new Map<string, string>([[request.path, origin.content]])
     const revisions = new Map([[request.path, origin]])
@@ -291,7 +297,8 @@ export function createSourceNavigator(project: SourceProject) {
     if (pending) return pending
     const result = navigate(pull, request)
       .then((value) => {
-        cache.set(key, value)
+        // A missing or failed installed server should be retried on the next click.
+        if (!languageServers || value.mode === 'semantic') cache.set(key, value)
         if (cache.size > 40) cache.delete(cache.keys().next().value!)
         return value
       })

@@ -164,7 +164,11 @@ export function SourceContextDialog({ pull, fileId, content, error, onRetry, onC
           }),
         },
       )
-      if (version === requestVersion.current) setNavigation(result)
+      if (version === requestVersion.current) {
+        setNavigation(result)
+        if (kind === 'definition' && result.mode === 'semantic' && result.targets.length === 1)
+          await openSource(result.targets[0].path, result.targets[0].line)
+      }
     } catch (failure) {
       if (version === requestVersion.current) setSourceError(message(failure))
     } finally {
