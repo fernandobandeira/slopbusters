@@ -1,62 +1,53 @@
-import { Layers, LoaderCircle } from 'lucide-react'
-import { Provider, type AppStatus } from '../shared/types'
-import { OpenAI, ClaudeAI } from './vendor/t3/components/ProviderLogos'
+import { LoaderCircle } from 'lucide-react'
+import { Link } from 'react-router'
+import { providerLabel, type OrganizationPreferences } from '../shared/preferences'
 import { Button } from './vendor/t3/components/ui/button'
 
 interface Props {
-  provider: Provider
-  status?: AppStatus
+  organization?: OrganizationPreferences
   organizing: boolean
-  onProviderChange: (provider: Provider) => void
-  onOrganize: () => void
+  failed?: boolean
+  onOrganize?: () => void
   onCancel?: () => void
 }
 
 export function OrganizationEmptyState({
-  provider,
-  status,
+  organization,
   organizing,
-  onProviderChange,
+  failed,
   onOrganize,
   onCancel,
 }: Props) {
   return (
-    <section className="organization-empty-state" aria-labelledby="organization-title">
+    <section
+      className="organization-empty-state"
+      aria-labelledby="organization-title"
+      aria-busy={organizing}
+    >
       <div className="organization-empty-content">
-        <Layers size={28} className="organization-empty-icon" aria-hidden="true" />
-        <h2 id="organization-title">Organize changes into groups</h2>
-        <p>Choose Claude or Codex, then organize this PR to start reviewing.</p>
-        <fieldset className="organization-providers" disabled={organizing}>
-          <legend className="sr-only">Coding provider</legend>
-          {[
-            { value: Provider.claude, label: 'Claude', Logo: ClaudeAI },
-            { value: Provider.codex, label: 'Codex', Logo: OpenAI },
-          ].map(({ value, label, Logo }) => (
-            <label className="organization-provider" key={value}>
-              <input
-                type="radio"
-                name="organization-provider"
-                value={value}
-                checked={provider === value}
-                disabled={status && !status[value].available}
-                onChange={() => onProviderChange(value)}
-              />
-              <span>
-                <Logo width={20} height={20} aria-hidden="true" />
-                {label}
-                {status && !status[value].available && <small>Not installed</small>}
-              </span>
-            </label>
-          ))}
-        </fieldset>
-        <Button
-          disabled={organizing || (status && !status[provider].available)}
-          onClick={onOrganize}
-        >
-          {organizing && <LoaderCircle size={14} className="animate-spin" aria-hidden="true" />}
-          {organizing ? 'Organizing…' : 'Organize changes'}
-        </Button>
-        {organizing && <span role="status">Creating review groups. This may take a moment.</span>}
+        {!failed && (
+          <LoaderCircle
+            size={32}
+            className="animate-spin organization-empty-icon"
+            aria-hidden="true"
+          />
+        )}
+        <h2 id="organization-title">
+          {failed
+            ? 'Could not organize this PR'
+            : organizing
+              ? 'Organizing changes…'
+              : 'Setting up your review…'}
+        </h2>
+        <p role="status">
+          {failed
+            ? 'Try again or update your provider and model in Settings.'
+            : organizing && organization
+              ? `${providerLabel(organization.provider)} is grouping related changes using ${organization.model}. This may take a moment.`
+              : 'Choose your coding provider and model to get started.'}
+        </p>
+        {failed && onOrganize && <Button onClick={onOrganize}>Try again</Button>}
+        {(failed || !organization) && <Link to="/settings">Open Settings</Link>}
         {onCancel && (
           <Button size="sm" variant="ghost" onClick={onCancel}>
             Cancel

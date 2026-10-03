@@ -2,7 +2,8 @@ import express from 'express'
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { z } from 'zod'
-import { DiffSide, Provider, ReviewEvent } from '../shared/types'
+import { DiffSide, ReviewEvent } from '../shared/types'
+import { preferencesSchema } from '../shared/preferences'
 import { fetchPull, getInbox, listRepositories, submitReview } from './github'
 import { ReviewerStore, ReviewNotFoundError } from './store'
 import { createRevisionChecker } from './updates'
@@ -86,10 +87,7 @@ export async function startReviewerServer(
 
   app.get('/api/preferences', (_request, response) => response.json(store.getPreferences()))
   app.put('/api/preferences', (request, response) => {
-    const preferences = z
-      .object({ theme: z.string().min(1).max(80).optional() })
-      .strict()
-      .parse(request.body)
+    const preferences = preferencesSchema.parse(request.body)
     response.json(store.savePreferences(preferences))
   })
   app.get('/api/pulls/:id/draft', (request, response) =>
@@ -225,17 +223,30 @@ export async function startReviewerServer(
     )
   })
   app.post('/api/pulls/:id/organize', async (request, response) => {
-    const { provider } = z.object({ provider: z.enum(Provider) }).parse(request.body)
+    const { force } = z
+      .object({ force: z.boolean().default(false) })
+      .strict()
+      .parse(request.body)
+    const organization = store.getPreferences().organization
+    if (!organization) throw new Error('Choose your coding provider and model in Settings first.')
     const pr = await getPull(request.params.id)
-    if ([...jobs.values()].some((job) => job.pullId === pr.id && job.status === 'running'))
-      throw new Error('This review is already being organized.')
+    const running = [...jobs].find(([, job]) => job.pullId === pr.id && job.status === 'running')
+    if (running) {
+      response.status(202).json({ id: running[0] })
+      return
+    }
+    if (!force && pr.groupingSource !== 'files') {
+      response.json({ complete: true })
+      return
+    }
     const id = randomUUID()
     const job: Job = { status: 'running', controller: new AbortController(), pullId: pr.id }
     jobs.set(id, job)
     response.status(202).json({ id })
-    void organizePull(pr, provider, job.controller.signal)
+    void organizePull(pr, organization, job.controller.signal)
       .then(async (groups) => {
-        await savePull({ ...pr, groups, groupingSource: provider })
+        const latest = await getPull(pr.id)
+        await savePull({ ...latest, groups, groupingSource: organization.provider })
         job.status = 'complete'
       })
       .catch((error: unknown) => {

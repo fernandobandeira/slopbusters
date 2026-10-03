@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Provider, type PullRequest } from '../shared/types'
 import { loadDraft } from '../src/drafts'
 import { OrganizationEmptyState } from '../src/OrganizationEmptyState'
+import { OrganizationSettings } from '../src/OrganizationSettings'
+import { organizationDefaults } from '../shared/preferences'
 import { ReviewWorkspace } from '../src/ReviewWorkspace'
 import { fixturePull } from './fixtures/pull'
 
@@ -30,6 +32,7 @@ function renderWorkspace(pull: PullRequest) {
       { initialEntries: ['/repos/review-room/example/pulls/128'] },
       createElement(ReviewWorkspace, {
         pull,
+        organization: { provider: Provider.codex, model: organizationDefaults.codex.model },
         onUpdate: vi.fn(),
         onReload: vi.fn(),
         reloading: false,
@@ -46,7 +49,7 @@ describe('organization before review', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it.each([false, true])(
-    'shows one organization prompt with no review UI (empty groups: %s)',
+    'shows a centered loader with no review UI (empty groups: %s)',
     (empty) => {
       const pull = fixturePull()
       if (empty) pull.groups = []
@@ -54,10 +57,10 @@ describe('organization before review', () => {
       const markup = renderWorkspace(pull)
 
       expect(markup.match(/id="organization-title"/g)).toHaveLength(1)
-      expect(markup).toContain('Organize changes into groups')
-      expect(markup).toContain('value="claude"')
-      expect(markup).toContain('value="codex"')
-      expect(markup).toContain('Organize changes</button>')
+      expect(markup).toContain('Organizing changes…')
+      expect(markup).toContain('gpt-6.1-sol')
+      expect(markup).toContain('role="status"')
+      expect(markup).not.toContain('name="organization-provider"')
       expect(markup).toContain('Back to inbox')
       expect(markup).not.toContain('Review navigation')
       expect(markup).not.toContain('Code changes')
@@ -81,20 +84,54 @@ describe('organization before review', () => {
     },
   )
 
-  it('keeps the organization prompt visible with progress and cancellation while working', () => {
+  it('shows progress and cancellation with progress and cancellation while working', () => {
     const markup = renderToStaticMarkup(
       createElement(OrganizationEmptyState, {
-        provider: Provider.claude,
+        organization: { provider: Provider.claude, model: organizationDefaults.claude.model },
         organizing: true,
-        onProviderChange: vi.fn(),
         onOrganize: vi.fn(),
         onCancel: vi.fn(),
       }),
     )
 
-    expect(markup).toContain('<fieldset class="organization-providers" disabled="">')
-    expect(markup).toContain('Organizing…')
+    expect(markup).not.toContain('fieldset')
+    expect(markup).toContain('Organizing changes…')
+    expect(markup).toContain('claude-opus-5-5')
     expect(markup).toContain('role="status"')
     expect(markup).toContain('Cancel')
+  })
+})
+
+describe('organization settings', () => {
+  it.each([Provider.codex, Provider.claude])(
+    'suggests the requested default for %s',
+    (provider) => {
+      const markup = renderToStaticMarkup(
+        createElement(OrganizationSettings, {
+          organization: { provider, model: organizationDefaults[provider].model },
+          firstRun: true,
+          onSave: vi.fn(),
+        }),
+      )
+      expect(markup).toContain(organizationDefaults[provider].model)
+      expect(markup).toContain(organizationDefaults[provider].label)
+      expect(markup).toContain('Get started')
+    },
+  )
+  it('lets a failed run retry and open settings without another provider picker', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(OrganizationEmptyState, {
+          organizing: false,
+          failed: true,
+          onOrganize: vi.fn(),
+        }),
+      ),
+    )
+    expect(markup).toContain('Try again')
+    expect(markup).toContain('href="/settings"')
+    expect(markup).not.toContain('fieldset')
   })
 })

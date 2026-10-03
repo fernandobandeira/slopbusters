@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import { Link, useSearchParams } from 'react-router'
@@ -10,7 +10,6 @@ import {
   Plus,
   ArrowLeft,
   ArrowRight,
-  LoaderCircle,
   RotateCw,
   ChevronDown,
   ChevronRight,
@@ -35,6 +34,7 @@ import { InlineDiscussion, ThreadDiscussion } from './InlineDiscussion'
 import { DiscussionsTray } from './DiscussionsTray'
 import { CompactReviewHeader } from './CompactReviewHeader'
 import { OrganizationEmptyState } from './OrganizationEmptyState'
+import type { OrganizationPreferences } from '../shared/preferences'
 import { useReviewDraft } from './useReviewDraft'
 import { usePullUpdates } from './usePullUpdates'
 import { usePullStack } from './usePullStack'
@@ -55,9 +55,7 @@ import { clearSubmittedFeedback, exportFeedback, groupChangeTotals } from '../sh
 import { pullHasUpdates } from '../shared/updates'
 import {
   DiffSide,
-  Provider,
   ReviewEvent,
-  type AppStatus,
   type DraftComment,
   type PullRequest,
   type PullDiscussions,
@@ -67,7 +65,7 @@ import {
 interface Props {
   pull: PullRequest
   onUpdate: (pull: PullRequest) => void
-  status?: AppStatus
+  organization?: OrganizationPreferences
   onReload: () => void
   reloading: boolean
   inboxUrl: string
@@ -82,7 +80,7 @@ const eventLabels: Record<ReviewEvent, string> = {
 export function ReviewWorkspace({
   pull,
   onUpdate,
-  status,
+  organization,
   onReload,
   reloading,
   inboxUrl,
@@ -116,12 +114,10 @@ export function ReviewWorkspace({
     if (next.toString() !== searchParams.toString()) setSearchParams(next)
   }
   const [discussionTray, setDiscussionTray] = useState(false)
-  const [provider, setProvider] = useState(() =>
-    pull.groupingSource === 'files' ? Provider.codex : pull.groupingSource,
-  )
-  const [showRegenerate, setShowRegenerate] = useState(false)
+  const autoStarted = useRef(false)
   const [job, setJob] = useState<string>()
-  const [organizing, setOrganizing] = useState(false)
+  const [organizing, setOrganizing] = useState(Boolean(!grouped && organization))
+  const [organizationFailed, setOrganizationFailed] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [editor, setEditor] = useState<Omit<DraftComment, 'body'> | null>(null)
@@ -326,16 +322,17 @@ export function ReviewWorkspace({
             onUpdate(updated)
             setJob(undefined)
             setOrganizing(false)
-            setShowRegenerate(false)
           }
         } else if (result.status === 'failed') {
           setError(result.error ?? 'Organization failed.')
+          setOrganizationFailed(true)
           setJob(undefined)
           setOrganizing(false)
         } else timer = setTimeout(() => void poll(), 1500)
       } catch (error) {
         if (active) {
           setError(message(error))
+          setOrganizationFailed(true)
           setJob(undefined)
           setOrganizing(false)
         }
@@ -348,22 +345,39 @@ export function ReviewWorkspace({
     }
   }, [job, pull.id, onUpdate])
 
-  async function organize() {
-    setError('')
-    setNotice('')
-    setOrganizing(true)
-    try {
-      const result = await api<{ id: string }>(`/pulls/${pull.id}/organize`, {
-        method: 'POST',
-        body: JSON.stringify({ provider }),
-      })
-      setJob(result.id)
-      changeView({ groupId: undefined })
-    } catch (error) {
-      setError(message(error))
-      setOrganizing(false)
-    }
-  }
+  const organize = useCallback(
+    async (force = false) => {
+      setError('')
+      setNotice('')
+      setOrganizing(true)
+      setOrganizationFailed(false)
+      try {
+        const result = await api<{ id?: string; complete?: boolean }>(
+          `/pulls/${pull.id}/organize`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ force }),
+          },
+        )
+        if (result.complete) {
+          onUpdate(await api<PullRequest>(`/pulls/${pull.id}`))
+          setOrganizing(false)
+        } else setJob(result.id)
+      } catch (error) {
+        setError(message(error))
+        setOrganizationFailed(true)
+        setOrganizing(false)
+      }
+    },
+    [pull.id, onUpdate],
+  )
+
+  useEffect(() => {
+    if (grouped || !organization || autoStarted.current) return
+    autoStarted.current = true
+    void organize()
+  }, [grouped, organization, organize])
+
   function addComment(location: { path: string; line: number; side: DiffSide; code?: string }) {
     if (!selected) return
     setBody('')
@@ -532,6 +546,23 @@ export function ReviewWorkspace({
   )
   return (
     <div className="review-workspace">
+      {grouped && organizing && (
+        <div className="organization-overlay">
+          <OrganizationEmptyState
+            organization={organization}
+            organizing
+            onCancel={
+              job
+                ? () => {
+                    void api(`/jobs/${job}`, { method: 'DELETE' }).catch((cause) =>
+                      setError(message(cause)),
+                    )
+                  }
+                : undefined
+            }
+          />
+        </div>
+      )}
       {grouped && (
         <aside className="group-sidebar" aria-label="Review navigation">
           <div className="review-navigation">
@@ -555,59 +586,14 @@ export function ReviewWorkspace({
                   className="regenerate-icon"
                   aria-label="Regenerate groups"
                   title="Regenerate groups"
-                  aria-expanded={showRegenerate}
                   disabled={organizing}
-                  onClick={() => setShowRegenerate((previous) => !previous)}
+                  onClick={() => {
+                    changeView({ groupId: undefined })
+                    void organize(true)
+                  }}
                 >
                   <RotateCw size={13} className={organizing ? 'animate-spin' : undefined} />
                 </button>
-              </div>
-            )}
-            {(showRegenerate || organizing) && (
-              <div className="organize-controls">
-                <select
-                  aria-label="Coding provider"
-                  value={provider}
-                  onChange={(event) => setProvider(event.target.value as Provider)}
-                >
-                  <option value={Provider.codex} disabled={status && !status.codex.available}>
-                    Codex
-                  </option>
-                  <option value={Provider.claude} disabled={status && !status.claude.available}>
-                    Claude Code
-                  </option>
-                </select>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={organizing || (status && !status[provider].available)}
-                  onClick={() => void organize()}
-                >
-                  {organizing ? (
-                    <LoaderCircle size={13} className="animate-spin" />
-                  ) : (
-                    <Plus size={13} />
-                  )}
-                  {organizing ? 'Organizing…' : 'Regenerate'}
-                </Button>
-                {grouped && !organizing && (
-                  <Button size="xs" variant="ghost" onClick={() => setShowRegenerate(false)}>
-                    Cancel
-                  </Button>
-                )}
-                {job && (
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={() =>
-                      void api(`/jobs/${job}`, { method: 'DELETE' }).catch((error) =>
-                        setError(message(error)),
-                      )
-                    }
-                  >
-                    Cancel
-                  </Button>
-                )}
               </div>
             )}
           </div>
@@ -712,10 +698,9 @@ export function ReviewWorkspace({
         <div className="review-body">
           {!grouped ? (
             <OrganizationEmptyState
-              provider={provider}
-              status={status}
-              organizing={organizing}
-              onProviderChange={setProvider}
+              organization={organization}
+              organizing={organizing || Boolean(organization && !autoStarted.current)}
+              failed={organizationFailed}
               onOrganize={() => void organize()}
               onCancel={
                 job

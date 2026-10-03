@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { Priority, Provider, type ChangeGroup, type PullRequest } from '../shared/types'
 import { runCommand } from './process'
+import type { OrganizationPreferences } from '../shared/preferences'
 
 const groupSchema = z.object({
   groups: z
@@ -53,7 +54,7 @@ export function validateGrouping(pr: PullRequest, input: unknown): ChangeGroup[]
 
 export async function organizePull(
   pr: PullRequest,
-  provider: Provider,
+  { provider, model }: OrganizationPreferences,
   signal: AbortSignal,
 ): Promise<ChangeGroup[]> {
   const sections = pr.files.flatMap((file) =>
@@ -83,6 +84,8 @@ export async function organizePull(
           command: 'codex',
           args: [
             'exec',
+            '--model',
+            model,
             '--ephemeral',
             '--ignore-user-config',
             '--ignore-rules',
@@ -108,6 +111,8 @@ export async function organizePull(
           command: 'claude',
           args: [
             '-p',
+            '--model',
+            model,
             '--safe-mode',
             '--tools',
             '',

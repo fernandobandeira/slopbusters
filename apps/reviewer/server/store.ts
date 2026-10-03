@@ -9,6 +9,7 @@ import {
   hunkFingerprint,
 } from '../shared/progress'
 import type { PullRequest, ReviewDraft } from '../shared/types'
+import type { Preferences } from '../shared/preferences'
 
 export class ReviewNotFoundError extends Error {
   constructor() {
@@ -18,9 +19,6 @@ export class ReviewNotFoundError extends Error {
 export interface StoredDraft {
   draft: ReviewDraft
   exists: boolean
-}
-export interface Preferences {
-  theme?: string
 }
 
 /** Instances own connections; importing this module never creates local data. */

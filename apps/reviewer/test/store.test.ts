@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ReviewerStore } from '../server/store'
 import { emptyDraft } from '../shared/progress'
-import { DiffSide } from '../shared/types'
+import { Provider, DiffSide } from '../shared/types'
 import { fixturePull } from './fixtures/pull'
 import { startReviewerServer } from '../server/app'
 
@@ -37,7 +37,10 @@ describe('SQLite review storage', () => {
     store.savePull(pull)
     const draft = { ...emptyDraft(), summary: 'A saved note', viewedFileIds: [pull.files[0]!.id] }
     store.saveDraft(pull.id, draft)
-    store.savePreferences({ theme: 'nord' })
+    store.savePreferences({
+      theme: 'nord',
+      organization: { provider: Provider.codex, model: 'gpt-6.1-sol' },
+    })
     close(store)
     store = open(path)
     expect(store.getPull(pull.id)).toEqual(pull)
@@ -49,7 +52,10 @@ describe('SQLite review storage', () => {
         viewedHunkIds: pull.files[0]!.hunks.map((hunk) => hunk.id),
       },
     })
-    expect(store.getPreferences()).toEqual({ theme: 'nord' })
+    expect(store.getPreferences()).toEqual({
+      theme: 'nord',
+      organization: { provider: Provider.codex, model: 'gpt-6.1-sol' },
+    })
   })
   it('carries unchanged review proof to a new revision while keeping notes and comments on the old revision', () => {
     const store = open(directory())

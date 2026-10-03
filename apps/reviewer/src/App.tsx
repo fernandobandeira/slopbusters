@@ -29,6 +29,8 @@ import { api, message } from './api'
 import { inboxPulls, type InboxFilter } from './inbox'
 import { ReviewWorkspace } from './ReviewWorkspace'
 import { SettingsPage } from './SettingsPage'
+import { OrganizationSettings } from './OrganizationSettings'
+import type { Preferences, OrganizationPreferences } from '../shared/preferences'
 import { StackBadge } from './StackBadge'
 import { StackDialog } from './StackPanel'
 import { PullStatusDialog } from './PullStatusDialog'
@@ -76,6 +78,30 @@ export function App() {
   const [reloading, setReloading] = useState(false)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const [preferences, setPreferences] = useState<Preferences>()
+  const [preferencesError, setPreferencesError] = useState('')
+  useEffect(() => {
+    const controller = new AbortController()
+    void api<Preferences>('/preferences', { signal: controller.signal })
+      .then((result) => {
+        if (!controller.signal.aborted) {
+          setPreferences(result)
+          setPreferencesError('')
+        }
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted) setPreferencesError(message(cause))
+      })
+    return () => controller.abort()
+  }, [refresh])
+  async function saveOrganization(organization: OrganizationPreferences) {
+    const result = await api<Preferences>('/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ organization }),
+    })
+    setPreferences(result)
+    setPreferencesError('')
+  }
   const pullUrl =
     route.kind === 'pull' ? `https://github.com/${route.repository}/pull/${route.number}` : ''
   const revision = route.kind === 'pull' ? route.revision : undefined
@@ -344,6 +370,14 @@ export function App() {
           </aside>
         )}
         <main className="app-main">
+          {preferencesError && (
+            <div className="error-banner" role="alert">
+              Could not load your preferences: {preferencesError}
+              <Button size="xs" variant="ghost" onClick={() => setRefresh((value) => value + 1)}>
+                Retry
+              </Button>
+            </div>
+          )}
           {displayError && (
             <div role="alert" className="error-banner">
               {displayError}
@@ -363,14 +397,20 @@ export function App() {
               key={pull.id}
               pull={pull}
               onUpdate={updatePull}
-              status={status}
+              organization={preferences?.organization}
               onReload={() => void reloadPull()}
               reloading={reloading}
               inboxUrl={inboxPath(repository, filter)}
               titlebarTarget={titlebarTarget}
             />
           ) : route.kind === 'settings' ? (
-            <SettingsPage inboxUrl={inboxPath(repository, filter)} />
+            <SettingsPage
+              key={preferences ? 'loaded' : 'loading'}
+              inboxUrl={inboxPath(repository, filter)}
+              organization={preferences?.organization}
+              status={status}
+              onSave={saveOrganization}
+            />
           ) : route.kind === 'not-found' ? (
             <div className="empty-state">
               <strong>Page not found</strong>
@@ -613,6 +653,17 @@ export function App() {
           </DialogPopup>
         </Dialog>
       </div>
+      <Dialog open={Boolean(preferences && !preferences.organization)}>
+        <DialogPopup showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Choose your coding provider</DialogTitle>
+            <DialogDescription>Set up automatic grouping for your pull requests.</DialogDescription>
+          </DialogHeader>
+          <div className="dialog-body">
+            <OrganizationSettings firstRun status={status} onSave={saveOrganization} />
+          </div>
+        </DialogPopup>
+      </Dialog>
       <UpdateButton />
     </div>
   )

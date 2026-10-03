@@ -737,23 +737,6 @@ pre {
 .copy-feedback {
   min-width: 112px;
 }
-.review-navigation .organize-controls {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 7px;
-}
-.review-navigation .organize-controls select {
-  width: 100%;
-  font-size: 11px;
-  background: var(--surface-recessed);
-  border: 1px solid var(--input);
-  padding: 6px 8px;
-  border-radius: 6px;
-}
-.review-navigation .organize-controls > button {
-  width: 100%;
-}
 .review-body {
   display: flex;
   flex: 1;
@@ -1392,4 +1375,38 @@ pre {
   .app-titlebar-brand strong {
     display: none;
   }
+}
+
+.organization-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 480px;
+}
+.organization-settings .organization-providers {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.organization-settings > label {
+  font-size: 13px;
+  font-weight: 500;
+}
+.organization-settings p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.organization-settings > button {
+  align-self: flex-start;
+}
+.organization-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: var(--background);
+}
+.organization-overlay .organization-empty-state {
+  width: 100%;
 }
