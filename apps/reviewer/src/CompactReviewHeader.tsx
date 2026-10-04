@@ -57,7 +57,7 @@ export function ReviewPullDetails({
           {pull.owner}/{pull.repo} #{pull.number}
           <ArrowUpRight size={12} />
         </a>
-        {stack && <StackBadge summary={stack} onClick={onStack} compact />}
+        {stack && <StackBadge summary={stack} onClick={onStack} />}
       </div>
       <div className="compact-review-details">
         <span className="compact-review-branches" title={`${pull.headBranch} → ${pull.baseBranch}`}>

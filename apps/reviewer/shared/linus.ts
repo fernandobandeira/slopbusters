@@ -76,6 +76,7 @@ export interface LinusRecommendation {
   number: number
   headSha: string
   verdict: LinusAdvice['verdict']
+  recommendationCount: number
 }
 
 export interface LinusReplayRequest {

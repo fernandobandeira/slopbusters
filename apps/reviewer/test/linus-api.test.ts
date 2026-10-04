@@ -87,7 +87,7 @@ describe('Linus review API and persistence', () => {
         {
           ...old.results[0],
           pull: { ...first, headSha: 'new-head' },
-          advice: { ...advice, verdict: 'stack' },
+          advice: { ...advice, verdict: 'stack', steps: [advice.steps[0], advice.steps[0]] },
         },
       ],
     })
@@ -119,6 +119,7 @@ describe('Linus review API and persistence', () => {
             number: first.number,
             headSha: 'new-head',
             verdict: 'stack',
+            recommendationCount: 2,
           },
           {
             sessionId: 'old-review',
@@ -127,6 +128,7 @@ describe('Linus review API and persistence', () => {
             number: second.number,
             headSha: second.headSha,
             verdict: 'keep',
+            recommendationCount: 1,
           },
         ],
       })

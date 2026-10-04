@@ -180,7 +180,8 @@ export class ReviewerStore {
         json_extract(result.value, '$.pull.url') AS url,
         json_extract(result.value, '$.pull.number') AS number,
         json_extract(result.value, '$.pull.headSha') AS head_sha,
-        json_extract(result.value, '$.advice.verdict') AS verdict
+        json_extract(result.value, '$.advice.verdict') AS verdict,
+        json_array_length(result.value, '$.advice.steps') AS recommendation_count
       FROM linus_sessions AS sessions, json_each(sessions.session, '$.results') AS result
       WHERE sessions.repository = ?
       ORDER BY sessions.created_at DESC, sessions.rowid DESC
@@ -198,6 +199,7 @@ export class ReviewerStore {
           number: Number(row.number),
           headSha: String(row.head_sha),
           verdict: String(row.verdict) as LinusRecommendation['verdict'],
+          recommendationCount: Number(row.recommendation_count),
         })
     }
     return [...latest.values()]
