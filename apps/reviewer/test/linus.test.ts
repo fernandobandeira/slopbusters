@@ -54,6 +54,13 @@ describe('Linus evidence and recommendations', () => {
       }),
     ).toThrow()
   })
+  it('rejects reviews longer than three turns or overly long dialogue', () => {
+    const advice = fixtureAdvice()
+    advice.steps.push({ ...advice.steps[0] })
+    expect(() => validateAdvice(fixturePull(), advice)).toThrow()
+    advice.steps = [{ ...advice.steps[0], text: 'x'.repeat(501) }]
+    expect(() => validateAdvice(fixturePull(), advice)).toThrow()
+  })
   it('distinguishes dependency stacks from independent changes and rejects forward/cyclic dependencies', () => {
     const advice = fixtureAdvice()
     advice.verdict = 'stack'

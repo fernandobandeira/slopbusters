@@ -88,7 +88,6 @@ export function App() {
   const [refresh, setRefresh] = useState(0)
   const [preferences, setPreferences] = useState<Preferences>()
   const [preferencesError, setPreferencesError] = useState('')
-  const [linusSelectionTarget, setLinusSelectionTarget] = useState<HTMLDivElement | null>(null)
   const [linusSelection, setLinusSelection] = useState<{ repository: string; urls: string[] }>()
   const [linusRefresh, setLinusRefresh] = useState(0)
   const [linusReplay, setLinusReplay] = useState<LinusReplayRequest & { repository: string }>()
@@ -495,7 +494,6 @@ export function App() {
                     </button>
                   ))}
                 </div>
-                <div ref={setLinusSelectionTarget} />
                 {savedLinus.error && (
                   <p role="status" className="inbox-warning">
                     Could not load Linus recommendations: {savedLinus.error}
@@ -666,7 +664,6 @@ export function App() {
             selection={{
               active: selectingForLinus,
               urls: selectedLinusUrls,
-              target: linusSelectionTarget,
               onChoose: () => {
                 setLinusReplay(undefined)
                 setLinusSelection({ repository, urls: [] })

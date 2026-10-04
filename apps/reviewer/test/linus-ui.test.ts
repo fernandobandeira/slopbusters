@@ -41,6 +41,33 @@ describe('Linus entry and model settings', () => {
     expect(markup).toContain('/linus/neutral.png')
     expect(markup).toContain('Close Linus')
   })
+  it('embeds selection controls in the chat bubble with cancellation before confirmation', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(LinusCompanion, {
+          repository: 'review-room/example',
+          pulls: [],
+          available: true,
+          preferences: { organization: { provider: Provider.codex, model: 'gpt-6.1-sol' } },
+          selection: {
+            active: true,
+            urls: ['https://github.com/review-room/example/pull/1'],
+            onChoose: vi.fn(),
+            onChange: vi.fn(),
+            onCancel: vi.fn(),
+          },
+        }),
+      ),
+    )
+    expect(markup).toContain('linus-bubble')
+    expect(markup).toContain('aria-label="Select PRs for Linus"')
+    expect(markup).toContain('1 / 20 selected')
+    expect(markup).toContain('Review 1 PR')
+    expect(markup.indexOf('Cancel')).toBeLessThan(markup.indexOf('Review 1 PR'))
+    expect(markup).not.toContain('Choose PRs</button>')
+  })
   it('keeps the invitation off other inboxes until a session exists', () => {
     const markup = renderToStaticMarkup(
       createElement(

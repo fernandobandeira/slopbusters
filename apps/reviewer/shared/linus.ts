@@ -2,6 +2,8 @@ import { z } from 'zod'
 import type { OrganizationPreferences } from './preferences'
 import type { PullRequest } from './types'
 
+export const linusTourStepLimit = 3
+
 export const expressionSchema = z.enum(['neutral', 'thinking', 'happy', 'resigned', 'angry'])
 export const verdictSchema = z.enum(['keep', 'stack', 'separate', 'uncertain'])
 export const adviceSchema = z
@@ -28,7 +30,7 @@ export const adviceSchema = z
       .array(
         z
           .object({
-            text: z.string().min(1).max(1200),
+            text: z.string().min(1).max(500),
             emotion: expressionSchema,
             target: z.enum(['overview', 'description', 'diff']),
             reference: z.string().max(2000),
@@ -36,7 +38,7 @@ export const adviceSchema = z
           .strict(),
       )
       .min(1)
-      .max(12),
+      .max(linusTourStepLimit),
   })
   .strict()
 

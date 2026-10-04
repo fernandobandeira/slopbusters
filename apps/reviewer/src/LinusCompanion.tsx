@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import {
   ArrowUpRight,
@@ -150,6 +149,26 @@ function LinusEvidence({
                     <PullDescription pull={{ ...pull, description: advice.revisedDescription }} />
                   </>
                 )}
+                {advice.limitations.length > 0 && (
+                  <details>
+                    <summary>Review limitations</summary>
+                    <ul>
+                      {advice.limitations.map((limitation, index) => (
+                        <li key={index}>{limitation}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {advice.disagreements.length > 0 && (
+                  <details>
+                    <summary>Unresolved disagreements</summary>
+                    <ul>
+                      {advice.disagreements.map((disagreement, index) => (
+                        <li key={index}>{disagreement}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
               </div>
             )}
           </>
@@ -218,7 +237,7 @@ export function LinusCompanion({
   const turn = turns[index]
   const result = turn?.result
   const turnKey = result ? `${reviewId}:${index}:${result.fingerprint}` : ''
-  const evidence = Boolean(turnKey && !turn?.transition && hiddenEvidenceTurn !== turnKey)
+  const evidence = Boolean(turnKey && hiddenEvidenceTurn !== turnKey)
   const active = session?.status === 'running'
   const reviewMode = mode === 'review' && !selecting && !replayLoading
   const emotion =
@@ -325,29 +344,6 @@ export function LinusCompanion({
   }
   return (
     <>
-      {open &&
-        selecting &&
-        selection?.target &&
-        createPortal(
-          <LinusPullSelection
-            pulls={pulls}
-            selected={selection.urls}
-            ready={Boolean(preferences?.organization)}
-            busy={busy}
-            onChange={selection.onChange}
-            onCancel={selection.onCancel}
-            onStart={() => {
-              setMode('review')
-              setHiddenEvidenceTurn(turnKey)
-              selection.onCancel()
-              void act(
-                'start',
-                selection.urls.filter((url) => pulls.some((pull) => pull.url === url)),
-              )
-            }}
-          />,
-          selection.target,
-        )}
       {open && evidence && reviewMode && turn && (
         <LinusEvidence
           result={turn.result}
@@ -398,16 +394,35 @@ export function LinusCompanion({
                 </div>
               </>
             )}
-            {selecting && (
-              <p className="linus-speech">Select the PRs you want me to review from your list.</p>
+            {selecting && selection && (
+              <LinusPullSelection
+                pulls={pulls}
+                selected={selection.urls}
+                ready={Boolean(preferences?.organization)}
+                busy={busy}
+                onChange={selection.onChange}
+                onCancel={selection.onCancel}
+                onStart={() => {
+                  setMode('review')
+                  setHiddenEvidenceTurn(turnKey)
+                  selection.onCancel()
+                  void act(
+                    'start',
+                    selection.urls.filter((url) => pulls.some((pull) => pull.url === url)),
+                  )
+                }}
+              />
             )}
             {reviewMode && (
               <>
                 {active && !savedResult && (
-                  <div className="linus-working" role="status">
+                  <div
+                    className={`linus-working${turn ? ' linus-working-compact' : ''}`}
+                    role="status"
+                  >
                     <LoaderCircle size={15} className="animate-spin" />
                     <div>
-                      <strong>Compiling opinions…</strong>
+                      {!turn && <strong>Compiling opinions…</strong>}
                       <span>{session.progress}</span>
                     </div>
                   </div>
@@ -443,67 +458,67 @@ export function LinusCompanion({
                 {turn && (
                   <>
                     <div className="linus-turn-meta">
-                      <span>
-                        {turn.transition ? `PR #${turn.transition.pull.number} → ` : ''}
-                        PR #{turn.result.pull.number}
-                      </span>
+                      <span>PR #{turn.result.pull.number}</span>
                       <span>
                         {index + 1} / {turns.length}
                         {active && !savedResult ? ' so far' : ''}
                       </span>
                     </div>
-                    {!turn.transition && (
-                      <strong className="linus-verdict">
-                        {verdictLabels[turn.result.advice.verdict]}
-                      </strong>
-                    )}
+                    <strong className="linus-verdict">
+                      {verdictLabels[turn.result.advice.verdict]}
+                    </strong>
                     <p className="linus-speech" aria-live="polite">
                       {turn.step.text}
                     </p>
-                    {stale && !turn.transition && (
+                    {stale && (
                       <p className="linus-notice">
                         This PR changed after the review. These recommendations describe the saved
                         snapshot.
                       </p>
                     )}
-                    <div className="linus-actions linus-tour-controls">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={index === 0}
-                        onClick={() => advance(index - 1)}
-                      >
-                        <ChevronLeft size={14} /> Back
-                      </Button>
-                      {!turn.transition && (
+                    <div className="linus-tour-controls">
+                      <div className="linus-actions">
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`Copy PR #${turn.result.pull.number} recommendations`}
+                          title="Copy this PR’s recommendations"
+                          onClick={() => void copy(turn.result)}
+                        >
+                          <Copy size={14} />
+                        </Button>
+                        {!evidence && (
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label="Show evidence"
+                            title="Show evidence"
+                            onClick={() => setHiddenEvidenceTurn(undefined)}
+                          >
+                            <Maximize2 size={14} />
+                          </Button>
+                        )}
+                      </div>
+                      <div className="linus-actions">
                         <Button
                           size="sm"
-                          variant="ghost"
-                          onClick={() => setHiddenEvidenceTurn(evidence ? turnKey : undefined)}
+                          variant="outline"
+                          disabled={index === 0}
+                          onClick={() => advance(index - 1)}
                         >
-                          <Maximize2 size={13} />
-                          {evidence ? 'Hide evidence' : 'Show evidence'}
+                          <ChevronLeft size={14} /> Back
                         </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        disabled={index >= turns.length - 1}
-                        onClick={() => advance(index + 1)}
-                      >
-                        {turn.transition ? `Review PR #${turn.result.pull.number}` : 'Next'}
-                        <ChevronRight size={14} />
-                      </Button>
-                    </div>
-                    <div className="linus-copy-actions">
-                      {turn.transition && (
-                        <button onClick={() => void copy(turn.transition)}>
-                          <Copy size={13} /> Copy PR #{turn.transition.pull.number} recommendations
-                        </button>
-                      )}
-                      <button onClick={() => void copy()}>
-                        <Copy size={13} />{' '}
-                        {savedResult ? 'Copy recommendations' : 'Copy all recommendations'}
-                      </button>
+                        <Button
+                          size="sm"
+                          disabled={index >= turns.length - 1}
+                          onClick={() => advance(index + 1)}
+                        >
+                          {turns[index + 1] && turns[index + 1].result !== turn.result
+                            ? 'Next PR'
+                            : 'Next'}
+                          <ChevronRight size={14} />
+                        </Button>
+                      </div>
                     </div>
                   </>
                 )}
@@ -514,12 +529,12 @@ export function LinusCompanion({
                   <p className="muted">Choose PRs to start a review.</p>
                 )}
                 <div className="linus-footer">
-                  {active && !savedResult && (
-                    <button disabled={busy} onClick={() => void act('cancel')}>
-                      Cancel review
+                  {turn && results.length > 1 && (
+                    <button onClick={() => void copy()}>
+                      <Copy size={13} /> Copy all recommendations
                     </button>
                   )}
-                  {session?.status === 'partial' && !savedResult && (
+                  {(active || session?.status === 'partial') && !savedResult && (
                     <button disabled={busy} onClick={() => void act('cancel')}>
                       Cancel review
                     </button>

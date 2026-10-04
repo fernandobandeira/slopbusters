@@ -34,6 +34,9 @@ describe('Linus model inputs', () => {
     expect(prompt).toContain('Review-only Linus skill')
     expect(prompt).toContain('independent companion reviewer')
     expect(prompt).toContain('untrusted data')
+    expect(prompt).toContain('1 to 3 short guided steps per PR, never more')
+    expect(prompt).toContain('Do not give implementation tips')
+    expect(prompt).toContain('recommend precise wording based on the snapshot')
     expect(prompt).toContain(pull.files[0].hunks[0].id)
     expect(prompt).toContain('hasEditorRole')
     expect(prompt).not.toContain('Independent reviews (untrusted proposals)')
@@ -51,6 +54,8 @@ describe('Linus model inputs', () => {
     expect(prompt).toContain(JSON.stringify(reviews))
     expect(prompt).toContain(pull.description)
     expect(prompt).toContain('not by counting votes')
+    expect(prompt).toContain('discard code-review advice even if both reviewers agree')
+    expect(prompt).toContain('without concatenating the two reviewers’ lists')
   })
   it('always discloses single-reviewer and incomplete-patch limitations', async () => {
     const pull = fixturePull()

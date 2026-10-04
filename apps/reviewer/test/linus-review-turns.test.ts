@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { linusReviewTurns } from '../src/linusReviewTurns'
-import type { LinusResult } from '../shared/linus'
+import { recommendationsPrompt, type LinusResult } from '../shared/linus'
 import { fixturePull } from './fixtures/pull'
 
 function result(number: number): LinusResult {
@@ -30,37 +30,42 @@ function result(number: number): LinusResult {
   }
 }
 
-describe('Linus guided PR handoffs', () => {
-  it('keeps a single PR’s evidence steps intact without an extra handoff', () => {
+describe('Linus focused tour', () => {
+  it('keeps a short single PR review intact', () => {
     const reviewed = result(1)
     expect(linusReviewTurns([reviewed])).toEqual(
       reviewed.advice.steps.map((step) => ({ result: reviewed, step })),
     )
     expect(linusReviewTurns([])).toEqual([])
   })
-  it('pauses between PRs with the completed review available for copying', () => {
+  it('moves directly between PRs without extra handoff screens', () => {
     const first = result(1)
     const second = result(2)
     const third = result(3)
     const turns = linusReviewTurns([first, second, third])
-    expect(turns).toHaveLength(8)
-    expect(turns[2]).toMatchObject({
-      result: second,
-      transition: first,
-      step: { target: 'overview', reference: '', emotion: 'neutral' },
-    })
-    expect(turns[2].step.text).toContain('That’s it for PR #1.')
-    expect(turns[2].step.text).toContain('Copy its recommendations')
-    expect(turns[2].step.text).toContain('PR #2: Change 2')
-    expect(turns[5].transition).toBe(second)
-    expect(turns[7].result).toBe(third)
-    expect(turns[7].transition).toBeUndefined()
+    expect(turns).toHaveLength(6)
+    expect(turns.map((turn) => turn.result.pull.number)).toEqual([1, 1, 2, 2, 3, 3])
   })
-  it('adds a stable handoff when a running session finishes the next PR', () => {
+  it('caps legacy sessions at three turns per PR while preserving full exports', () => {
+    const reviews = [result(1), result(2), result(3)]
+    for (const review of reviews) {
+      review.advice.steps = Array.from({ length: 12 }, (_, index) => ({
+        ...review.advice.steps[0],
+        text: `PR ${review.pull.number} point ${index + 1}`,
+      }))
+    }
+    const turns = linusReviewTurns(reviews)
+    expect(turns).toHaveLength(9)
+    expect(turns.map((turn) => turn.step.text)).not.toContain('PR 1 point 12')
+    expect(recommendationsPrompt(reviews)).toContain('PR 1 point 12')
+    expect(recommendationsPrompt(reviews)).toContain('PR 3 point 12')
+    expect(reviews[0].advice.steps).toHaveLength(12)
+  })
+  it('keeps existing turns stable as another PR finishes', () => {
     const first = result(1)
     const before = linusReviewTurns([first])
     const after = linusReviewTurns([first, result(2)])
     expect(after.slice(0, before.length)).toEqual(before)
-    expect(after[before.length].transition).toBe(first)
+    expect(after[before.length].result.pull.number).toBe(2)
   })
 })
