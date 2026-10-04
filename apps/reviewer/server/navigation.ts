@@ -73,6 +73,16 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
       if (result?.mode === 'semantic') return result
       for (const warning of result?.warnings ?? []) warnings.add(warning)
     }
+    if (!semantic && request.kind === 'implementation')
+      return {
+        language,
+        mode: 'text',
+        targets: [],
+        warnings: [
+          ...warnings,
+          'Implementation lookup requires a language server that supports it. Configure the language server in Settings.',
+        ],
+      }
     const available = new Set(tree.paths)
     const files = new Map<string, string>([[request.path, origin.content]])
     const revisions = new Map([[request.path, origin]])
@@ -128,9 +138,9 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
       }
       if (config) {
         projectDirectory = posix.dirname(config) === '.' ? '' : posix.dirname(config)
-        if (request.kind === 'references' && projectDirectory)
+        if (request.kind !== 'definition' && projectDirectory)
           warnings.add(
-            `References are scoped to the configured project in ${projectDirectory}; other projects may contain additional usages.`,
+            `Navigation is scoped to the configured project in ${projectDirectory}; other projects may contain additional locations.`,
           )
         async function optionsFrom(path: string, depth: number): Promise<ts.CompilerOptions> {
           if (depth > 8 || visited.has(path)) return {}
@@ -186,7 +196,7 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
           nearby(request.path, right) - nearby(request.path, left) || left.localeCompare(right),
       )
 
-    if (request.kind === 'references' || !semantic) await loadMany(candidates)
+    if (request.kind !== 'definition' || !semantic) await loadMany(candidates)
     if (semantic) {
       const options: ts.CompilerOptions = {
         module: ts.ModuleKind.ESNext,

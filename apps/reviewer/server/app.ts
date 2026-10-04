@@ -160,7 +160,7 @@ export async function startReviewerServer(
         path: z.string().min(1).max(2000),
         line: z.number().int().positive().max(1_000_000),
         column: z.number().int().positive().max(1_000_000),
-        kind: z.enum(['definition', 'references']),
+        kind: z.enum(['definition', 'references', 'implementation']),
       })
       .strict()
       .parse(request.body)

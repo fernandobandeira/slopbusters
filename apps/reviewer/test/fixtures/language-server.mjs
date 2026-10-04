@@ -12,7 +12,7 @@ connection.onRequest('initialize', async (params) => {
   initialization = params
   const settings = await connection.sendRequest('workspace/configuration', { items: [{ section: 'gopls' }, { section: 'rust-analyzer' }, { section: 'python.analysis' }] })
   writeFileSync(join(root, 'client-record.json'), JSON.stringify({ initialization, settings, pid: process.pid }))
-  return { capabilities: { definitionProvider: true, referencesProvider: true, positionEncoding: 'utf-8' } }
+  return { capabilities: { definitionProvider: true, referencesProvider: true, implementationProvider: true, positionEncoding: 'utf-8' } }
 })
 connection.onNotification('textDocument/didOpen', ({ textDocument }) => { document = textDocument })
 function locations(params) {
@@ -29,6 +29,7 @@ function locations(params) {
 }
 connection.onRequest('textDocument/definition', locations)
 connection.onRequest('textDocument/references', locations)
+connection.onRequest('textDocument/implementation', locations)
 connection.onRequest('shutdown', () => null)
 connection.onNotification('exit', () => process.exit(0))
 connection.listen()

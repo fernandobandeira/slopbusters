@@ -24,6 +24,37 @@ const request: NavigationRequest = {
 }
 
 describe('revision source navigation', () => {
+  it('loads implementers outside the selected interface import graph at the saved revision', async () => {
+    const loader = project({
+      'src/use.ts': 'export interface Runner { run(): number }',
+      'src/runner.ts':
+        "import { Runner } from './use'\nexport class Task implements Runner { run() { return 1 } }",
+      'src/unrelated.ts': 'export class Other { run() { return 2 } }',
+    })
+    const result = await createSourceNavigator(loader)(fixturePull(), {
+      ...request,
+      line: 1,
+      column: 27,
+      kind: 'implementation',
+      side: DiffSide.left,
+    })
+    expect(result.mode).toBe('semantic')
+    expect(result.targets).toMatchObject([{ path: 'src/runner.ts', name: 'run' }])
+    expect(loader.file.mock.calls.every(([, side]) => side === DiffSide.left)).toBe(true)
+  })
+
+  it('does not substitute text references for unsupported implementation lookup', async () => {
+    const loader = project({ 'src/use.py': 'def run():\n    return 1\nrun()' })
+    const result = await createSourceNavigator(loader)(fixturePull(), {
+      ...request,
+      path: 'src/use.py',
+      line: 1,
+      column: 5,
+      kind: 'implementation',
+    })
+    expect(result.targets).toEqual([])
+    expect(result.warnings.join(' ')).toContain('Implementation lookup requires a language server')
+  })
   it('loads imported related files at the same saved side and resolves the actual definition', async () => {
     const loader = project({
       'src/use.ts': "import { run } from './service'\nrun()",

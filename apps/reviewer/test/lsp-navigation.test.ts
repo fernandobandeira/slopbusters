@@ -55,6 +55,11 @@ describe('installed language-server navigation', () => {
       expect(refs.targets).toEqual(result.targets)
       const refsRecord = JSON.parse(await readFile(join(workspace.root, 'client-record.json'), 'utf8'))
       expect(refsRecord.request.context).toEqual({ includeDeclaration: true })
+      const implementations = await session.navigate({ ...request, kind: 'implementation' })
+      expect(implementations.targets).toEqual(result.targets)
+      const implRecord = JSON.parse(await readFile(join(workspace.root, 'client-record.json'), 'utf8'))
+      expect(implRecord.request.context).toBeUndefined()
+      expect(implRecord.initialization.capabilities.textDocument.implementation.linkSupport).toBe(true)
       await session.close()
       await expect(access(workspace.directory)).rejects.toThrow()
     },

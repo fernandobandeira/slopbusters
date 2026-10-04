@@ -29,6 +29,9 @@ import { diffItems } from './diffItems'
 import { displayPullWithContext, CONTEXT_STEP, MAX_CONTEXT } from './displayContext'
 import { useFileContext } from './useFileContext'
 import { SourceContextDialog } from './SourceContextDialog'
+import { SymbolContextMenu, type SymbolMenuSelection } from './SymbolContextMenu'
+import { clickedSymbol } from './codeSymbols'
+import type { NavigationRequest } from '../shared/navigation'
 import { annotateDiscussions, discussionGroup, type LineDiscussion } from './discussions'
 import { InlineDiscussion, ThreadDiscussion } from './InlineDiscussion'
 import { DiscussionsTray } from './DiscussionsTray'
@@ -103,7 +106,22 @@ export function ReviewWorkspace({
   const fileContext = useFileContext(pull.id)
   const loadFileContext = fileContext.load
   const [contextLines, setContextLines] = useState(() => new Map<string, number>())
-  const [sourceFileId, setSourceFileId] = useState<string>()
+  const [symbolMenu, setSymbolMenu] = useState<
+    SymbolMenuSelection & { fileId: string; side: DiffSide; path: string }
+  >()
+  const [sourceSelection, setSourceSelection] = useState<{
+    fileId: string
+    request: NavigationRequest
+    text: string
+  }>()
+  const sourceFileId = sourceSelection?.fileId
+  function navigateSymbol(kind: NavigationRequest['kind'], selection = symbolMenu) {
+    if (!selection) return
+    const { fileId, side, path, line, column, text } = selection
+    setSymbolMenu(undefined)
+    setSourceSelection({ fileId, request: { kind, side, path, line, column }, text })
+    void fileContext.load(fileId).catch(() => {})
+  }
   const [searchParams, setSearchParams] = useSearchParams()
   const unviewedOnly = searchParams.get('unviewed') === '1'
   const view = readReviewView(searchParams)
@@ -746,6 +764,23 @@ export function ReviewWorkspace({
                       className="viewer"
                       viewerRef={viewerRef}
                       items={annotated.items}
+                      onTokenContextMenu={(props, event, item) => {
+                        const symbol = clickedSymbol(props, event)
+                        const file = pull.files.find((file) => file.id === item.id)
+                        if (!symbol || !file) return
+                        event.preventDefault()
+                        setSymbolMenu({
+                          ...symbol,
+                          x: event.clientX,
+                          y: event.clientY,
+                          fileId: file.id,
+                          side: props.side === 'deletions' ? DiffSide.left : DiffSide.right,
+                          path:
+                            props.side === 'deletions'
+                              ? (file.previousPath ?? file.path)
+                              : file.path,
+                        })
+                      }}
                       renderHeaderPrefix={(item) => (
                         <button
                           type="button"
@@ -808,15 +843,6 @@ export function ReviewWorkspace({
                                 Reset
                               </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSourceFileId(file.id)
-                                void fileContext.load(file.id).catch(() => {})
-                              }}
-                            >
-                              Browse source
-                            </button>
                             <label className="file-viewed">
                               <input
                                 type="checkbox"
@@ -905,6 +931,28 @@ export function ReviewWorkspace({
                         overflow: 'wrap',
                         enableLineSelection: true,
                         enableGutterUtility: true,
+                        onTokenClick: (props, event, context) => {
+                          if (
+                            !(event.metaKey || event.ctrlKey) ||
+                            context.type !== 'diff' ||
+                            !('side' in props)
+                          )
+                            return
+                          const symbol = clickedSymbol(props, event)
+                          const file = pull.files.find((file) => file.id === context.item.id)
+                          if (!symbol || !file) return
+                          navigateSymbol('definition', {
+                            ...symbol,
+                            x: event.clientX,
+                            y: event.clientY,
+                            fileId: file.id,
+                            side: props.side === 'deletions' ? DiffSide.left : DiffSide.right,
+                            path:
+                              props.side === 'deletions'
+                                ? (file.previousPath ?? file.path)
+                                : file.path,
+                          })
+                        },
                         onLineNumberClick: (props, context) => {
                           if (props.type === 'diff-line' && context.type === 'diff')
                             commentOnLine({
@@ -917,6 +965,7 @@ export function ReviewWorkspace({
                             })
                         },
                         onLineClick: (props, context) => {
+                          if (props.event.metaKey || props.event.ctrlKey) return
                           if (props.type === 'diff-line' && context.type === 'diff')
                             commentOnLine({
                               fileId: context.item.id,
@@ -1086,16 +1135,23 @@ export function ReviewWorkspace({
         filter={inboxFilter}
         onClose={() => setStackOpen(false)}
       />
+      <SymbolContextMenu
+        selection={symbolMenu}
+        onNavigate={navigateSymbol}
+        onClose={() => setSymbolMenu(undefined)}
+      />
       <SourceContextDialog
-        key={`${pull.id}/${sourceFileId ?? ''}`}
+        key={`${pull.id}/${JSON.stringify(sourceSelection)}`}
         pull={pull}
         fileId={sourceFileId}
+        initialRequest={sourceSelection?.request}
+        initialSymbol={sourceSelection?.text}
         content={sourceFileId ? fileContext.contents.get(sourceFileId) : undefined}
         error={sourceFileId ? fileContext.error(sourceFileId) : undefined}
         onRetry={() => {
           if (sourceFileId) void fileContext.load(sourceFileId).catch(() => {})
         }}
-        onClose={() => setSourceFileId(undefined)}
+        onClose={() => setSourceSelection(undefined)}
       />
       <PullStatusDialog
         url={statusOpen ? pull.url : undefined}

@@ -7,6 +7,24 @@ function position(source: string, word: string, line: number) {
 }
 
 describe('virtual TypeScript symbol navigation', () => {
+  it('finds interface method implementations across files without including unrelated names', () => {
+    const contract = 'export interface Runner { run(): number }'
+    const files = new Map([
+      ['src/contract.ts', contract],
+      [
+        'src/runner.ts',
+        "import { Runner } from './contract'\nexport class Task implements Runner { run() { return 1 } }",
+      ],
+      ['src/unrelated.ts', 'export class Other { run() { return 2 } }'],
+    ])
+    expect(
+      navigateTypeScript(files, {
+        path: 'src/contract.ts',
+        kind: 'implementation',
+        ...position(contract, 'run', 1),
+      }),
+    ).toMatchObject([{ path: 'src/runner.ts', line: 2, name: 'run' }])
+  })
   it('follows imported aliases through re-exports to the original implementation', () => {
     const main = "import { exported as selected } from './index'\nselected()\n"
     const files = new Map([

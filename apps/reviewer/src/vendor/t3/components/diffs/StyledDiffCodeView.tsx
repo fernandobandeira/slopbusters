@@ -8,6 +8,8 @@ import {
 } from "@pierre/diffs/react";
 /* oxlint-enable eslint/no-restricted-imports */
 import type { Ref } from "react";
+import type { CodeViewItem, DiffTokenEventBaseProps } from "@pierre/diffs";
+import { contextMenuToken } from "../../../../codeSymbols";
 
 import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
 import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
@@ -319,6 +321,7 @@ type StyledDiffCodeViewProps<LAnnotation> = (
    * to restyle chrome the viewer owns — such as replacing its per-file line counts.
    */
   readonly unsafeCSSExtra?: string;
+  readonly onTokenContextMenu?: (token: DiffTokenEventBaseProps, event: MouseEvent, item: CodeViewItem<LAnnotation>) => void;
 };
 
 /** The shared web CodeView surface: app styling and virtualized geometry stay paired here. */
@@ -327,6 +330,7 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
   viewerRef,
   className,
   unsafeCSSExtra,
+  onTokenContextMenu,
   ...props
 }: StyledDiffCodeViewProps<LAnnotation>) {
   return (
@@ -344,6 +348,10 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
         options={{
           ...options,
           onPostRender: (node, _instance, phase, context) => {
+            node.oncontextmenu = onTokenContextMenu ? (event) => {
+              const token = contextMenuToken(event);
+              if (token) onTokenContextMenu(token, event, context.item);
+            } : null;
             // Whitespace-only word decorations add noise around indentation without
             // identifying changed code. Keep the text and line coordinates intact.
             for (const span of node.shadowRoot?.querySelectorAll("[data-diff-span]") ?? []) {

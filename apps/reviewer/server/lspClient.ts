@@ -160,7 +160,7 @@ export async function startLanguageServer(server: LanguageServerConfig, executab
     await workspace.close()
   }
   try {
-    const initialize = await rpc<{ capabilities: { definitionProvider?: unknown; referencesProvider?: unknown; positionEncoding?: Encoding } }>(connection, 'initialize', {
+    const initialize = await rpc<{ capabilities: { definitionProvider?: unknown; referencesProvider?: unknown; implementationProvider?: unknown; positionEncoding?: Encoding } }>(connection, 'initialize', {
       processId: process.pid, clientInfo: { name: 'Slopbusters', version: '0.1.0' },
       rootUri: pathToFileURL(workspace.root).href, rootPath: workspace.root,
       workspaceFolders: [{ uri: pathToFileURL(workspace.root).href, name: 'Review source' }],
@@ -168,13 +168,14 @@ export async function startLanguageServer(server: LanguageServerConfig, executab
         general: { positionEncodings: ['utf-16', 'utf-8', 'utf-32'] },
         experimental: { serverStatusNotification: true },
         workspace: { configuration: true, workspaceFolders: true, applyEdit: false },
-        textDocument: { definition: { linkSupport: true, dynamicRegistration: true }, references: { dynamicRegistration: true }, synchronization: { didSave: false } },
+        textDocument: { definition: { linkSupport: true, dynamicRegistration: true }, references: { dynamicRegistration: true }, implementation: { linkSupport: true, dynamicRegistration: true }, synchronization: { didSave: false } },
       },
       initializationOptions: settings,
     }, 45_000)
     const capabilities = initialize.capabilities
     if (capabilities.definitionProvider) providers.add('textDocument/definition')
     if (capabilities.referencesProvider) providers.add('textDocument/references')
+    if (capabilities.implementationProvider) providers.add('textDocument/implementation')
     encoding = capabilities.positionEncoding ?? 'utf-16'
     if (!['utf-16', 'utf-8', 'utf-32'].includes(encoding)) throw new Error('The language server uses an unsupported position encoding.')
     await connection.sendNotification('initialized', {})

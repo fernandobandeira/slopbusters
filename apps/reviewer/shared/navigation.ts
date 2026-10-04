@@ -6,7 +6,7 @@ export interface NavigationRequest {
   /** One-based line and UTF-16 column in the exact source revision. */
   line: number
   column: number
-  kind: 'definition' | 'references'
+  kind: 'definition' | 'references' | 'implementation'
 }
 
 export interface NavigationTarget {

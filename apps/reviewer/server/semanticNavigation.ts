@@ -1,12 +1,12 @@
 import { posix } from 'node:path'
 import ts from 'typescript'
-import type { NavigationTarget } from '../shared/navigation'
+import type { NavigationRequest, NavigationTarget } from '../shared/navigation'
 
 interface SemanticRequest {
   path: string
   line: number
   column: number
-  kind: 'definition' | 'references'
+  kind: NavigationRequest['kind']
 }
 
 const root = '/review'
@@ -125,15 +125,17 @@ export function navigateTypeScript(
     const occurrences =
       request.kind === 'definition'
         ? definitions
-        : [
-            ...(service.findReferences(fileName, position) ?? []),
-            // Searching an import alias alone only finds that local alias's uses.
-            // Search its resolved declaration too to include references across the project.
-            ...definitions.flatMap(
-              (definition) =>
-                service.findReferences(definition.fileName, definition.textSpan.start) ?? [],
-            ),
-          ].flatMap((symbol) => symbol.references)
+        : request.kind === 'implementation'
+          ? (service.getImplementationAtPosition(fileName, position) ?? [])
+          : [
+              ...(service.findReferences(fileName, position) ?? []),
+              // Searching an import alias alone only finds that local alias's uses.
+              // Search its resolved declaration too to include references across the project.
+              ...definitions.flatMap(
+                (definition) =>
+                  service.findReferences(definition.fileName, definition.textSpan.start) ?? [],
+              ),
+            ].flatMap((symbol) => symbol.references)
     const targets = new Map<string, NavigationTarget>()
     for (const occurrence of occurrences) {
       const targetName = virtualName(occurrence.fileName)
