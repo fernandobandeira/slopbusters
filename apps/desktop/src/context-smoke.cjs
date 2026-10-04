@@ -42,6 +42,11 @@ async function verifyContextRenderer(window) {
       history.pushState({},'', '/repos/example/demo/pulls/1?revision='+pull.id);dispatchEvent(new PopStateEvent('popstate'));
       await wait(() => button('+20 context'), 'Review workspace did not load context controls');
       if (!document.querySelector('.app-titlebar .compact-review-header') || document.querySelectorAll('.review-chrome').length !== 1) throw new Error('The PR header must occupy the app title bar exactly once');
+      const titlebar = document.querySelector('.app-titlebar');
+      if (titlebar.getBoundingClientRect().height !== 44 || titlebar.querySelector('h1')?.textContent !== pull.title) throw new Error('The title bar must show the PR title in one slim row');
+      if (titlebar.querySelector('.review-pull-details') || !document.querySelector('.review-content .review-pull-details')) throw new Error('PR metadata must stay with the diff layout');
+      if (document.querySelector('.app-titlebar-brand').getBoundingClientRect().right !== document.querySelector('.group-sidebar').getBoundingClientRect().right) throw new Error('The brand must align with the review sidebar');
+      if (!titlebar.contains(button('Submit review')) || !document.querySelector('.review-context').contains(button('Split'))) throw new Error('Review actions and diff controls must occupy their respective layouts');
       for (const action of document.querySelectorAll('.app-titlebar button')) {
         if (getComputedStyle(action).webkitAppRegion !== 'no-drag') throw new Error('Title bar actions must remain clickable');
       }

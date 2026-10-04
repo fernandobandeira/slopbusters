@@ -144,6 +144,8 @@ pre {
   background: var(--primary);
 }
 .app-frame {
+  --app-sidebar-width: 245px;
+  --review-sidebar-width: 227px;
   display: flex;
   flex-direction: column;
   height: 100dvh;
@@ -152,17 +154,17 @@ pre {
 .app-titlebar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  --titlebar-inset: 0px;
   flex-shrink: 0;
-  min-height: 72px;
-  padding: 4px 18px 4px 8px;
+  height: 44px;
+  padding: 0 12px 0 var(--titlebar-inset);
   border-bottom: 1px solid var(--border);
   background: var(--sidebar);
   -webkit-app-region: drag;
   user-select: none;
 }
 :root[data-desktop-platform='darwin'] .app-titlebar {
-  padding-left: 88px;
+  --titlebar-inset: 88px;
 }
 .app-titlebar :is(button, a, input, select, textarea, [role='button']) {
   -webkit-app-region: no-drag;
@@ -171,17 +173,34 @@ pre {
   display: flex;
   flex: 1;
   min-width: 0;
+  height: 100%;
+  background: var(--background);
 }
 .app-titlebar-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  align-self: stretch;
   flex-shrink: 0;
-  font-size: 12px;
-  color: var(--muted-foreground);
+  width: calc(var(--app-sidebar-width) - var(--titlebar-inset));
+  padding: 0 8px 0 16px;
+  border-right: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--foreground);
+}
+.app-titlebar[data-navigation='review'] .app-titlebar-brand {
+  width: calc(var(--review-sidebar-width) - var(--titlebar-inset));
+}
+.app-titlebar[data-navigation='none'] .app-titlebar-brand {
+  width: auto;
+  padding-right: 16px;
+}
+:root[data-desktop-platform='darwin'] .app-titlebar-brand {
+  padding-left: 0;
 }
 .app-titlebar-brand img {
   object-fit: contain;
+  flex-shrink: 0;
 }
 .app-page-title {
   display: flex;
@@ -226,7 +245,7 @@ pre {
   overflow: hidden;
 }
 .app-sidebar {
-  width: 245px;
+  width: var(--app-sidebar-width);
   flex-shrink: 0;
   background: var(--sidebar);
   border-right: 1px solid var(--border);
@@ -643,39 +662,21 @@ pre {
   background: var(--surface-hover);
   color: var(--foreground);
 }
-/* The PR context stays outside the scrolling diff and uses two compact rows. */
+/* Keep the title and review actions in one row above the workspace. */
 .review-chrome {
   display: flex;
   align-items: center;
-  flex-shrink: 0;
-  min-height: 65px;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
   border-bottom: 1px solid var(--border);
 }
 .compact-review-header {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 5px;
-  padding: 8px 14px;
   flex: 1;
   min-width: 0;
+  padding: 0 14px;
 }
-.compact-review-title,
-.compact-review-details {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.compact-review-title a {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--muted-foreground);
-  flex-shrink: 0;
-  font-size: 10px;
-}
-.compact-review-title h1 {
+.compact-review-header h1 {
   margin: 0;
   font-size: 12px;
   font-weight: 550;
@@ -684,10 +685,48 @@ pre {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.review-context {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.review-pull-details {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  flex: 1;
+  min-width: 0;
+}
+.review-pull-identity,
 .compact-review-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.review-pull-identity a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+.compact-review-details {
+  flex: 1;
   gap: 8px;
   font-size: 10px;
   color: var(--muted-foreground);
+}
+.review-view-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
 }
 .compact-review-branches {
   display: flex;
@@ -729,10 +768,7 @@ pre {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  padding: 8px 24px 8px 0;
-}
-.review-toolbar > .push-right {
-  display: none;
+  padding: 0 12px 0 0;
 }
 .copy-feedback {
   min-width: 112px;
@@ -749,7 +785,7 @@ pre {
   border-bottom: 1px solid var(--border);
 }
 .group-sidebar {
-  width: 227px;
+  width: var(--review-sidebar-width);
   flex-shrink: 0;
   background: var(--sidebar);
   border-right: 1px solid var(--border);
@@ -996,30 +1032,15 @@ pre {
   font-variant-numeric: tabular-nums;
 }
 @media (max-width: 1200px) {
-  .app-sidebar {
-    width: 205px;
-  }
-  .group-sidebar {
-    width: 190px;
+  .app-frame {
+    --app-sidebar-width: 205px;
+    --review-sidebar-width: 190px;
   }
   .review-toolbar {
     gap: 6px;
   }
   .discussion-tray {
     width: 250px;
-  }
-}
-@media (max-width: 1100px) {
-  .review-chrome {
-    flex-wrap: wrap;
-  }
-  .compact-review-header {
-    flex-basis: 100%;
-    padding-bottom: 4px;
-  }
-  .review-toolbar {
-    padding: 4px 14px 8px;
-    flex-wrap: wrap;
   }
 }
 @media (max-width: 800px) {
@@ -1029,12 +1050,12 @@ pre {
   .pr-row-link {
     flex-basis: 100%;
   }
-  .app-sidebar {
-    width: 170px;
-    padding-inline: 8px;
+  .app-frame {
+    --app-sidebar-width: 170px;
+    --review-sidebar-width: 160px;
   }
-  .group-sidebar {
-    width: 160px;
+  .app-sidebar {
+    padding-inline: 8px;
   }
   .discussion-tray {
     position: absolute;
@@ -1057,7 +1078,7 @@ pre {
   }
 }
 @media (max-width: 600px) {
-  .compact-review-title a {
+  .review-pull-identity a {
     max-width: 145px;
     overflow: hidden;
     white-space: nowrap;
@@ -1070,8 +1091,9 @@ pre {
   .compact-review-branches {
     flex-basis: 100%;
   }
-  .app-sidebar {
-    width: 56px;
+  .app-frame {
+    --app-sidebar-width: 56px;
+    --review-sidebar-width: 135px;
   }
   .repo-picker span,
   .repo-picker > svg:last-child,
@@ -1092,9 +1114,6 @@ pre {
   }
   .sidebar-bottom {
     margin-top: auto;
-  }
-  .group-sidebar {
-    width: 135px;
   }
 
   .review-toolbar button {
@@ -1380,7 +1399,7 @@ pre {
   }
 }
 
-@media (max-width: 800px) {
+@media (max-width: 600px) {
   .app-titlebar-brand strong {
     display: none;
   }

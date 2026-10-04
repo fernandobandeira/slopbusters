@@ -300,7 +300,12 @@ export function App() {
     filter === 'mine' ? inboxSections(visible) : [{ id: 'all', label: '', pulls: visible }]
   return (
     <div className="app-frame">
-      <AppTitleBar contentRef={setTitlebarTarget}>
+      <AppTitleBar
+        contentRef={setTitlebarTarget}
+        navigation={
+          route.kind !== 'pull' ? 'app' : pull?.groupingSource !== 'files' ? 'review' : 'none'
+        }
+      >
         {!pull && (
           <div className="app-page-title">
             <h1>

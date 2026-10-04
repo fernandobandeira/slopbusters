@@ -22,7 +22,15 @@ interface Props {
   onStatus: (section?: PullStatusSection) => void
 }
 
-export function CompactReviewHeader({
+export function CompactReviewHeader({ pull }: { pull: PullRequest }) {
+  return (
+    <header className="compact-review-header">
+      <h1 title={pull.title}>{pull.title}</h1>
+    </header>
+  )
+}
+
+export function ReviewPullDetails({
   pull,
   onDescription,
   onReload,
@@ -40,8 +48,8 @@ export function CompactReviewHeader({
   const deletions = pull.files.reduce((total, file) => total + file.deletions, 0)
 
   return (
-    <header className="compact-review-header">
-      <div className="compact-review-title">
+    <div className="review-pull-details" aria-label="Pull request details">
+      <div className="review-pull-identity">
         <Badge size="sm" variant={pull.state === 'open' ? 'success' : 'secondary'}>
           {pull.state}
         </Badge>
@@ -49,7 +57,6 @@ export function CompactReviewHeader({
           {pull.owner}/{pull.repo} #{pull.number}
           <ArrowUpRight size={12} />
         </a>
-        <h1 title={pull.title}>{pull.title}</h1>
         {stack && <StackBadge summary={stack} onClick={onStack} compact />}
       </div>
       <div className="compact-review-details">
@@ -92,6 +99,6 @@ export function CompactReviewHeader({
           {reloading ? 'Loading…' : hasUpdates ? 'Updates available' : 'Reload'}
         </Button>
       </div>
-    </header>
+    </div>
   )
 }

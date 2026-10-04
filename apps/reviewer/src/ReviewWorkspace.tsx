@@ -32,7 +32,7 @@ import { SourceContextDialog } from './SourceContextDialog'
 import { annotateDiscussions, discussionGroup, type LineDiscussion } from './discussions'
 import { InlineDiscussion, ThreadDiscussion } from './InlineDiscussion'
 import { DiscussionsTray } from './DiscussionsTray'
-import { CompactReviewHeader } from './CompactReviewHeader'
+import { CompactReviewHeader, ReviewPullDetails } from './CompactReviewHeader'
 import { OrganizationEmptyState } from './OrganizationEmptyState'
 import type { OrganizationPreferences } from '../shared/preferences'
 import { useReviewDraft } from './useReviewDraft'
@@ -464,49 +464,9 @@ export function ReviewWorkspace({
           Back to inbox
         </Link>
       )}
-      <CompactReviewHeader
-        pull={pull}
-        onDescription={() => setDescriptionOpen(true)}
-        onReload={() => void reloadReview()}
-        hasUpdates={
-          updates.hasUpdates ||
-          Boolean(pullStatus.status && pullHasUpdates(pull, pullStatus.status))
-        }
-        updateCheckError={updates.error}
-        stack={stackSummary}
-        onStack={() => setStackOpen(true)}
-        status={pullStatus.status}
-        statusError={pullStatus.error}
-        onStatus={(section) => {
-          setStatusSection(section)
-          setStatusOpen(true)
-        }}
-        reloading={reloading}
-        organizing={organizing || submitting}
-      />
+      <CompactReviewHeader pull={pull} />
       {grouped && (
         <div className="review-toolbar">
-          {groups.length > 0 && (
-            <Button size="xs" variant="ghost" onClick={() => changeView({ split: !split })}>
-              {split ? 'Unified' : 'Split'}
-            </Button>
-          )}
-          {groups.length > 0 && (
-            <Button
-              size="xs"
-              variant={unviewedOnly ? 'secondary' : 'ghost'}
-              aria-pressed={unviewedOnly}
-              onClick={() => {
-                const next = new URLSearchParams(searchParams)
-                if (unviewedOnly) next.delete('unviewed')
-                else next.set('unviewed', '1')
-                setSearchParams(next)
-              }}
-            >
-              {unviewedOnly ? 'Show all diffs' : 'Unviewed only'}
-            </Button>
-          )}
-          <span className="push-right" />
           <Button
             size="sm"
             variant={discussionTray ? 'secondary' : 'ghost'}
@@ -636,6 +596,48 @@ export function ReviewWorkspace({
       )}
       <div className="review-content">
         {titlebarTarget ? createPortal(reviewHeader, titlebarTarget) : reviewHeader}
+        <div className="review-context">
+          <ReviewPullDetails
+            pull={pull}
+            onDescription={() => setDescriptionOpen(true)}
+            onReload={() => void reloadReview()}
+            hasUpdates={
+              updates.hasUpdates ||
+              Boolean(pullStatus.status && pullHasUpdates(pull, pullStatus.status))
+            }
+            updateCheckError={updates.error}
+            stack={stackSummary}
+            onStack={() => setStackOpen(true)}
+            status={pullStatus.status}
+            statusError={pullStatus.error}
+            onStatus={(section) => {
+              setStatusSection(section)
+              setStatusOpen(true)
+            }}
+            reloading={reloading}
+            organizing={organizing || submitting}
+          />
+          {grouped && groups.length > 0 && (
+            <div className="review-view-controls">
+              <Button size="xs" variant="ghost" onClick={() => changeView({ split: !split })}>
+                {split ? 'Unified' : 'Split'}
+              </Button>
+              <Button
+                size="xs"
+                variant={unviewedOnly ? 'secondary' : 'ghost'}
+                aria-pressed={unviewedOnly}
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams)
+                  if (unviewedOnly) next.delete('unviewed')
+                  else next.set('unviewed', '1')
+                  setSearchParams(next)
+                }}
+              >
+                {unviewedOnly ? 'Show all diffs' : 'Unviewed only'}
+              </Button>
+            </div>
+          )}
+        </div>
         {storageError && (
           <div className="error-banner" role="alert">
             {storageError}

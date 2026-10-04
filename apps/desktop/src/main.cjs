@@ -117,7 +117,7 @@ async function createWindow() {
     title: 'Slopbusters',
     ...(process.platform === 'darwin' ? {
       titleBarStyle: 'hiddenInset',
-      trafficLightPosition: { x: 16, y: 26 },
+      trafficLightPosition: { x: 16, y: 14 },
     } : {}),
     icon: join(__dirname, 'icon.png'),
     backgroundColor: '#111214',
@@ -179,7 +179,7 @@ async function verifySmoke(window) {
   if (!isolation.sandbox || !isolation.contextIsolation || isolation.nodeIntegration) throw new Error('The renderer must remain sandboxed and isolated from Node.')
   if (process.platform === 'darwin') {
     const controls = window.getWindowButtonPosition()
-    if (controls?.x !== 16 || controls?.y !== 26) throw new Error('The macOS window controls must use the custom title bar position.')
+    if (controls?.x !== 16 || controls?.y !== 14) throw new Error('The macOS window controls must use the custom title bar position.')
   }
   const result = await window.webContents.executeJavaScript(`(async () => {
     if (typeof require !== 'undefined') throw new Error('Node was exposed to the renderer.');
