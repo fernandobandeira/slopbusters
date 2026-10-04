@@ -46,4 +46,7 @@ same checks against a packaged executable instead of the development build.
 The packaged app includes the reviewer license, dependency notices, Electron and
 Chromium licenses, and the T3 Code license emitted by the renderer build. The
 source parsers and their upstream notices are bundled for offline analysis.
+The TypeScript worker and its standard declaration files ship as explicit
+`source-analysis` resources; declaration files are runtime inputs even though
+the application's archive excludes development type declarations.
 single-line T3 credit appears at the bottom of the repository README.

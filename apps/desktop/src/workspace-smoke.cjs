@@ -1,9 +1,9 @@
-const { mkdtemp, mkdir, realpath, rm, writeFile } = require('node:fs/promises')
+const { mkdtemp, mkdir, readFile, realpath, rm, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { WorkspaceTypeScriptNavigation } = require('../../reviewer/server/workspaceNavigation.ts')
 
-async function verifyWorkspaceWorker() {
+async function verifyWorkspaceWorker(options) {
   const directory = await realpath(await mkdtemp(join(tmpdir(), 'slopbusters-worker-smoke-')))
   const files = new Map([
     ['tsconfig.json', '{"compilerOptions":{"baseUrl":".","paths":{"@source/*":["src/*"]}}}'],
@@ -13,11 +13,10 @@ async function verifyWorkspaceWorker() {
   const sha = 'b'.repeat(40)
   const project = { tree: async () => ({ sha, paths: [...files.keys()], warnings: [] }) }
   const workspaces = { acquire: async () => ({ workspace: { directory, sha, paths: new Set(files.keys()), warnings: [] }, release() {} }) }
-  const navigation = new WorkspaceTypeScriptNavigation(project, workspaces, {
-    typeScriptWorkerPath: join(__dirname, 'workspaceTypeScriptWorker.cjs'),
-    typeScriptLibDirectory: join(__dirname, 'typescript'),
-  })
+  const navigation = new WorkspaceTypeScriptNavigation(project, workspaces, options)
   try {
+    const standardLibrary = await readFile(join(options.typeScriptLibDirectory, 'lib.es5.d.ts'), 'utf8')
+    if (!standardLibrary.includes('interface Array<T>')) throw new Error('Packaged TypeScript standard declarations are missing.')
     for (const [path, content] of files) {
       await mkdir(join(directory, path, '..'), { recursive: true })
       await writeFile(join(directory, path), content)

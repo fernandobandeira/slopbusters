@@ -1,7 +1,7 @@
 {
   "name": "@slopbusters/desktop",
   "productName": "Slopbusters",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "description": "Slopbusters desktop code review workspace.",
   "author": "Fernando Bandeira",
@@ -26,7 +26,11 @@
     "appId": "dev.slopbusters.reviewer",
     "productName": "Slopbusters",
     "directories": { "output": "release" },
-    "files": ["dist/**", "package.json"],
+    "files": ["dist/**", "!dist/workspaceTypeScriptWorker.cjs", "!dist/typescript/**", "package.json"],
+    "extraResources": [
+      { "from": "dist/workspaceTypeScriptWorker.cjs", "to": "source-analysis/workspaceTypeScriptWorker.cjs" },
+      { "from": "dist/typescript", "to": "source-analysis/typescript", "filter": ["*.d.ts"] }
+    ],
     "asar": true,
     "mac": {
       "icon": "dist/icon.png",

@@ -7,6 +7,14 @@ const { promisify } = require('node:util')
 const { startReviewerServer } = require('../../reviewer/server/app.ts')
 const { createUpdates } = require('./updates.cjs')
 
+// Declaration files are runtime inputs. electron-builder excludes .d.ts
+// from the application archive, so ship analysis assets as explicit resources.
+const analysisDirectory = app.isPackaged ? join(process.resourcesPath, 'source-analysis') : __dirname
+const sourceAnalysisOptions = {
+  typeScriptWorkerPath: join(analysisDirectory, 'workspaceTypeScriptWorker.cjs'),
+  typeScriptLibDirectory: join(analysisDirectory, 'typescript'),
+}
+
 const smoke = process.argv.includes('--smoke-test')
 const smokeArgument = (name) => process.argv.find((value) => value.startsWith(`${name}=`))?.slice(name.length + 1)
 function smokeStage(stage) { if (smoke) console.log(JSON.stringify({ smokeStage: stage, phase: smokeArgument('--smoke-phase') })) }
@@ -174,7 +182,7 @@ async function verifySmoke(window) {
   const sourceSymbols = await getRevisionSymbols('sample.py', 'class Example:\n    def inspect(self):\n        return 42\n')
   if (!sourceSymbols.some((symbol) => symbol.kind === 'class' && symbol.name === 'Example') || !sourceSymbols.some((symbol) => symbol.name.endsWith('inspect'))) throw new Error('The bundled source parser did not load its WASM grammar.')
   smokeStage('parsers-ready')
-  const workspaceResult = await require('./workspace-smoke.cjs').verifyWorkspaceWorker()
+  const workspaceResult = await require('./workspace-smoke.cjs').verifyWorkspaceWorker(sourceAnalysisOptions)
   smokeStage('workspace-worker-ready')
   const phase = smokeArgument('--smoke-phase')
   const isolation = window.webContents.getLastWebPreferences()
@@ -312,8 +320,7 @@ async function start() {
     dataDirectory: app.getPath('userData'),
     staticDirectory: join(__dirname, 'renderer'),
     sourceAssetsDirectory: join(__dirname, 'syntax'),
-    typeScriptWorkerPath: join(__dirname, 'workspaceTypeScriptWorker.cjs'),
-    typeScriptLibDirectory: join(__dirname, 'typescript'),
+    ...sourceAnalysisOptions,
     port: 0,
   })
   smokeStage('server-ready')

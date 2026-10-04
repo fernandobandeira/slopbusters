@@ -35,11 +35,15 @@ export class WorkspaceTypeScriptNavigation {
     private options: TypeScriptWorkerOptions = {},
   ) {}
 
-  private async retire(key: string, entry: Entry) {
+  private async retire(
+    key: string,
+    entry: Entry,
+    error = new Error('Source analysis has stopped. Retry navigation.'),
+  ) {
     if (this.entries.get(key) === entry) this.entries.delete(key)
     for (const pending of entry.pending.values()) {
       clearTimeout(pending.timer)
-      pending.reject(new Error('Source analysis has stopped. Retry navigation.'))
+      pending.reject(error)
     }
     entry.pending.clear()
     await entry.worker.terminate()
@@ -102,8 +106,8 @@ export class WorkspaceTypeScriptNavigation {
               })
           },
         )
-        worker.on('error', () => {
-          void this.retire(key, created)
+        worker.on('error', (error) => {
+          void this.retire(key, created, error instanceof Error ? error : new Error(String(error)))
         })
         worker.on('exit', () => {
           if (this.entries.get(key) === created) void this.retire(key, created)
