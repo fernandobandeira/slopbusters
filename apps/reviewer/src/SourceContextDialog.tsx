@@ -3,17 +3,19 @@ import type { CodeViewHandle } from '@pierre/diffs/react'
 import type { NavigationRequest, NavigationResult, NavigationTarget } from '../shared/navigation'
 import type { PullFileContent, RevisionFileContent } from '../shared/fileContent'
 import { DiffSide, type PullRequest } from '../shared/types'
-import {
-  Dialog,
-  DialogPopup,
-  DialogHeader,
-  DialogTitle,
-} from './vendor/t3/components/ui/dialog'
+import { Dialog, DialogPopup, DialogHeader, DialogTitle } from './vendor/t3/components/ui/dialog'
 import { StyledDiffCodeView } from './vendor/t3/components/diffs/StyledDiffCodeView'
 import { useReviewerTheme } from './ThemeProvider'
 import { api, message } from './api'
 import { clickedSymbol, type CodeSymbol } from './codeSymbols'
 import { SymbolContextMenu, type SymbolMenuSelection } from './SymbolContextMenu'
+import {
+  emptySourceHistory,
+  isCurrentDefinition,
+  navigationOutcome,
+  visitSource,
+} from './sourceNavigationHistory'
+import type { ReviewWorkspaceInfo } from '../shared/workspace'
 import './sourceContext.css'
 
 interface Props {
@@ -24,10 +26,6 @@ interface Props {
   initialRequest?: NavigationRequest
   onRetry: () => void
   onClose: () => void
-}
-interface SourceVisit {
-  file: RevisionFileContent
-  target: NavigationTarget
 }
 
 const destinationStyles = `
@@ -63,7 +61,10 @@ export function SourceContextDialog({
   const { themeId, resolvedTheme } = useReviewerTheme()
   const viewer = useRef<CodeViewHandle<undefined, undefined>>(null)
   const side = initialRequest?.side === DiffSide.left ? 'old' : 'new'
-  const [visit, setVisit] = useState<SourceVisit>()
+  const [history, setHistory] = useState(emptySourceHistory)
+  const visit = history.visits[history.index]
+  const [notice, setNotice] = useState('')
+  const [workspace, setWorkspace] = useState<ReviewWorkspaceInfo>()
   const [busy, setBusy] = useState(Boolean(initialRequest))
   const [sourceError, setSourceError] = useState('')
   const [symbolMenu, setSymbolMenu] = useState<SymbolMenuSelection>()
@@ -71,13 +72,9 @@ export function SourceContextDialog({
   const requestVersion = useRef(0)
   const savedRevision = content?.[side] ?? content?.old ?? content?.new
   const revision = visit?.file ?? savedRevision
-  const actualSide = savedRevision
-    ? savedRevision === content?.old
-      ? DiffSide.left
-      : DiffSide.right
-    : side === 'old'
-      ? DiffSide.left
-      : DiffSide.right
+  const actualSide =
+    initialRequest?.side ??
+    (savedRevision && savedRevision === content?.old ? DiffSide.left : DiffSide.right)
   const file = pull.files.find((candidate) => candidate.id === fileId)
   const initialLine = file?.hunks[0]?.lines.find((entry) =>
     actualSide === DiffSide.right ? entry.newLine !== null : entry.oldLine !== null,
@@ -101,13 +98,7 @@ export function SourceContextDialog({
         : [],
     [revision, sourceId],
   )
-  const warnings = (navigation?.warnings ?? []).filter(
-    (warning) =>
-      !(
-        warning.startsWith('Package-based inherited configuration for ') &&
-        warning.endsWith(' is unavailable in the saved repository source.')
-      ),
-  )
+  const warnings = [...new Set([...(navigation?.warnings ?? []), ...(workspace?.warnings ?? [])])]
   useEffect(() => {
     if (!revision) return
     const frame = requestAnimationFrame(() =>
@@ -138,6 +129,7 @@ export function SourceContextDialog({
       .then(async (result) => {
         if (version !== requestVersion.current) return
         setNavigation(result)
+        setNotice(navigationOutcome(initialRequest.kind, result.targets.length))
         if (
           initialRequest.kind !== 'references' &&
           result.mode === 'semantic' &&
@@ -149,7 +141,7 @@ export function SourceContextDialog({
             { signal: controller.signal },
           )
           if (version === requestVersion.current) {
-            setVisit({ file: source, target })
+            setHistory((current) => visitSource(current, { file: source, target }))
           }
         }
       })
@@ -166,12 +158,13 @@ export function SourceContextDialog({
     const version = ++requestVersion.current
     setBusy(true)
     setSourceError('')
+    setNotice('')
     try {
       const result = await api<RevisionFileContent>(
         `/pulls/${encodeURIComponent(pull.id)}/source-file?side=${actualSide}&path=${encodeURIComponent(target.path)}`,
       )
       if (version !== requestVersion.current) return
-      setVisit({ file: result, target })
+      setHistory((current) => visitSource(current, { file: result, target }))
     } catch (failure) {
       if (version === requestVersion.current) setSourceError(message(failure))
     } finally {
@@ -183,6 +176,7 @@ export function SourceContextDialog({
     const version = ++requestVersion.current
     setBusy(true)
     setSourceError('')
+    setNotice('')
     setNavigation(undefined)
     try {
       const result = await api<NavigationResult>(
@@ -200,8 +194,34 @@ export function SourceContextDialog({
       )
       if (version === requestVersion.current) {
         setNavigation(result)
-        if (kind !== 'references' && result.mode === 'semantic' && result.targets.length === 1)
-          await openSource(result.targets[0])
+        setNotice(navigationOutcome(kind, result.targets.length))
+        if (kind !== 'references' && result.mode === 'semantic' && result.targets.length === 1) {
+          if (isCurrentDefinition(revision.path, selection, result.targets[0]))
+            setNotice('Already at this definition.')
+          else await openSource(result.targets[0])
+        }
+      }
+    } catch (failure) {
+      if (version === requestVersion.current) setSourceError(message(failure))
+    } finally {
+      if (version === requestVersion.current) setBusy(false)
+    }
+  }
+  async function prepareLocalSource() {
+    const version = ++requestVersion.current
+    setBusy(true)
+    setSourceError('')
+    try {
+      const prepared = await api<ReviewWorkspaceInfo>(
+        `/pulls/${encodeURIComponent(pull.id)}/workspace`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ side: actualSide }),
+        },
+      )
+      if (version === requestVersion.current) {
+        setWorkspace(prepared)
+        setNotice('Local source is ready. Use Go to definition to navigate this checkout.')
       }
     } catch (failure) {
       if (version === requestVersion.current) setSourceError(message(failure))
@@ -230,13 +250,57 @@ export function SourceContextDialog({
             )}
           </div>
         )}
-        {!revision && !error && <p className="source-context-loading muted">Loading exact source…</p>}
+        {!revision && !error && (
+          <p className="source-context-loading muted">Loading exact source…</p>
+        )}
         {revision && (
           <>
+            <nav className="source-context-toolbar" aria-label="Source navigation">
+              <button
+                type="button"
+                aria-label="Back in source"
+                disabled={busy || history.index < 0}
+                onClick={() => {
+                  setHistory((current) => ({ ...current, index: current.index - 1 }))
+                  setNavigation(undefined)
+                  setNotice('')
+                }}
+              >
+                ← Back
+              </button>
+              <button
+                type="button"
+                aria-label="Forward in source"
+                disabled={busy || history.index + 1 >= history.visits.length}
+                onClick={() => {
+                  setHistory((current) => ({ ...current, index: current.index + 1 }))
+                  setNavigation(undefined)
+                  setNotice('')
+                }}
+              >
+                Forward →
+              </button>
+              <span className="muted" title={workspace?.directory}>
+                {navigation?.source?.kind === 'local' || workspace?.status === 'ready'
+                  ? 'Local checkout'
+                  : 'Saved source'}{' '}
+                · {revision.sha.slice(0, 8)}
+              </span>
+              {navigation?.source?.kind !== 'local' && workspace?.status !== 'ready' && (
+                <button type="button" disabled={busy} onClick={() => void prepareLocalSource()}>
+                  Prepare local source
+                </button>
+              )}
+            </nav>
             {busy && (
               <div className="source-context-navigation" role="status">
                 Loading…
               </div>
+            )}
+            {notice && (
+              <p className="source-context-notice" role="status">
+                {notice}
+              </p>
             )}
             {warnings.length > 0 && (
               <div className="source-context-warnings">
@@ -261,18 +325,26 @@ export function SourceContextDialog({
                 options={{
                   onPostRender: (node) => {
                     const target = visit?.target
-                    for (const row of node.shadowRoot?.querySelectorAll<HTMLElement>('[data-line]') ?? []) {
+                    for (const row of node.shadowRoot?.querySelectorAll<HTMLElement>(
+                      '[data-line]',
+                    ) ?? []) {
                       const line = Number(row.dataset.line)
-                      const focused = Boolean(target && line >= target.line && line <= target.endLine)
+                      const focused = Boolean(
+                        target && line >= target.line && line <= target.endLine,
+                      )
                       row.toggleAttribute('data-source-destination', focused)
                       for (const token of row.querySelectorAll<HTMLElement>('[data-char]')) {
                         const start = Number(token.dataset.char)
                         const end = start + (token.textContent?.length ?? 0)
-                        token.toggleAttribute('data-source-destination-token', Boolean(
-                          focused && target &&
-                          (line !== target.line || end > target.column - 1) &&
-                          (line !== target.endLine || start < target.endColumn - 1),
-                        ))
+                        token.toggleAttribute(
+                          'data-source-destination-token',
+                          Boolean(
+                            focused &&
+                            target &&
+                            (line !== target.line || end > target.column - 1) &&
+                            (line !== target.endLine || start < target.endColumn - 1),
+                          ),
+                        )
                       }
                     }
                   },

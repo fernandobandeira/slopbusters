@@ -94,6 +94,24 @@ describe('dual Linus review sessions', () => {
     expect(jobs.get(session.id).results[0].reviewers).toEqual([primary, companion])
     expect(new LinusJobs(store, directory).latest(repository)?.results).toHaveLength(1)
   })
+  it('shares local inspection with both reviewers and reconciliation, then releases it', async () => {
+    const context = {
+      directory,
+      sha: fixturePull().headSha,
+      url: 'http://127.0.0.1:1/mcp',
+      token: 'fixture-token',
+      close: vi.fn(async () => {}),
+    }
+    const prepare = vi.fn(async () => context)
+    jobs = new LinusJobs(store, directory, undefined, prepare)
+    const session = jobs.start(repository, [fixturePull().url])
+    await vi.waitFor(() => expect(jobs.get(session.id).status).toBe('complete'))
+    expect(prepare).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(reviewWithLinus).mock.calls.every((call) => call[5] === context)).toBe(true)
+    expect(vi.mocked(reconcileWithLinus).mock.calls[0][4]).toBe(context)
+    await vi.waitFor(() => expect(context.close).toHaveBeenCalledTimes(1))
+  })
+
   it('waits for an explicit single-model choice when a reviewer fails', async () => {
     vi.mocked(reviewWithLinus).mockImplementation(async (_pull, model) => {
       if (model.provider === Provider.claude) throw new Error('Companion unavailable')

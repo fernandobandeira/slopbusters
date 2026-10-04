@@ -25,7 +25,7 @@ async function verifyContextRenderer(window) {
     const source={path:'src/example.ts',sha,content:newLines.join('\n')+'\n',symbols:[{name:'Example',kind:'class',line:1,endLine:120},{name:'Example.inspect',kind:'method',line:40,endLine:70},{name:'Example.run',kind:'method',line:80,endLine:80}]};
     const pull={id:'native-context-smoke',owner:'example',repo:'demo',number:1,url:'https://github.com/example/demo/pull/1',title:'Synthetic context smoke',description:'## Smoke description\n\nA **formatted** description with [safe link](https://github.com/example/demo).',author:'reviewer',baseBranch:'main',headBranch:'feature',baseSha:'a'.repeat(40),mergeBaseSha:'a'.repeat(40),headSha:sha,state:'open',files:[{id:'example-file',path:source.path,status:'modified',additions:2,deletions:2,hunks:[first,second],coverage:'complete',oldContent:oldLines.join('\n')+'\n'}],groups:[{id:'first-group',title:'First group',reason:'Smoke fixture',priority:'P2',fileIds:['example-file'],hunkIds:[first.id]},{id:'second-group',title:'Second group',reason:'Smoke fixture',priority:'P2',fileIds:['example-file'],hunkIds:[second.id]}],transfers:[],groupingSource:'codex',warnings:[]};
     const draft={comments:[],summary:'',viewedFileIds:[],viewedHunkIds:[]};
-    let contentRequests=0, navigationRequests=[];
+    let contentRequests=0, sourceRequests=0, noLocations=false, navigationRequests=[];
     globalThis.fetch=async(input,init) => {
       const url=new URL(typeof input==='string'?input:input.url,location.href);
       if(url.pathname==='/api/pulls/'+pull.id)return Response.json(pull);
@@ -33,8 +33,8 @@ async function verifyContextRenderer(window) {
       if(url.pathname==='/api/pulls/'+pull.id+'/threads')return Response.json({threads:[]});
       if(url.pathname==='/api/pulls/'+pull.id+'/files/example-file/content'){contentRequests++;return Response.json({fileId:'example-file',old:{...source,sha:pull.baseSha,content:oldLines.join('\n')+'\n'},new:source});}
       if(url.pathname==='/api/pulls/'+pull.id+'/source-tree')return Response.json({sha,paths:[source.path,'src/related.ts'],warnings:[]});
-      if(url.pathname==='/api/pulls/'+pull.id+'/source-file')return Response.json(url.searchParams.get('path')==='src/related.ts'?{path:'src/related.ts',sha,content:'export function related() { return 42 }\n',symbols:[{name:'related',kind:'function',line:1,endLine:1}]}:source);
-      if(url.pathname==='/api/pulls/'+pull.id+'/navigation'){navigationRequests.push(JSON.parse(init.body));return Response.json({language:'typescript',mode:'semantic',targets:[{path:'src/related.ts',line:1,column:17,endLine:1,endColumn:24,name:'related'}],warnings:[]});}
+      if(url.pathname==='/api/pulls/'+pull.id+'/source-file'){sourceRequests++;return Response.json(url.searchParams.get('path')==='src/related.ts'?{path:'src/related.ts',sha,content:'export function related() { return 42 }\n',symbols:[{name:'related',kind:'function',line:1,endLine:1}]}:source);}
+      if(url.pathname==='/api/pulls/'+pull.id+'/navigation'){navigationRequests.push(JSON.parse(init.body));return Response.json({language:'typescript',mode:'semantic',targets:noLocations?[]:[{path:'src/related.ts',line:1,column:17,endLine:1,endColumn:24,name:'related'}],warnings:[]});}
       if(url.pathname.startsWith('/api/pulls/'+pull.id+'/') || url.pathname==='/api/stack' || url.pathname==='/api/inbox' || url.pathname==='/api/inbox-status')return Response.json({error:'Synthetic fixture metadata unavailable'},{status:400});
       return originalFetch(input,init);
     };
@@ -78,7 +78,26 @@ async function verifyContextRenderer(window) {
       await wait(() => codeText(panel).includes('function related'), 'Definition target did not open');
       await wait(() => roots(panel).some(root => [...root.querySelectorAll('[data-source-destination-token]')].some(token => token.textContent === 'related')), 'Definition target was not highlighted');
       const relatedToken=await wait(() => roots(panel).flatMap(root=>[...root.querySelectorAll('[data-char]')]).find(node=>node.textContent.trim()==='related'), 'Definition identifier tokens unavailable');
+      const beforeSameDefinition=sourceRequests;
       rightClick(relatedToken);
+      await wait(() => menuItem('Go to definition'), 'Same-location menu did not open');
+      menuItem('Go to definition').click();
+      await wait(() => panel.textContent.includes('Already at this definition.'), 'Same-location jump was not explained');
+      if(sourceRequests!==beforeSameDefinition)throw new Error('Same-location jump refetched the current file');
+      panel.querySelector('button[aria-label="Back in source"]').click();
+      await wait(() => codeText(panel).includes('private inspect'), 'Source history did not return to the origin');
+      panel.querySelector('button[aria-label="Forward in source"]').click();
+      await wait(() => codeText(panel).includes('function related'), 'Source history did not return to the declaration');
+      noLocations=true;
+      const unresolvedToken=await wait(() => roots(panel).flatMap(root=>[...root.querySelectorAll('[data-char]')]).find(node=>node.textContent.trim()==='related'), 'Unresolved identifier unavailable');
+      rightClick(unresolvedToken);
+      await wait(() => menuItem('Go to definition'), 'Unresolved menu did not open');
+      menuItem('Go to definition').click();
+      await wait(() => panel.textContent.includes('No definition found.'), 'Missing definition was not explained');
+      if(!codeText(panel).includes('function related'))throw new Error('Missing definition replaced the current source');
+      noLocations=false;
+      const referenceToken=await wait(() => roots(panel).flatMap(root=>[...root.querySelectorAll('[data-char]')]).find(node=>node.textContent.trim()==='related'), 'Reference identifier unavailable');
+      rightClick(referenceToken);
       await wait(() => menuItem('Show references'), 'Reference menu did not open');
       menuItem('Show references').click();
       await wait(() => navigationRequests.some(request=>request.kind==='references' && request.path==='src/related.ts'), 'References request did not use selected source token');

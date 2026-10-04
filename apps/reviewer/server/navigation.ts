@@ -7,6 +7,7 @@ import { getSyntaxIdentifierLocations, sourceLanguage } from './treeSymbols'
 import { createTypeScriptNavigator } from './semanticNavigation'
 import type { LanguageServerNavigation } from './lspNavigation'
 import { workspacePackagePaths } from './workspacePackages'
+import type { WorkspaceTypeScriptNavigation } from './workspaceNavigation'
 
 type SourceProject = ReturnType<typeof createSourceProjectLoader>
 const virtualRoot = '/review/'
@@ -54,7 +55,7 @@ function plainMatches(path: string, content: string, name: string): NavigationTa
 }
 
 /** Loads a bounded, immutable virtual project; reviewed packages and configuration are never run. */
-export function createSourceNavigator(project: SourceProject, languageServers?: LanguageServerNavigation) {
+export function createSourceNavigator(project: SourceProject, languageServers?: LanguageServerNavigation, localTypeScript?: WorkspaceTypeScriptNavigation) {
   const active = new Map<string, Promise<NavigationResult>>()
   const cache = new Map<string, NavigationResult>()
   const typeScriptProjects = new Map<string, ReturnType<typeof createTypeScriptNavigator>>()
@@ -70,6 +71,12 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
     const name = selectedWord(origin.content, request.line, request.column)
     const warnings = new Set(tree.warnings)
     if (!name) return { language, mode: semantic ? 'semantic' : 'text', targets: [], warnings: [] }
+    if (semantic && localTypeScript) {
+      try { return await localTypeScript.navigate(pull, request) }
+      catch (error) {
+        warnings.add(`Full-project navigation is unavailable: ${error instanceof Error ? error.message : 'Local source could not be prepared.'} Using the saved source snapshot.`)
+      }
+    }
     if (!semantic && languageServers) {
       const result = await languageServers.navigate(pull, request)
       if (result?.mode === 'semantic') return result
@@ -287,6 +294,7 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
         mode: 'semantic',
         targets: navigator.navigate(request).slice(0, 500),
         warnings: [...warnings],
+        source: { sha: tree.sha, kind: 'snapshot' },
       }
     }
 
@@ -353,7 +361,7 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
     const result = navigate(pull, request)
       .then((value) => {
         // A missing or failed installed server should be retried on the next click.
-        if (!languageServers || value.mode === 'semantic') cache.set(key, value)
+        if ((!languageServers || value.mode === 'semantic') && !value.warnings.some((warning) => warning.startsWith('Full-project navigation is unavailable:'))) cache.set(key, value)
         if (cache.size > 40) cache.delete(cache.keys().next().value!)
         return value
       })
@@ -362,6 +370,7 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
     return result
   }
   return Object.assign(sourceNavigation, {
+    clearCache() { cache.clear() },
     close() {
       for (const navigator of typeScriptProjects.values()) navigator.close()
       typeScriptProjects.clear()

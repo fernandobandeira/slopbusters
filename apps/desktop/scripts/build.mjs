@@ -33,14 +33,26 @@ for (const asset of parserRecord.assets) {
 await cp(resolve(parserNoticesDirectory, 'SOURCE_PARSER_NOTICES.txt'), resolve(destination, 'SOURCE_PARSER_NOTICES.txt'))
 await cp(resolve(parserNoticesDirectory, 'sources.json'), resolve(destination, 'SOURCE_PARSER_ASSETS.json'))
 await cp(resolve(parserNoticesDirectory, 'README.md'), resolve(destination, 'SOURCE_PARSER_PROVENANCE.md'))
+// The bundled language service still needs TypeScript's standard declaration files.
+const typeScriptDirectory = dirname(reviewerRequire.resolve('typescript'))
+await cp(typeScriptDirectory, resolve(destination, 'typescript'), {
+  recursive: true,
+  filter: (path) => path === typeScriptDirectory || /[/\\]lib(?:\.[\w.]+)?\.d\.ts$/.test(path),
+})
 await build({
-  entryPoints: [resolve(directory, 'src/main.cjs'), resolve(directory, 'src/preload.cjs')],
+  entryPoints: {
+    main: resolve(directory, 'src/main.cjs'),
+    preload: resolve(directory, 'src/preload.cjs'),
+    workspaceTypeScriptWorker: resolve(directory, '../reviewer/server/workspaceTypeScriptWorker.ts'),
+  },
   outdir: destination,
   outExtension: { '.js': '.cjs' },
   bundle: true,
   platform: 'node',
   format: 'cjs',
   target: 'node24',
+  // createRequire accepts an absolute filename in the CommonJS desktop bundle.
+  define: { 'import.meta.url': '__filename' },
   external: ['electron', 'electron-updater', 'node:*'],
   legalComments: 'eof',
 })

@@ -71,7 +71,7 @@ function validatePatch(file: ChangedFile, content: PullFileContent): void {
 }
 
 /** Per-server bounded cache uses immutable commit pairs, never a current branch or PR head. */
-export function createFileContentLoader() {
+export function createFileContentLoader(repository?: SourceRepository) {
   const cache = new Map<string, { value: PullFileContent; bytes: number }>()
   const pending = new Map<string, Promise<PullFileContent>>()
   const mergeBases = new Map<string, Promise<string>>()
@@ -107,6 +107,17 @@ export function createFileContentLoader() {
     const oldPath = file.status === 'added' ? null : filePath(file.previousPath ?? file.path)
     const newPath = file.status === 'removed' ? null : filePath(file.path)
     const oldSha = oldPath == null ? null : await mergeBase(pull)
+    if (repository) {
+      try {
+        const [oldContent, newContent] = await Promise.all([
+          oldPath == null ? null : repository.file(pull.owner, pull.repo, oldSha!, oldPath).then((blob) => readBlob(blob, oldPath, oldSha!)),
+          newPath == null ? null : repository.file(pull.owner, pull.repo, pull.headSha, newPath).then((blob) => readBlob(blob, newPath, pull.headSha)),
+        ])
+        const value = { fileId: file.id, old: oldContent, new: newContent }
+        validatePatch(file, value)
+        return value
+      } catch { /* GitHub can still supply an exact saved revision when local Git is unavailable. */ }
+    }
     const variables = {
       owner: pull.owner,
       name: pull.repo,
@@ -285,12 +296,12 @@ export function createSourceProjectLoader(repository?: SourceRepository) {
           // Unusual Git filenames do not make every other source file unavailable.
         }
       }
-      const paths = [...new Set(validPaths)].sort().slice(0, 10000)
+      const paths = [...new Set(validPaths)].sort().slice(0, local ? undefined : 10000)
       if (result.truncated)
         warnings.push(
           'GitHub returned a truncated source tree. Some definitions may be unavailable.',
         )
-      if (validPaths.length > 10000)
+      if (!local && validPaths.length > 10000)
         warnings.push(
           'Source navigation is limited to the first 10,000 regular files in this revision.',
         )

@@ -20,14 +20,18 @@ import { LanguageServers } from './languageServers'
 import { LanguageServerNavigation } from './lspNavigation'
 import { LinusJobs } from './linusJobs'
 import { parsePullUrl } from '../shared/pullUrl'
+import { ReviewWorkspaces } from './reviewWorkspaces'
+import { WorkspaceTypeScriptNavigation, type TypeScriptWorkerOptions } from './workspaceNavigation'
+import { startRepositoryTools } from './repositoryTools'
 
-export interface ReviewerServerOptions {
+export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   dataDirectory: string
   staticDirectory: string
   sourceAssetsDirectory?: string
   linusSkillDirectory?: string
   port?: number
   allowedOrigins?: string[]
+  sourceRemoteUrl?: (owner: string, repo: string) => string
 }
 
 export async function startReviewerServer(
@@ -35,13 +39,13 @@ export async function startReviewerServer(
 ): Promise<{ url: string; close: () => Promise<void> }> {
   configureSourceAssetsDirectory(options.sourceAssetsDirectory)
   const store = new ReviewerStore({ dataDirectory: options.dataDirectory })
-  const linusJobs = new LinusJobs(store, options.staticDirectory, options.linusSkillDirectory)
   const getPull = async (id: string) => store.getPull(id)
   const savePull = async (pull: Parameters<ReviewerStore['savePull']>[0]) => store.savePull(pull)
   const checkRevision = createRevisionChecker()
-  const loadFileContent = createFileContentLoader()
-  const sourceRepository = new LocalSourceRepository(options.dataDirectory)
+  const sourceRepository = new LocalSourceRepository(options.dataDirectory, options.sourceRemoteUrl)
+  const loadFileContent = createFileContentLoader(sourceRepository)
   const sourceProject = createSourceProjectLoader(sourceRepository)
+  const workspaces = new ReviewWorkspaces(options.dataDirectory, sourceRepository)
   function warmSource(pull: Parameters<typeof sourceProject.tree>[0]) {
     // Warm immutable revisions without delaying the diff or grouping response.
     for (const sha of new Set(
@@ -52,8 +56,31 @@ export async function startReviewerServer(
         .catch(() => {})
   }
   const languageServers = new LanguageServers(options.dataDirectory)
-  let languageNavigation = new LanguageServerNavigation(sourceProject, languageServers)
-  let navigateSource = createSourceNavigator(sourceProject, languageNavigation)
+  let languageNavigation = new LanguageServerNavigation(sourceProject, languageServers, workspaces)
+  let typeScriptNavigation = new WorkspaceTypeScriptNavigation(sourceProject, workspaces, options)
+  let navigateSource = createSourceNavigator(
+    sourceProject,
+    languageNavigation,
+    typeScriptNavigation,
+  )
+  const linusJobs = new LinusJobs(
+    store,
+    options.staticDirectory,
+    options.linusSkillDirectory,
+    async (pull, signal) => {
+      signal.throwIfAborted()
+      const lease = await workspaces.acquire(pull, pull.headSha)
+      try {
+        signal.throwIfAborted()
+        return await startRepositoryTools(pull, lease, sourceProject, (pull, request) =>
+          navigateSource(pull, request),
+        )
+      } catch (error) {
+        lease.release()
+        throw error
+      }
+    },
+  )
   const app = express()
   let ownOrigin = ''
   app.disable('x-powered-by')
@@ -152,12 +179,26 @@ export async function startReviewerServer(
   app.get('/api/language-servers', async (_request, response) =>
     response.json(await languageServers.statuses()),
   )
+  app.get('/api/workspaces', async (_request, response) => response.json(await workspaces.list()))
+  app.delete('/api/workspaces', async (request, response) => {
+    const identity = z
+      .object({ owner: z.string(), repo: z.string(), sha: z.string() })
+      .strict()
+      .parse(request.body)
+    await typeScriptNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
+    await languageNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
+    await workspaces.remove(identity, identity.sha)
+    navigateSource.clearCache()
+    response.json({ ok: true })
+  })
   app.put('/api/language-servers', async (request, response) => {
     await languageServers.save(request.body)
     await languageNavigation.close()
+    await typeScriptNavigation.close()
     navigateSource.close()
-    languageNavigation = new LanguageServerNavigation(sourceProject, languageServers)
-    navigateSource = createSourceNavigator(sourceProject, languageNavigation)
+    languageNavigation = new LanguageServerNavigation(sourceProject, languageServers, workspaces)
+    typeScriptNavigation = new WorkspaceTypeScriptNavigation(sourceProject, workspaces, options)
+    navigateSource = createSourceNavigator(sourceProject, languageNavigation, typeScriptNavigation)
     response.json(await languageServers.statuses())
   })
   app.put('/api/preferences', (request, response) => {
@@ -214,6 +255,22 @@ export async function startReviewerServer(
   app.get('/api/pulls/:id/source-tree', async (request, response) => {
     const pull = store.getPull(request.params.id)
     response.json(await sourceProject.tree(pull, z.enum(DiffSide).parse(request.query.side)))
+  })
+  app.get('/api/pulls/:id/workspace', async (request, response) => {
+    const pull = store.getPull(request.params.id)
+    const tree = await sourceProject.tree(pull, z.enum(DiffSide).parse(request.query.side))
+    response.json(workspaces.status(pull, tree.sha))
+  })
+  app.post('/api/pulls/:id/workspace', async (request, response) => {
+    const pull = store.getPull(request.params.id)
+    const { side } = z
+      .object({ side: z.enum(DiffSide) })
+      .strict()
+      .parse(request.body)
+    const tree = await sourceProject.tree(pull, side)
+    const lease = await workspaces.acquire(pull, tree.sha)
+    lease.release()
+    response.json(workspaces.status(pull, tree.sha))
   })
   app.post('/api/pulls/:id/navigation', async (request, response) => {
     const selection = z
@@ -403,7 +460,9 @@ export async function startReviewerServer(
         server.close((error) => {
           void Promise.all([
             languageNavigation.close(),
+            typeScriptNavigation.close(),
             linusJobs.close(),
+            workspaces.close(),
             sourceRepository.close(),
           ]).then(() => {
             navigateSource.close()

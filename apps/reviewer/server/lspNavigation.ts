@@ -3,6 +3,7 @@ import type { PullRequest } from '../shared/types'
 import { LanguageServers, findExecutable } from './languageServers'
 import { startLanguageServer } from './lspClient'
 import { createSourceWorkspace, projectRoot, type SourceProject } from './sourceWorkspace'
+import type { ReviewWorkspaces } from './reviewWorkspaces'
 
 type Session = Awaited<ReturnType<typeof startLanguageServer>>
 interface Entry {
@@ -16,7 +17,7 @@ interface Entry {
 export class LanguageServerNavigation {
   private entries = new Map<string, Entry>()
   private closed = false
-  constructor(private readonly project: SourceProject, readonly servers: LanguageServers) {}
+  constructor(private readonly project: SourceProject, readonly servers: LanguageServers, private readonly workspaces?: ReviewWorkspaces) {}
 
   private retire(key: string, entry: Entry): Promise<void> {
     clearTimeout(entry.timer)
@@ -40,7 +41,7 @@ export class LanguageServerNavigation {
     if (!entry) {
       entry = {
         users: 0,
-        session: createSourceWorkspace(this.project, pull, request, server)
+        session: createSourceWorkspace(this.project, pull, request, server, this.workspaces)
           .then((workspace) => startLanguageServer(server, executable, workspace)),
       }
       this.entries.set(key, entry)
@@ -51,7 +52,8 @@ export class LanguageServerNavigation {
     this.entries.delete(key)
     this.entries.set(key, entry)
     try {
-      return await (await entry.session).navigate(request)
+      const result = await (await entry.session).navigate(request)
+      return { ...result, source: { sha: tree.sha, kind: this.workspaces ? 'local' : 'snapshot' } }
     } catch {
       if (entry.users === 1) await this.retire(key, entry)
       return fallback(`The ${server.command} language server could not resolve this request. Check its installation and project toolchain; retry navigation or use the syntax matches below.`)
@@ -71,5 +73,14 @@ export class LanguageServerNavigation {
   async close() {
     this.closed = true
     await Promise.all([...this.entries].map(([key, entry]) => this.retire(key, entry)))
+  }
+
+  async closeRevision(owner: string, repo: string, sha: string) {
+    const matches = [...this.entries].filter(([key]) => {
+      const identity = JSON.parse(key) as string[]
+      return identity[0] === owner && identity[1] === repo && identity[2] === sha
+    })
+    if (matches.some(([, entry]) => entry.users)) throw new Error('Source analysis is in progress. Try removing this checkout when it finishes.')
+    await Promise.all(matches.map(([key, entry]) => this.retire(key, entry)))
   }
 }

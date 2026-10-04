@@ -21,6 +21,12 @@ vi.mock('../server/linusReview', async (original) => ({
   reviewWithLinus: vi.fn(),
   reconcileWithLinus: vi.fn(),
 }))
+vi.mock('../server/reviewWorkspaces', () => ({
+  ReviewWorkspaces: class {
+    async acquire() { throw new Error('Repository inspection unavailable in this API fixture.') }
+    async close() {}
+  },
+}))
 const directories: string[] = []
 afterEach(() => {
   vi.resetAllMocks()

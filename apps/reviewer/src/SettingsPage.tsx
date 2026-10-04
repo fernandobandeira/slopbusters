@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router'
 import { ThemePicker } from './ThemePicker'
 import { LanguageServerSettings } from './LanguageServerSettings'
+import { ReviewWorkspaceSettings } from './ReviewWorkspaceSettings'
 import { OrganizationSettings } from './OrganizationSettings'
 import { Provider, type AppStatus } from '../shared/types'
 import { organizationDefaults, type OrganizationPreferences } from '../shared/preferences'
@@ -47,6 +48,7 @@ export function SettingsPage({
         />
       </section>
       <LanguageServerSettings />
+      <ReviewWorkspaceSettings />
       <section className="settings-section" aria-labelledby="appearance-title">
         <h2 id="appearance-title">Appearance</h2>
         <p className="muted">Choose the colors used throughout the app and in code diffs.</p>

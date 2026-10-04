@@ -17,6 +17,7 @@ export function workspacePackagePaths(
   content: string,
   available: Set<string>,
   options: ts.CompilerOptions,
+  workspaceRoot = '/review',
 ): Record<string, string[]> {
   let manifest: Record<string, unknown>
   try {
@@ -29,8 +30,9 @@ export function workspacePackagePaths(
   if (typeof manifest.name !== 'string' || !manifest.name) return {}
   const directory = posix.dirname(manifestPath)
   const packageRoot = directory === '.' ? '' : `${directory}/`
-  const sourceRoot = options.rootDir?.replace(/^\/review\//, '') ?? `${packageRoot}src`
-  const outputRoot = options.outDir?.replace(/^\/review\//, '')
+  const relativeOption = (path?: string) => path?.startsWith(`${workspaceRoot}/`) ? path.slice(workspaceRoot.length + 1) : path
+  const sourceRoot = relativeOption(options.rootDir) ?? `${packageRoot}src`
+  const outputRoot = relativeOption(options.outDir)
 
   function exists(path: string) {
     if (!path.startsWith(packageRoot) || path.startsWith('../') || path.startsWith('/'))
@@ -56,7 +58,7 @@ export function workspacePackagePaths(
         ...['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'].map((extension) => stem + extension),
         candidate,
       ].find(exists)
-      if (source) return `/review/${source}`
+      if (source) return `${workspaceRoot}/${source}`
     }
     return undefined
   }

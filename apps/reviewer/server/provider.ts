@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { Provider } from '../shared/types'
 import type { OrganizationPreferences } from '../shared/preferences'
 import { runCommand } from './process'
+import type { RepositoryContext } from './repositoryTools'
 
 /** Reuse the signed-in CLI accounts for bounded, structured advisory calls. */
 export async function runStructured<T>(
@@ -12,6 +13,7 @@ export async function runStructured<T>(
   prompt: string,
   outputSchema: z.ZodType<T>,
   signal: AbortSignal,
+  repository?: RepositoryContext,
 ): Promise<T> {
   signal.throwIfAborted()
   const directory = await mkdtemp(join(tmpdir(), 'slopbusters-'))
@@ -35,6 +37,18 @@ export async function runStructured<T>(
             '--skip-git-repo-check',
             '--sandbox',
             'read-only',
+            ...(repository
+              ? [
+                  '-c',
+                  `mcp_servers.slopbusters.url=${JSON.stringify(repository.url)}`,
+                  '-c',
+                  `mcp_servers.slopbusters.http_headers={Authorization=${JSON.stringify(`Bearer ${repository.token}`)}}`,
+                  '-c',
+                  'mcp_servers.slopbusters.required=true',
+                  '-c',
+                  'mcp_servers.slopbusters.tool_timeout_sec=120',
+                ]
+              : []),
             '--output-schema',
             schemaPath,
             '--output-last-message',
@@ -42,7 +56,7 @@ export async function runStructured<T>(
             '-',
           ],
           input: prompt,
-          cwd: directory,
+          cwd: repository?.directory ?? directory,
           signal,
           timeoutMs: 300_000,
         })
@@ -56,9 +70,29 @@ export async function runStructured<T>(
             '-p',
             '--model',
             model,
-            '--safe-mode',
+            ...(repository
+              ? [
+                  '--setting-sources',
+                  '',
+                  '--mcp-config',
+                  JSON.stringify({
+                    mcpServers: {
+                      slopbusters: {
+                        type: 'http',
+                        url: repository.url,
+                        headers: { Authorization: `Bearer ${repository.token}` },
+                      },
+                    },
+                  }),
+                  '--allowedTools',
+                  'Read',
+                  'Glob',
+                  'Grep',
+                  'mcp__slopbusters__*',
+                ]
+              : ['--safe-mode']),
             '--tools',
-            '',
+            repository ? 'Read,Glob,Grep' : '',
             '--strict-mcp-config',
             '--permission-mode',
             'dontAsk',
@@ -68,7 +102,7 @@ export async function runStructured<T>(
             schema,
           ],
           input: prompt,
-          cwd: directory,
+          cwd: repository?.directory ?? directory,
           signal,
           timeoutMs: 300_000,
         })

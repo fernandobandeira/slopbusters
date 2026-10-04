@@ -24,4 +24,5 @@ export interface NavigationResult {
   mode: 'semantic' | 'text'
   targets: NavigationTarget[]
   warnings: string[]
+  source?: { sha: string; kind: 'local' | 'snapshot' }
 }

@@ -35,7 +35,8 @@ export function LanguageServerSettings() {
       <p className="muted">
         Go to definition and Find references use installed language servers. JavaScript and
         TypeScript are included in the app. Other languages use syntax matches when their server
-        is unavailable. Servers read temporary copies of the saved PR revision.
+        is unavailable. Servers inspect a local checkout of the saved PR revision. Dependencies
+        and generated files are not installed automatically.
       </p>
       {error && <p role="alert">{error}</p>}
       {!servers.length && !error && <p role="status">Checking language servers…</p>}

@@ -174,6 +174,8 @@ async function verifySmoke(window) {
   const sourceSymbols = await getRevisionSymbols('sample.py', 'class Example:\n    def inspect(self):\n        return 42\n')
   if (!sourceSymbols.some((symbol) => symbol.kind === 'class' && symbol.name === 'Example') || !sourceSymbols.some((symbol) => symbol.name.endsWith('inspect'))) throw new Error('The bundled source parser did not load its WASM grammar.')
   smokeStage('parsers-ready')
+  const workspaceResult = await require('./workspace-smoke.cjs').verifyWorkspaceWorker()
+  smokeStage('workspace-worker-ready')
   const phase = smokeArgument('--smoke-phase')
   const isolation = window.webContents.getLastWebPreferences()
   if (!isolation.sandbox || !isolation.contextIsolation || isolation.nodeIntegration) throw new Error('The renderer must remain sandboxed and isolated from Node.')
@@ -228,7 +230,7 @@ async function verifySmoke(window) {
   if (readFileSync(join(app.getPath('userData'), 'reviewer.sqlite')).subarray(0, 16).toString() !== 'SQLite format 3\0') throw new Error('The persistent reviewer SQLite database was not created.')
   app.quit()
   if (window.isEnabled()) throw new Error('The window still accepts edits while the close flush is pending.')
-  console.log(JSON.stringify({ smoke: phase, electron: process.versions.electron, sqlite: true, sourceParsers: true, sandbox: window.webContents.getLastWebPreferences().sandbox, closeInputBlocked: true, ...contextResult, ...result }))
+  console.log(JSON.stringify({ smoke: phase, electron: process.versions.electron, sqlite: true, sourceParsers: true, sandbox: window.webContents.getLastWebPreferences().sandbox, closeInputBlocked: true, ...workspaceResult, ...contextResult, ...result }))
 }
 
 async function verifyUpdateFooter(window) {
@@ -310,6 +312,8 @@ async function start() {
     dataDirectory: app.getPath('userData'),
     staticDirectory: join(__dirname, 'renderer'),
     sourceAssetsDirectory: join(__dirname, 'syntax'),
+    typeScriptWorkerPath: join(__dirname, 'workspaceTypeScriptWorker.cjs'),
+    typeScriptLibDirectory: join(__dirname, 'typescript'),
     port: 0,
   })
   smokeStage('server-ready')

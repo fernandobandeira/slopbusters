@@ -16,6 +16,7 @@ export function runCommand(params: {
       cwd: params.cwd,
       env: params.env ? { ...process.env, ...params.env } : process.env,
       shell: false,
+      detached: process.platform !== 'win32',
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     let output = ''
@@ -28,7 +29,14 @@ export function runCommand(params: {
       clearTimeout(timer)
       params.signal?.removeEventListener('abort', abort)
       if (error) {
-        child.kill('SIGTERM')
+        const kill = (signal: NodeJS.Signals) => {
+          try {
+            if (child.pid && process.platform !== 'win32') process.kill(-child.pid, signal)
+            else child.kill(signal)
+          } catch { /* The process group may already have exited. */ }
+        }
+        kill('SIGTERM')
+        setTimeout(() => kill('SIGKILL'), 1000).unref()
         reject(error)
       } else resolve(params.includeStderr ? `${output}\n${errors}` : output)
     }

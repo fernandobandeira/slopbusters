@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import type { LinusSession } from '../shared/linus'
 import { organizationDefaults } from '../shared/preferences'
-import { Provider } from '../shared/types'
+import { Provider, type PullRequest } from '../shared/types'
 import { fetchPull } from './github'
+import type { RepositoryContext } from './repositoryTools'
 import { loadLinusSkill, pullFingerprint, reconcileWithLinus, reviewWithLinus } from './linusReview'
 import type { ReviewerStore } from './store'
 
@@ -13,6 +14,7 @@ export class LinusJobs {
     private store: ReviewerStore,
     private staticDirectory: string,
     private skillDirectory?: string,
+    private openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<RepositoryContext>,
   ) {}
 
   start(repository: string, urls: string[]): LinusSession {
@@ -134,63 +136,104 @@ export class LinusJobs {
     const skill = await loadLinusSkill(this.staticDirectory, this.skillDirectory)
     for (let index = session.results.length; index < session.urls.length; index++) {
       signal.throwIfAborted()
-      if (!single || !session.pending) {
-        session.progress = `Loading PR ${index + 1} of ${session.urls.length}…`
-        this.store.saveLinusSession(session)
-        const pull = await fetchPull(session.urls[index])
-        signal.throwIfAborted()
-        session.progress = `Two reviewers are looking at PR #${pull.number} (${index + 1} of ${session.urls.length})…`
-        this.store.saveLinusSession(session)
-        const models = [session.primary, session.companion]
-        const outcomes = await Promise.allSettled(
-          models.map((model, reviewer) =>
-            reviewWithLinus(pull, model, skill, signal, reviewer === 1),
-          ),
-        )
-        signal.throwIfAborted()
-        session.pending = {
-          pull,
-          fingerprint: pullFingerprint(pull),
-          reviews: outcomes.map((outcome, reviewer) => ({
-            model: models[reviewer],
-            ...(outcome.status === 'fulfilled'
-              ? { advice: outcome.value }
-              : {
-                  error:
-                    outcome.reason instanceof Error ? outcome.reason.message : 'Reviewer failed.',
-                }),
-          })),
-        }
-        const successes = session.pending.reviews.filter((review) => review.advice).length
-        if (successes === 0)
-          throw new Error(
-            session.pending.reviews
-              .map((review) => `${review.model.provider}: ${review.error}`)
-              .join('\n'),
-          )
-        if (successes === 1) {
-          session.status = 'partial'
-          session.progress =
-            'One reviewer failed. Retry both reviewers or continue with the available review.'
-          session.error = session.pending.reviews.find((review) => review.error)?.error
+      let repository: RepositoryContext | undefined
+      try {
+        if (!single || !session.pending) {
+          session.progress = `Loading PR ${index + 1} of ${session.urls.length}…`
           this.store.saveLinusSession(session)
-          return
+          const pull = await fetchPull(session.urls[index])
+          signal.throwIfAborted()
+          const models = [session.primary, session.companion]
+          let sourceLimitation = ''
+          if (this.openRepository) {
+            session.progress = `Preparing local source for PR #${pull.number}…`
+            this.store.saveLinusSession(session)
+            try {
+              repository = await this.openRepository(pull, signal)
+            } catch (error) {
+              signal.throwIfAborted()
+              sourceLimitation = `Local repository inspection was unavailable: ${error instanceof Error ? error.message : 'Source could not be prepared.'} Review used the supplied PR snapshot.`
+            }
+          }
+          session.progress = `Two reviewers are looking at PR #${pull.number} (${index + 1} of ${session.urls.length})…`
+          this.store.saveLinusSession(session)
+          const outcomes = await Promise.allSettled(
+            models.map((model, reviewer) =>
+              repository
+                ? reviewWithLinus(pull, model, skill, signal, reviewer === 1, repository)
+                : reviewWithLinus(pull, model, skill, signal, reviewer === 1),
+            ),
+          )
+          if (sourceLimitation)
+            for (const outcome of outcomes) {
+              if (outcome.status === 'fulfilled')
+                outcome.value.limitations.unshift(sourceLimitation)
+            }
+          signal.throwIfAborted()
+          session.pending = {
+            pull,
+            fingerprint: pullFingerprint(pull),
+            reviews: outcomes.map((outcome, reviewer) => ({
+              model: models[reviewer],
+              ...(outcome.status === 'fulfilled'
+                ? { advice: outcome.value }
+                : {
+                    error:
+                      outcome.reason instanceof Error ? outcome.reason.message : 'Reviewer failed.',
+                  }),
+            })),
+          }
+          const successes = session.pending.reviews.filter((review) => review.advice).length
+          if (successes === 0)
+            throw new Error(
+              session.pending.reviews
+                .map((review) => `${review.model.provider}: ${review.error}`)
+                .join('\n'),
+            )
+          if (successes === 1) {
+            session.status = 'partial'
+            session.progress =
+              'One reviewer failed. Retry both reviewers or continue with the available review.'
+            session.error = session.pending.reviews.find((review) => review.error)?.error
+            this.store.saveLinusSession(session)
+            return
+          }
         }
+        session.progress = `The primary model is reconciling PR #${session.pending!.pull.number}…`
+        this.store.saveLinusSession(session)
+        const pending = session.pending!
+        if (!repository && this.openRepository) {
+          try {
+            repository = await this.openRepository(pending.pull, signal)
+          } catch {
+            signal.throwIfAborted()
+          }
+        }
+        const advice = repository
+          ? await reconcileWithLinus(pending, session.primary, skill, signal, repository)
+          : await reconcileWithLinus(pending, session.primary, skill, signal)
+        for (const limitation of new Set(
+          pending.reviews
+            .flatMap((review) => review.advice?.limitations ?? [])
+            .filter((text) => text.startsWith('Local repository inspection was unavailable:')),
+        )) {
+          if (!advice.limitations.includes(limitation)) advice.limitations.unshift(limitation)
+        }
+        signal.throwIfAborted()
+        session.results.push({
+          pull: pending.pull,
+          fingerprint: pending.fingerprint,
+          advice,
+          reviewers: pending.reviews
+            .filter((review) => review.advice)
+            .map((review) => review.model),
+        })
+        session.pending = undefined
+        single = false
+        this.store.saveLinusSession(session)
+      } finally {
+        await repository?.close()
       }
-      session.progress = `The primary model is reconciling PR #${session.pending!.pull.number}…`
-      this.store.saveLinusSession(session)
-      const pending = session.pending!
-      const advice = await reconcileWithLinus(pending, session.primary, skill, signal)
-      signal.throwIfAborted()
-      session.results.push({
-        pull: pending.pull,
-        fingerprint: pending.fingerprint,
-        advice,
-        reviewers: pending.reviews.filter((review) => review.advice).map((review) => review.model),
-      })
-      session.pending = undefined
-      single = false
-      this.store.saveLinusSession(session)
     }
     session.status = 'complete'
     session.progress = `Reviewed ${session.results.length} PR${session.results.length === 1 ? '' : 's'}.`

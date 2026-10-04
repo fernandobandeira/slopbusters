@@ -133,3 +133,36 @@
     width: 100%;
   }
 }
+.source-context-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 24px 10px;
+  font-size: 12px;
+}
+.source-context-toolbar button {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.source-context-notice {
+  padding: 0 24px;
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+.review-checkout-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.review-checkout-item p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.review-checkout-item button {
+  flex-shrink: 0;
+}
