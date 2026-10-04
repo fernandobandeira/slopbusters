@@ -112,6 +112,14 @@ export async function startReviewerServer(
       .parse(request.query.repository)
     response.json({ session: linusJobs.latest(repository) ?? null })
   })
+  app.get('/api/linus/recommendations', (request, response) => {
+    const repository = z
+      .string()
+      .max(300)
+      .regex(/^[\w.-]+\/[\w.-]+$/)
+      .parse(request.query.repository)
+    response.json({ recommendations: store.linusRecommendations(repository) })
+  })
   app.post('/api/linus', (request, response) => {
     const { repository, urls } = z
       .object({

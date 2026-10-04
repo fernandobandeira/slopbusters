@@ -352,6 +352,16 @@ pre {
 .pr-row:hover {
   background: var(--surface-hover);
 }
+.pr-row.pr-row-selected {
+  background: color-mix(in srgb, var(--primary) 8%, var(--background));
+}
+.pr-selection-checkbox {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
 .pr-row-link {
   display: flex;
   align-items: center;

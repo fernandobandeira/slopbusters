@@ -10,7 +10,7 @@ import {
 } from '../shared/progress'
 import type { PullRequest, ReviewDraft } from '../shared/types'
 import type { Preferences } from '../shared/preferences'
-import type { LinusSession } from '../shared/linus'
+import type { LinusRecommendation, LinusSession } from '../shared/linus'
 
 export class ReviewNotFoundError extends Error {
   constructor() {
@@ -171,6 +171,36 @@ export class ReviewerStore {
       )
       .get(repository)
     return row ? (JSON.parse(String(row.session)) as LinusSession) : undefined
+  }
+  linusRecommendations(repository: string): LinusRecommendation[] {
+    const rows = this.database
+      .prepare(
+        `
+      SELECT sessions.id AS session_id, sessions.created_at,
+        json_extract(result.value, '$.pull.url') AS url,
+        json_extract(result.value, '$.pull.number') AS number,
+        json_extract(result.value, '$.pull.headSha') AS head_sha,
+        json_extract(result.value, '$.advice.verdict') AS verdict
+      FROM linus_sessions AS sessions, json_each(sessions.session, '$.results') AS result
+      WHERE sessions.repository = ?
+      ORDER BY sessions.created_at DESC, sessions.rowid DESC
+    `,
+      )
+      .all(repository)
+    const latest = new Map<string, LinusRecommendation>()
+    for (const row of rows) {
+      const url = String(row.url)
+      if (!latest.has(url))
+        latest.set(url, {
+          sessionId: String(row.session_id),
+          createdAt: String(row.created_at),
+          url,
+          number: Number(row.number),
+          headSha: String(row.head_sha),
+          verdict: String(row.verdict) as LinusRecommendation['verdict'],
+        })
+    }
+    return [...latest.values()]
   }
   savePreferences(preferences: Preferences): Preferences {
     const value = { ...this.getPreferences(), ...preferences }

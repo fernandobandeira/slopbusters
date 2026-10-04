@@ -90,6 +90,7 @@
 .linus-selection-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin: 16px 0 8px;
   font-size: 11px;
@@ -97,6 +98,33 @@
 .linus-selection-toolbar span {
   margin-left: auto;
   color: var(--muted-foreground);
+}
+.linus-inbox-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-recessed);
+}
+.linus-inbox-selection strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.linus-inbox-selection p {
+  margin-top: 5px;
+  font-size: 12px;
+}
+.linus-inbox-selection a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.linus-recommendation-badge img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 .linus-companion button:not(.linus-portrait):hover {
   color: var(--primary);
@@ -111,36 +139,6 @@
   background: transparent;
   color: var(--muted-foreground);
   font-size: 11px;
-}
-.linus-pull-picker {
-  max-height: 240px;
-  overflow-y: auto;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
-}
-.linus-pull-picker label {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 4px;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-}
-.linus-pull-picker label:last-child {
-  border: 0;
-}
-.linus-pull-picker input {
-  margin-top: 3px;
-  accent-color: var(--primary);
-}
-.linus-pull-picker label span {
-  line-height: 1.5;
-}
-.linus-pull-picker small {
-  display: block;
-  color: var(--muted-foreground);
-  margin-bottom: 2px;
 }
 .linus-working {
   display: flex;
@@ -198,12 +196,6 @@
   border-radius: 6px;
   background: var(--surface-recessed);
   margin: 12px 0;
-}
-.linus-caveats {
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--muted-foreground);
-  margin-bottom: 14px;
 }
 .linus-error {
   color: var(--destructive);
@@ -292,31 +284,16 @@
 .linus-proposal ol {
   padding-left: 20px;
 }
-.linus-diff pre {
-  overflow-x: auto;
-  font-size: 12px;
-  line-height: 1.7;
-  padding: 12px 0;
-  font-family: var(--font-mono);
-}
-.linus-diff pre > div {
+.linus-evidence-body.linus-evidence-code {
   display: flex;
-  padding-right: 12px;
-  min-width: max-content;
+  padding: 0;
+  overflow: hidden;
 }
-.linus-line-number {
-  display: inline-block;
-  min-width: 42px;
-  padding: 0 8px;
-  text-align: right;
-  color: var(--muted-foreground);
-  user-select: none;
-}
-.linus-line-added {
-  background: var(--diff-addition);
-}
-.linus-line-removed {
-  background: var(--diff-deletion);
+.linus-diff {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  --diffs-font-size: 12px;
 }
 @media (max-width: 1150px) {
   .linus-evidence {

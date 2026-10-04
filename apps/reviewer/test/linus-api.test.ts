@@ -8,7 +8,7 @@ import { ReviewerStore } from '../server/store'
 import { fetchPull } from '../server/github'
 import { loadLinusSkill, reconcileWithLinus, reviewWithLinus } from '../server/linusReview'
 import { Provider } from '../shared/types'
-import type { LinusAdvice } from '../shared/linus'
+import type { LinusAdvice, LinusSession } from '../shared/linus'
 import { fixturePull } from './fixtures/pull'
 
 vi.mock('../server/github', async (original) => ({
@@ -52,6 +52,96 @@ function directory() {
 }
 
 describe('Linus review API and persistence', () => {
+  it('keeps the newest saved recommendation per PR across sessions and restarts', async () => {
+    const path = directory()
+    const first = fixturePull()
+    const second = {
+      ...first,
+      number: first.number + 1,
+      url: first.url.replace(/\d+$/, String(first.number + 1)),
+    }
+    const old: LinusSession = {
+      id: 'old-review',
+      repository: 'review-room/example',
+      urls: [first.url, second.url],
+      primary,
+      companion,
+      status: 'complete',
+      progress: 'Done',
+      createdAt: '2026-01-01T00:00:00Z',
+      results: [first, second].map((pull) => ({
+        pull,
+        fingerprint: pull.id,
+        advice,
+        reviewers: [primary, companion],
+      })),
+    }
+    const store = new ReviewerStore({ dataDirectory: path })
+    store.saveLinusSession(old)
+    store.saveLinusSession({
+      ...old,
+      id: 'new-review',
+      createdAt: '2026-01-02T00:00:00Z',
+      status: 'cancelled',
+      results: [
+        {
+          ...old.results[0],
+          pull: { ...first, headSha: 'new-head' },
+          advice: { ...advice, verdict: 'stack' },
+        },
+      ],
+    })
+    store.saveLinusSession({
+      ...old,
+      id: 'unfinished-review',
+      createdAt: '2026-01-03T00:00:00Z',
+      results: [],
+    })
+    store.saveLinusSession({
+      ...old,
+      id: 'other-repository',
+      repository: 'someone/else',
+      createdAt: '2026-01-04T00:00:00Z',
+    })
+    store.close()
+    const app = await startReviewerServer({ dataDirectory: path, staticDirectory: path, port: 0 })
+    try {
+      const response = await fetch(
+        `${app.url}/api/linus/recommendations?repository=review-room/example`,
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        recommendations: [
+          {
+            sessionId: 'new-review',
+            createdAt: '2026-01-02T00:00:00Z',
+            url: first.url,
+            number: first.number,
+            headSha: 'new-head',
+            verdict: 'stack',
+          },
+          {
+            sessionId: 'old-review',
+            createdAt: old.createdAt,
+            url: second.url,
+            number: second.number,
+            headSha: second.headSha,
+            verdict: 'keep',
+          },
+        ],
+      })
+      const replay = await (await fetch(`${app.url}/api/linus/old-review`)).json()
+      expect(replay.results).toEqual(old.results)
+      expect(
+        await (await fetch(`${app.url}/api/linus/recommendations?repository=no/reviews`)).json(),
+      ).toEqual({ recommendations: [] })
+      expect((await fetch(`${app.url}/api/linus/recommendations?repository=invalid`)).status).toBe(
+        400,
+      )
+    } finally {
+      await app.close()
+    }
+  })
   it('requires the existing primary setup, merges the companion preference, and rejects unrelated/duplicate selections', async () => {
     const path = directory()
     const app = await startReviewerServer({ dataDirectory: path, staticDirectory: path, port: 0 })

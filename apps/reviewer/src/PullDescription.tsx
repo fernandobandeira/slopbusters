@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Markdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
@@ -123,119 +123,130 @@ export function PullDescription({ pull, focusQuote }: { pull: PullRequest; focus
       target.classList.remove('linus-highlight')
     }
   }, [focusQuote, pull.description])
+  const focused = Boolean(focusQuote)
+  // Markdown treats these renderers as component types. Keep their identities stable so
+  // session polling and bubble interactions don't replace the highlighted DOM element.
+  const components = useMemo<Components>(
+    () => ({
+      ...(focused &&
+        ({
+          p: ({ node, children }) => (
+            <p
+              data-source-start={node?.position?.start.offset}
+              data-source-end={node?.position?.end.offset}
+            >
+              {children}
+            </p>
+          ),
+          h1: ({ node, children }) => (
+            <h1
+              data-source-start={node?.position?.start.offset}
+              data-source-end={node?.position?.end.offset}
+            >
+              {children}
+            </h1>
+          ),
+          h2: ({ node, children }) => (
+            <h2
+              data-source-start={node?.position?.start.offset}
+              data-source-end={node?.position?.end.offset}
+            >
+              {children}
+            </h2>
+          ),
+          h3: ({ node, children }) => (
+            <h3
+              data-source-start={node?.position?.start.offset}
+              data-source-end={node?.position?.end.offset}
+            >
+              {children}
+            </h3>
+          ),
+          li: ({ node, children, ...props }) => (
+            <li
+              {...props}
+              data-source-start={node?.position?.start.offset}
+              data-source-end={node?.position?.end.offset}
+            >
+              {children}
+            </li>
+          ),
+          details: ({ node, children, open }) => (
+            <details
+              open={open}
+              data-source-start={node?.position?.start.offset}
+              data-source-end={node?.position?.end.offset}
+            >
+              {children}
+            </details>
+          ),
+        } satisfies Components)),
+      a: ({ href, children, title, id }) =>
+        href ? (
+          <a
+            href={href}
+            title={title}
+            id={id}
+            target={href.startsWith('#') ? undefined : '_blank'}
+            rel={href.startsWith('#') ? undefined : 'noopener noreferrer'}
+          >
+            {children}
+          </a>
+        ) : (
+          <span id={id}>{children}</span>
+        ),
+      img: ({ src, alt, title }) =>
+        src && typeof src === 'string' && githubImage(src) ? (
+          <img src={src} alt={alt ?? ''} title={title} loading="lazy" />
+        ) : src ? (
+          <a
+            className="description-image-link"
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ImageIcon size={15} aria-hidden="true" />
+            {alt || 'View image attachment'}
+          </a>
+        ) : (
+          <span>{alt}</span>
+        ),
+      table: ({ node, children }) => (
+        <div
+          className="description-table-scroll"
+          data-source-start={focused ? node?.position?.start.offset : undefined}
+          data-source-end={focused ? node?.position?.end.offset : undefined}
+        >
+          <table>{children}</table>
+        </div>
+      ),
+      pre: ({ node, children }) => {
+        const code = node?.children.find(
+          (child) => child.type === 'element' && child.tagName === 'code',
+        )
+        const classes = code?.type === 'element' ? code.properties.className : undefined
+        const language = Array.isArray(classes)
+          ? classes
+              .map(String)
+              .find((name) => name.startsWith('language-'))
+              ?.slice(9)
+          : undefined
+        return (
+          <div
+            data-source-start={focused ? node?.position?.start.offset : undefined}
+            data-source-end={focused ? node?.position?.end.offset : undefined}
+          >
+            <DescriptionCode text={plainText(code)} language={language}>
+              {children}
+            </DescriptionCode>
+          </div>
+        )
+      },
+    }),
+    [focused],
+  )
   if (!pull.description.trim())
     return <p className="pull-description-empty">No description provided.</p>
-  const components: Components = {
-    ...(focusQuote &&
-      ({
-        p: ({ node, children }) => (
-          <p
-            data-source-start={node?.position?.start.offset}
-            data-source-end={node?.position?.end.offset}
-          >
-            {children}
-          </p>
-        ),
-        h1: ({ node, children }) => (
-          <h1
-            data-source-start={node?.position?.start.offset}
-            data-source-end={node?.position?.end.offset}
-          >
-            {children}
-          </h1>
-        ),
-        h2: ({ node, children }) => (
-          <h2
-            data-source-start={node?.position?.start.offset}
-            data-source-end={node?.position?.end.offset}
-          >
-            {children}
-          </h2>
-        ),
-        h3: ({ node, children }) => (
-          <h3
-            data-source-start={node?.position?.start.offset}
-            data-source-end={node?.position?.end.offset}
-          >
-            {children}
-          </h3>
-        ),
-        li: ({ node, children, ...props }) => (
-          <li
-            {...props}
-            data-source-start={node?.position?.start.offset}
-            data-source-end={node?.position?.end.offset}
-          >
-            {children}
-          </li>
-        ),
-        details: ({ node, children, open }) => (
-          <details
-            open={open}
-            data-source-start={node?.position?.start.offset}
-            data-source-end={node?.position?.end.offset}
-          >
-            {children}
-          </details>
-        ),
-      } satisfies Components)),
-    a: ({ href, children, title, id }) =>
-      href ? (
-        <a
-          href={href}
-          title={title}
-          id={id}
-          target={href.startsWith('#') ? undefined : '_blank'}
-          rel={href.startsWith('#') ? undefined : 'noopener noreferrer'}
-        >
-          {children}
-        </a>
-      ) : (
-        <span id={id}>{children}</span>
-      ),
-    img: ({ src, alt, title }) =>
-      src && typeof src === 'string' && githubImage(src) ? (
-        <img src={src} alt={alt ?? ''} title={title} loading="lazy" />
-      ) : src ? (
-        <a className="description-image-link" href={src} target="_blank" rel="noopener noreferrer">
-          <ImageIcon size={15} aria-hidden="true" />
-          {alt || 'View image attachment'}
-        </a>
-      ) : (
-        <span>{alt}</span>
-      ),
-    table: ({ node, children }) => (
-      <div
-        className="description-table-scroll"
-        data-source-start={focusQuote ? node?.position?.start.offset : undefined}
-        data-source-end={focusQuote ? node?.position?.end.offset : undefined}
-      >
-        <table>{children}</table>
-      </div>
-    ),
-    pre: ({ node, children }) => {
-      const code = node?.children.find(
-        (child) => child.type === 'element' && child.tagName === 'code',
-      )
-      const classes = code?.type === 'element' ? code.properties.className : undefined
-      const language = Array.isArray(classes)
-        ? classes
-            .map(String)
-            .find((name) => name.startsWith('language-'))
-            ?.slice(9)
-        : undefined
-      return (
-        <div
-          data-source-start={focusQuote ? node?.position?.start.offset : undefined}
-          data-source-end={focusQuote ? node?.position?.end.offset : undefined}
-        >
-          <DescriptionCode text={plainText(code)} language={language}>
-            {children}
-          </DescriptionCode>
-        </div>
-      )
-    },
-  }
   return (
     <article className="pull-description" ref={article}>
       <Markdown

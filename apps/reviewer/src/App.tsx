@@ -37,6 +37,9 @@ import { PullStatusIcons, type PullStatusSection } from './PullStatusIcons'
 import { inboxSections } from './inboxSections'
 import { ConnectionStatus } from './ConnectionStatus'
 import { LinusCompanion } from './LinusCompanion'
+import { LinusRecommendationBadge } from './LinusRecommendationBadge'
+import { useLinusRecommendations } from './useLinusRecommendations'
+import type { LinusReplayRequest } from '../shared/linus'
 import type { AppStatus, PullRequest, Repository, RepositoryInbox } from '../shared/types'
 import type { PullStatus } from '../shared/pullStatus'
 
@@ -85,6 +88,17 @@ export function App() {
   const [refresh, setRefresh] = useState(0)
   const [preferences, setPreferences] = useState<Preferences>()
   const [preferencesError, setPreferencesError] = useState('')
+  const [linusSelectionTarget, setLinusSelectionTarget] = useState<HTMLDivElement | null>(null)
+  const [linusSelection, setLinusSelection] = useState<{ repository: string; urls: string[] }>()
+  const [linusRefresh, setLinusRefresh] = useState(0)
+  const [linusReplay, setLinusReplay] = useState<LinusReplayRequest & { repository: string }>()
+  const savedLinus = useLinusRecommendations(repository, refresh + linusRefresh)
+  const recommendations = new Map(
+    savedLinus.recommendations.map((recommendation) => [recommendation.url, recommendation]),
+  )
+  const refreshLinus = useCallback(() => setLinusRefresh((value) => value + 1), [])
+  const selectingForLinus =
+    route.kind === 'inbox' && filter === 'mine' && linusSelection?.repository === repository
   useEffect(() => {
     const controller = new AbortController()
     void api<Preferences>('/preferences', { signal: controller.signal })
@@ -312,6 +326,11 @@ export function App() {
     }
   }
   const visible = inbox ? inboxPulls(inbox, filter) : []
+  const myPulls = inbox ? inboxPulls(inbox, 'mine') : []
+  const selectedLinusUrls =
+    linusSelection?.repository === repository
+      ? linusSelection.urls.filter((url) => myPulls.some((pr) => pr.url === url))
+      : []
   const sections =
     filter === 'mine' ? inboxSections(visible) : [{ id: 'all', label: '', pulls: visible }]
   return (
@@ -476,6 +495,12 @@ export function App() {
                     </button>
                   ))}
                 </div>
+                <div ref={setLinusSelectionTarget} />
+                {savedLinus.error && (
+                  <p role="status" className="inbox-warning">
+                    Could not load Linus recommendations: {savedLinus.error}
+                  </p>
+                )}
                 {inbox?.warnings?.map((warning) => (
                   <p key={warning} role="status" className="inbox-warning">
                     {warning}
@@ -508,7 +533,30 @@ export function App() {
                           </h2>
                         )}
                         {section.pulls.map((pr) => (
-                          <div className="pr-row" key={pr.number}>
+                          <div
+                            className={`pr-row${selectingForLinus && selectedLinusUrls.includes(pr.url) ? ' pr-row-selected' : ''}`}
+                            key={pr.number}
+                          >
+                            {selectingForLinus && (
+                              <input
+                                className="pr-selection-checkbox"
+                                type="checkbox"
+                                aria-label={`Select PR #${pr.number} for Linus`}
+                                checked={selectedLinusUrls.includes(pr.url)}
+                                disabled={
+                                  !selectedLinusUrls.includes(pr.url) &&
+                                  selectedLinusUrls.length >= 20
+                                }
+                                onChange={(event) =>
+                                  setLinusSelection({
+                                    repository,
+                                    urls: event.target.checked
+                                      ? [...selectedLinusUrls, pr.url]
+                                      : selectedLinusUrls.filter((url) => url !== pr.url),
+                                  })
+                                }
+                              />
+                            )}
                             <Link className="pr-row-link" to={reviewPath({ url: pr.url, filter })}>
                               {pr.isDraft ? (
                                 <GitPullRequestDraft
@@ -538,6 +586,21 @@ export function App() {
                                 <Badge variant="info">Your review requested</Badge>
                               )}
                             </Link>
+                            {recommendations.has(pr.url) && (
+                              <LinusRecommendationBadge
+                                recommendation={recommendations.get(pr.url)!}
+                                headSha={pr.headSha}
+                                onOpen={() => {
+                                  const recommendation = recommendations.get(pr.url)!
+                                  setLinusSelection(undefined)
+                                  setLinusReplay({
+                                    repository,
+                                    sessionId: recommendation.sessionId,
+                                    url: pr.url,
+                                  })
+                                }}
+                              />
+                            )}
                             {pr.stack && (
                               <StackBadge
                                 summary={pr.stack}
@@ -594,10 +657,24 @@ export function App() {
           <LinusCompanion
             key={repository}
             repository={repository}
-            pulls={inbox ? inboxPulls(inbox, 'mine') : []}
+            pulls={myPulls}
             available={route.kind === 'inbox' && filter === 'mine'}
             preferences={preferences}
             currentPull={pull}
+            replayRequest={linusReplay?.repository === repository ? linusReplay : undefined}
+            onSessionUpdate={refreshLinus}
+            selection={{
+              active: selectingForLinus,
+              urls: selectedLinusUrls,
+              target: linusSelectionTarget,
+              onChoose: () => {
+                setLinusReplay(undefined)
+                setLinusSelection({ repository, urls: [] })
+                void navigate(inboxPath(repository, 'mine'))
+              },
+              onChange: (urls) => setLinusSelection({ repository, urls }),
+              onCancel: () => setLinusSelection(undefined),
+            }}
           />
         )}
         <StackDialog

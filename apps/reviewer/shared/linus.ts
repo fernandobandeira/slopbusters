@@ -67,6 +67,20 @@ export interface LinusSession {
   createdAt: string
 }
 
+export interface LinusRecommendation {
+  sessionId: string
+  createdAt: string
+  url: string
+  number: number
+  headSha: string
+  verdict: LinusAdvice['verdict']
+}
+
+export interface LinusReplayRequest {
+  sessionId: string
+  url: string
+}
+
 export function validateAdvice(pull: PullRequest, input: unknown): LinusAdvice {
   const advice = adviceSchema.parse(input)
   const hunks = new Set(pull.files.flatMap((file) => file.hunks.map((hunk) => hunk.id)))
