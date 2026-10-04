@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Markdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
@@ -89,10 +89,96 @@ function DescriptionCode({
   )
 }
 
-export function PullDescription({ pull }: { pull: PullRequest }) {
+export function PullDescription({ pull, focusQuote }: { pull: PullRequest; focusQuote?: string }) {
+  const article = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const root = article.current
+    if (!root || !focusQuote) return
+    const target = [...root.querySelectorAll<HTMLElement>('[data-source-start]')]
+      .filter((element) => {
+        const start = Number(element.dataset.sourceStart)
+        const end = Number(element.dataset.sourceEnd)
+        const index = pull.description.indexOf(focusQuote)
+        return index >= start && index < end
+      })
+      .sort(
+        (a, b) =>
+          Number(a.dataset.sourceEnd) -
+          Number(a.dataset.sourceStart) -
+          (Number(b.dataset.sourceEnd) - Number(b.dataset.sourceStart)),
+      )[0]
+    if (!target) return
+    for (
+      let ancestor: HTMLElement | null = target;
+      ancestor && ancestor !== root;
+      ancestor = ancestor.parentElement
+    )
+      if (ancestor instanceof HTMLDetailsElement) ancestor.open = true
+    target.classList.add('linus-highlight')
+    const frame = requestAnimationFrame(() =>
+      target.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    )
+    return () => {
+      cancelAnimationFrame(frame)
+      target.classList.remove('linus-highlight')
+    }
+  }, [focusQuote, pull.description])
   if (!pull.description.trim())
     return <p className="pull-description-empty">No description provided.</p>
   const components: Components = {
+    ...(focusQuote &&
+      ({
+        p: ({ node, children }) => (
+          <p
+            data-source-start={node?.position?.start.offset}
+            data-source-end={node?.position?.end.offset}
+          >
+            {children}
+          </p>
+        ),
+        h1: ({ node, children }) => (
+          <h1
+            data-source-start={node?.position?.start.offset}
+            data-source-end={node?.position?.end.offset}
+          >
+            {children}
+          </h1>
+        ),
+        h2: ({ node, children }) => (
+          <h2
+            data-source-start={node?.position?.start.offset}
+            data-source-end={node?.position?.end.offset}
+          >
+            {children}
+          </h2>
+        ),
+        h3: ({ node, children }) => (
+          <h3
+            data-source-start={node?.position?.start.offset}
+            data-source-end={node?.position?.end.offset}
+          >
+            {children}
+          </h3>
+        ),
+        li: ({ node, children, ...props }) => (
+          <li
+            {...props}
+            data-source-start={node?.position?.start.offset}
+            data-source-end={node?.position?.end.offset}
+          >
+            {children}
+          </li>
+        ),
+        details: ({ node, children, open }) => (
+          <details
+            open={open}
+            data-source-start={node?.position?.start.offset}
+            data-source-end={node?.position?.end.offset}
+          >
+            {children}
+          </details>
+        ),
+      } satisfies Components)),
     a: ({ href, children, title, id }) =>
       href ? (
         <a
@@ -118,8 +204,12 @@ export function PullDescription({ pull }: { pull: PullRequest }) {
       ) : (
         <span>{alt}</span>
       ),
-    table: ({ children }) => (
-      <div className="description-table-scroll">
+    table: ({ node, children }) => (
+      <div
+        className="description-table-scroll"
+        data-source-start={focusQuote ? node?.position?.start.offset : undefined}
+        data-source-end={focusQuote ? node?.position?.end.offset : undefined}
+      >
         <table>{children}</table>
       </div>
     ),
@@ -135,14 +225,19 @@ export function PullDescription({ pull }: { pull: PullRequest }) {
             ?.slice(9)
         : undefined
       return (
-        <DescriptionCode text={plainText(code)} language={language}>
-          {children}
-        </DescriptionCode>
+        <div
+          data-source-start={focusQuote ? node?.position?.start.offset : undefined}
+          data-source-end={focusQuote ? node?.position?.end.offset : undefined}
+        >
+          <DescriptionCode text={plainText(code)} language={language}>
+            {children}
+          </DescriptionCode>
+        </div>
       )
     },
   }
   return (
-    <article className="pull-description">
+    <article className="pull-description" ref={article}>
       <Markdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, descriptionSchema]]}

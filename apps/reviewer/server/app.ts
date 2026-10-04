@@ -18,11 +18,14 @@ import { LocalSourceRepository } from './sourceRepository'
 import { configureSourceAssetsDirectory } from './treeSymbols'
 import { LanguageServers } from './languageServers'
 import { LanguageServerNavigation } from './lspNavigation'
+import { LinusJobs } from './linusJobs'
+import { parsePullUrl } from '../shared/pullUrl'
 
 export interface ReviewerServerOptions {
   dataDirectory: string
   staticDirectory: string
   sourceAssetsDirectory?: string
+  linusSkillDirectory?: string
   port?: number
   allowedOrigins?: string[]
 }
@@ -32,6 +35,7 @@ export async function startReviewerServer(
 ): Promise<{ url: string; close: () => Promise<void> }> {
   configureSourceAssetsDirectory(options.sourceAssetsDirectory)
   const store = new ReviewerStore({ dataDirectory: options.dataDirectory })
+  const linusJobs = new LinusJobs(store, options.staticDirectory, options.linusSkillDirectory)
   const getPull = async (id: string) => store.getPull(id)
   const savePull = async (pull: Parameters<ReviewerStore['savePull']>[0]) => store.savePull(pull)
   const checkRevision = createRevisionChecker()
@@ -40,8 +44,12 @@ export async function startReviewerServer(
   const sourceProject = createSourceProjectLoader(sourceRepository)
   function warmSource(pull: Parameters<typeof sourceProject.tree>[0]) {
     // Warm immutable revisions without delaying the diff or grouping response.
-    for (const sha of new Set([pull.headSha, pull.mergeBaseSha].filter((sha): sha is string => Boolean(sha))))
-      void Promise.resolve().then(() => sourceRepository.tree(pull.owner, pull.repo, sha)).catch(() => {})
+    for (const sha of new Set(
+      [pull.headSha, pull.mergeBaseSha].filter((sha): sha is string => Boolean(sha)),
+    ))
+      void Promise.resolve()
+        .then(() => sourceRepository.tree(pull.owner, pull.repo, sha))
+        .catch(() => {})
   }
   const languageServers = new LanguageServers(options.dataDirectory)
   let languageNavigation = new LanguageServerNavigation(sourceProject, languageServers)
@@ -97,7 +105,45 @@ export async function startReviewerServer(
   const jobs = new Map<string, Job>()
 
   app.get('/api/preferences', (_request, response) => response.json(store.getPreferences()))
-  app.get('/api/language-servers', async (_request, response) => response.json(await languageServers.statuses()))
+  app.get('/api/linus/latest', (request, response) => {
+    const repository = z
+      .string()
+      .regex(/^[\w.-]+\/[\w.-]+$/)
+      .parse(request.query.repository)
+    response.json({ session: linusJobs.latest(repository) ?? null })
+  })
+  app.post('/api/linus', (request, response) => {
+    const { repository, urls } = z
+      .object({
+        repository: z
+          .string()
+          .max(300)
+          .regex(/^[\w.-]+\/[\w.-]+$/),
+        urls: z.array(z.string().max(2000)).min(1).max(20),
+      })
+      .strict()
+      .parse(request.body)
+    for (const url of urls) {
+      const pull = parsePullUrl(url)
+      if (`${pull.owner}/${pull.repo}` !== repository)
+        throw new Error('Select PRs from the current repository.')
+    }
+    if (new Set(urls).size !== urls.length) throw new Error('Select each PR only once.')
+    response.status(202).json(linusJobs.start(repository, urls))
+  })
+  app.get('/api/linus/:id', (request, response) => response.json(linusJobs.get(request.params.id)))
+  app.post('/api/linus/:id/continue', (request, response) =>
+    response.status(202).json(linusJobs.continue(request.params.id)),
+  )
+  app.post('/api/linus/:id/retry', (request, response) =>
+    response.status(202).json(linusJobs.retry(request.params.id)),
+  )
+  app.delete('/api/linus/:id', (request, response) =>
+    response.json(linusJobs.cancel(request.params.id)),
+  )
+  app.get('/api/language-servers', async (_request, response) =>
+    response.json(await languageServers.statuses()),
+  )
   app.put('/api/language-servers', async (request, response) => {
     await languageServers.save(request.body)
     await languageNavigation.close()
@@ -347,7 +393,11 @@ export async function startReviewerServer(
       closing ??= new Promise<void>((resolve, reject) => {
         for (const job of jobs.values()) job.controller.abort()
         server.close((error) => {
-          void Promise.all([languageNavigation.close(), sourceRepository.close()]).then(() => {
+          void Promise.all([
+            languageNavigation.close(),
+            linusJobs.close(),
+            sourceRepository.close(),
+          ]).then(() => {
             navigateSource.close()
             store.close()
             if (error) reject(error)

@@ -3,19 +3,23 @@ import { Link } from 'react-router'
 import { ThemePicker } from './ThemePicker'
 import { LanguageServerSettings } from './LanguageServerSettings'
 import { OrganizationSettings } from './OrganizationSettings'
-import type { AppStatus } from '../shared/types'
-import type { OrganizationPreferences } from '../shared/preferences'
+import { Provider, type AppStatus } from '../shared/types'
+import { organizationDefaults, type OrganizationPreferences } from '../shared/preferences'
 
 export function SettingsPage({
   inboxUrl,
   organization,
+  companion,
   status,
   onSave,
+  onSaveCompanion,
 }: {
   inboxUrl: string
   organization?: OrganizationPreferences
+  companion?: OrganizationPreferences
   status?: AppStatus
   onSave: (organization: OrganizationPreferences) => Promise<void>
+  onSaveCompanion: (companion: OrganizationPreferences) => Promise<void>
 }) {
   return (
     <div className="settings-content">
@@ -24,11 +28,23 @@ export function SettingsPage({
       </Link>
       <h1>Settings</h1>
       <section className="settings-section" aria-labelledby="organization-settings-title">
-        <h2 id="organization-settings-title">PR organization</h2>
+        <h2 id="organization-settings-title">Primary model</h2>
         <p className="muted">
-          Choose the provider and model that group changes when you open a PR.
+          Group PR changes, review with Linus, and reconcile both reviewers’ recommendations.
         </p>
         <OrganizationSettings organization={organization} status={status} onSave={onSave} />
+      </section>
+      <section className="settings-section" aria-labelledby="companion-settings-title">
+        <h2 id="companion-settings-title">Companion model</h2>
+        <p className="muted">Review alongside the primary model and challenge its reasoning.</p>
+        <OrganizationSettings
+          organization={
+            companion ?? { provider: Provider.claude, model: organizationDefaults.claude.model }
+          }
+          status={status}
+          onSave={onSaveCompanion}
+          companion
+        />
       </section>
       <LanguageServerSettings />
       <section className="settings-section" aria-labelledby="appearance-title">

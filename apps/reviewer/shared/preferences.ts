@@ -17,6 +17,7 @@ export const preferencesSchema = z
   .object({
     theme: z.string().min(1).max(80).optional(),
     organization: organizationSchema.optional(),
+    companion: organizationSchema.optional(),
   })
   .strict()
 

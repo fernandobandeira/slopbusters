@@ -17,11 +17,13 @@ export function OrganizationSettings({
   status,
   onSave,
   firstRun = false,
+  companion = false,
 }: {
   organization?: OrganizationPreferences
   status?: AppStatus
   onSave: (organization: OrganizationPreferences) => Promise<void>
   firstRun?: boolean
+  companion?: boolean
 }) {
   const id = useId()
   const [provider, setProvider] = useState(organization?.provider ?? Provider.codex)
@@ -101,12 +103,13 @@ export function OrganizationSettings({
         {providerLabel(provider)}.
       </p>
       <p className="muted">
-        PR changes are grouped automatically using your signed-in {providerLabel(provider)} account.
-        You can change this in Settings anytime.
+        {companion
+          ? `The companion reviews independently. Your primary model reconciles both reviews and guides Linus’s conversation.`
+          : `Your signed-in ${providerLabel(provider)} account groups PR changes, reviews with Linus, and reconciles the companion’s findings.`}
       </p>
       {status && (!status[provider].available || status[provider].authenticated === false) && (
         <p role="status" className="inbox-warning">
-          Install and sign in to {providerLabel(provider)} in your terminal before opening a PR.
+          Install and sign in to {providerLabel(provider)} in your terminal before running a review.
         </p>
       )}
       {error && <p role="alert">Could not save your preferences: {error}</p>}

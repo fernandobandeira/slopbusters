@@ -1,4 +1,5 @@
-import { Parser, Language, type Node } from '@vscode/tree-sitter-wasm'
+import * as TreeSitter from '@vscode/tree-sitter-wasm'
+import type { Node } from '@vscode/tree-sitter-wasm'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import type { SourceSymbol } from '../shared/sourceSymbols'
@@ -6,6 +7,13 @@ import { getSourceSymbols } from './sourceSymbols'
 import type { NavigationTarget } from '../shared/navigation'
 import { sourceLanguage } from '../shared/languages'
 export { sourceLanguage } from '../shared/languages'
+
+// The package is CommonJS; native Node ESM exposes it through the default export.
+const { Parser, Language } = (
+  'default' in TreeSitter ? TreeSitter.default : TreeSitter
+) as typeof TreeSitter
+type Language = TreeSitter.Language
+type Parser = TreeSitter.Parser
 
 let sourceAssetsDirectory: string | undefined
 let initialized: Promise<void> | undefined

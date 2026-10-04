@@ -4,6 +4,7 @@ import { startReviewerServer } from './app'
 const server = await startReviewerServer({
   dataDirectory: resolve('.data'),
   staticDirectory: resolve('dist'),
+  linusSkillDirectory: resolve('../../skills/linus'),
   port: 4311,
   allowedOrigins: ['http://127.0.0.1:4310', 'http://localhost:4310'],
 })

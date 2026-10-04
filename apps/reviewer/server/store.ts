@@ -10,6 +10,7 @@ import {
 } from '../shared/progress'
 import type { PullRequest, ReviewDraft } from '../shared/types'
 import type { Preferences } from '../shared/preferences'
+import type { LinusSession } from '../shared/linus'
 
 export class ReviewNotFoundError extends Error {
   constructor() {
@@ -33,7 +34,7 @@ export class ReviewerStore {
       'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;',
     )
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
-    if (version !== 0 && version !== 1 && version !== 2) {
+    if (version !== 0 && version !== 1 && version !== 2 && version !== 3) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
     }
@@ -49,10 +50,15 @@ export class ReviewerStore {
       `)
       this.importLegacySnapshots(join(dataDirectory, 'pulls'))
     }
-    if (version !== 2) {
+    if (version === 0 || version === 1) {
       this.database.exec(`BEGIN IMMEDIATE;
         CREATE TABLE draft_writers (snapshot_id TEXT NOT NULL REFERENCES snapshots(id), writer_id TEXT NOT NULL, sequence INTEGER NOT NULL, PRIMARY KEY(snapshot_id, writer_id));
         PRAGMA user_version = 2; COMMIT;`)
+    }
+    if (version !== 3) {
+      this.database.exec(`BEGIN IMMEDIATE;
+        CREATE TABLE linus_sessions (id TEXT PRIMARY KEY, repository TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL);
+        PRAGMA user_version = 3; COMMIT;`)
     }
   }
   savePull(pull: PullRequest): void {
@@ -145,6 +151,26 @@ export class ReviewerStore {
   getPreferences(): Preferences {
     const row = this.database.prepare('SELECT value FROM preferences WHERE id = 1').get()
     return row ? (JSON.parse(String(row.value)) as Preferences) : {}
+  }
+  saveLinusSession(session: LinusSession): void {
+    this.database
+      .prepare(
+        `INSERT INTO linus_sessions (id, repository, created_at, session) VALUES (?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET session = excluded.session`,
+      )
+      .run(session.id, session.repository, session.createdAt, JSON.stringify(session))
+  }
+  getLinusSession(id: string): LinusSession | undefined {
+    const row = this.database.prepare('SELECT session FROM linus_sessions WHERE id = ?').get(id)
+    return row ? (JSON.parse(String(row.session)) as LinusSession) : undefined
+  }
+  latestLinusSession(repository: string): LinusSession | undefined {
+    const row = this.database
+      .prepare(
+        'SELECT session FROM linus_sessions WHERE repository = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
+      )
+      .get(repository)
+    return row ? (JSON.parse(String(row.session)) as LinusSession) : undefined
   }
   savePreferences(preferences: Preferences): Preferences {
     const value = { ...this.getPreferences(), ...preferences }

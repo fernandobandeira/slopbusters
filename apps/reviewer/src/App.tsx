@@ -36,6 +36,7 @@ import { PullStatusDialog } from './PullStatusDialog'
 import { PullStatusIcons, type PullStatusSection } from './PullStatusIcons'
 import { inboxSections } from './inboxSections'
 import { ConnectionStatus } from './ConnectionStatus'
+import { LinusCompanion } from './LinusCompanion'
 import type { AppStatus, PullRequest, Repository, RepositoryInbox } from '../shared/types'
 import type { PullStatus } from '../shared/pullStatus'
 
@@ -102,6 +103,14 @@ export function App() {
     const result = await api<Preferences>('/preferences', {
       method: 'PUT',
       body: JSON.stringify({ organization }),
+    })
+    setPreferences(result)
+    setPreferencesError('')
+  }
+  async function saveCompanion(companion: OrganizationPreferences) {
+    const result = await api<Preferences>('/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ companion }),
     })
     setPreferences(result)
     setPreferencesError('')
@@ -426,8 +435,10 @@ export function App() {
               key={preferences ? 'loaded' : 'loading'}
               inboxUrl={inboxPath(repository, filter)}
               organization={preferences?.organization}
+              companion={preferences?.companion}
               status={status}
               onSave={saveOrganization}
+              onSaveCompanion={saveCompanion}
             />
           ) : route.kind === 'not-found' ? (
             <div className="empty-state">
@@ -579,6 +590,16 @@ export function App() {
             </>
           )}
         </main>
+        {repository && (
+          <LinusCompanion
+            key={repository}
+            repository={repository}
+            pulls={inbox ? inboxPulls(inbox, 'mine') : []}
+            available={route.kind === 'inbox' && filter === 'mine'}
+            preferences={preferences}
+            currentPull={pull}
+          />
+        )}
         <StackDialog
           url={stackTarget?.url}
           currentNumber={stackTarget?.number ?? 0}

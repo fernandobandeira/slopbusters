@@ -1,9 +1,6 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { z } from 'zod'
-import { Priority, Provider, type ChangeGroup, type PullRequest } from '../shared/types'
-import { runCommand } from './process'
+import { Priority, type ChangeGroup, type PullRequest } from '../shared/types'
+import { runStructured } from './provider'
 import type { OrganizationPreferences } from '../shared/preferences'
 
 const groupSchema = z.object({
@@ -71,71 +68,5 @@ export async function organizePull(
     throw new Error(
       'This PR exceeds the initial grouping limit. You can still review every available diff without grouping.',
     )
-  const directory = await mkdtemp(join(tmpdir(), 'slopbusters-'))
-  try {
-    const schema = JSON.stringify(z.toJSONSchema(groupSchema, { target: 'draft-7' }))
-    let output: unknown
-    switch (provider) {
-      case Provider.codex: {
-        const schemaPath = join(directory, 'schema.json')
-        const resultPath = join(directory, 'result.json')
-        await writeFile(schemaPath, schema)
-        await runCommand({
-          command: 'codex',
-          args: [
-            'exec',
-            '--model',
-            model,
-            '--ephemeral',
-            '--ignore-user-config',
-            '--ignore-rules',
-            '--skip-git-repo-check',
-            '--sandbox',
-            'read-only',
-            '--output-schema',
-            schemaPath,
-            '--output-last-message',
-            resultPath,
-            '-',
-          ],
-          input: prompt,
-          cwd: directory,
-          signal,
-          timeoutMs: 300_000,
-        })
-        output = JSON.parse(await readFile(resultPath, 'utf8'))
-        break
-      }
-      case Provider.claude: {
-        const text = await runCommand({
-          command: 'claude',
-          args: [
-            '-p',
-            '--model',
-            model,
-            '--safe-mode',
-            '--tools',
-            '',
-            '--strict-mcp-config',
-            '--permission-mode',
-            'dontAsk',
-            '--output-format',
-            'json',
-            '--json-schema',
-            schema,
-          ],
-          input: prompt,
-          cwd: directory,
-          signal,
-          timeoutMs: 300_000,
-        })
-        const envelope = z.object({ structured_output: z.unknown() }).parse(JSON.parse(text))
-        output = envelope.structured_output
-        break
-      }
-    }
-    return validateGrouping(pr, output)
-  } finally {
-    await rm(directory, { recursive: true, force: true })
-  }
+  return validateGrouping(pr, await runStructured({ provider, model }, prompt, groupSchema, signal))
 }
