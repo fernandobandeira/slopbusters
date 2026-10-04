@@ -733,7 +733,11 @@ export function ReviewWorkspace({
               }
             />
           ) : (
-            <section className="code-panel" aria-label="Code changes">
+            <section
+              className="code-panel"
+              data-diff-style={split ? 'split' : 'unified'}
+              aria-label="Code changes"
+            >
               {selected ? (
                 <>
                   {transfers.length > 0 && (

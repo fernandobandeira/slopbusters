@@ -144,8 +144,9 @@ pre {
   background: var(--primary);
 }
 .app-frame {
-  --app-sidebar-width: 245px;
-  --review-sidebar-width: 227px;
+  --app-sidebar-width: 280px;
+  --review-sidebar-width: var(--app-sidebar-width);
+  --review-content-padding: clamp(20px, 4vw, 56px);
   display: flex;
   flex-direction: column;
   height: 100dvh;
@@ -757,7 +758,7 @@ pre {
   flex-wrap: wrap;
   gap: 6px 12px;
   flex-shrink: 0;
-  padding: 6px 12px;
+  padding: 10px var(--review-content-padding);
   border-bottom: 1px solid var(--border);
 }
 .review-pull-details {
@@ -845,7 +846,7 @@ pre {
   min-height: 0;
 }
 .review-progress-note {
-  padding: 6px 12px;
+  padding: 10px var(--review-content-padding);
   color: var(--muted-foreground);
   font-size: 11px;
   border-bottom: 1px solid var(--border);
@@ -952,7 +953,12 @@ pre {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding-right: 16px;
+  max-width: 1280px;
+  margin-inline: auto;
+  padding: 24px var(--review-content-padding) 32px;
+}
+.code-panel[data-diff-style='split'] {
+  max-width: 1680px;
 }
 .transfers {
   padding: 9px 14px;
@@ -1099,8 +1105,7 @@ pre {
 }
 @media (max-width: 1200px) {
   .app-frame {
-    --app-sidebar-width: 205px;
-    --review-sidebar-width: 190px;
+    --app-sidebar-width: 240px;
   }
   .review-toolbar {
     gap: 6px;
@@ -1117,8 +1122,8 @@ pre {
     flex-basis: 100%;
   }
   .app-frame {
-    --app-sidebar-width: 170px;
-    --review-sidebar-width: 160px;
+    --app-sidebar-width: 200px;
+    --review-content-padding: 16px;
   }
   .app-sidebar {
     padding-inline: 8px;
@@ -1160,6 +1165,7 @@ pre {
   .app-frame {
     --app-sidebar-width: 56px;
     --review-sidebar-width: 135px;
+    --review-content-padding: 12px;
   }
   .sidebar-label,
   .nav-row span,

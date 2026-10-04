@@ -382,7 +382,7 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
             // one clipped file row per expanded file above it.
             paddingBottom: 8,
           },
-          layout: { paddingTop: 0, paddingBottom: 24, gap: 0 },
+          layout: { paddingTop: 0, paddingBottom: 24, gap: 24 },
         }}
       />
     </DiffWorkerPoolProvider>
