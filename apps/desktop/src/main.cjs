@@ -369,7 +369,9 @@ if (!app.requestSingleInstanceLock()) {
         stopping = false
         return
       }
+      smokeStage('save-confirmed')
       try { await server.close() } catch (error) { console.error('Reviewer shutdown failed:', error.message) }
+      smokeStage('server-closed')
       quitting = true
       app.quit()
     })().catch((error) => {

@@ -66,8 +66,6 @@ async function verifyContextRenderer(window) {
       token.dispatchEvent(new MouseEvent('click',{bubbles:true,composed:true}));
       await wait(() => button('Go to definition',panel) && !button('Go to definition',panel).disabled, 'Source token did not select');
       button('Go to definition',panel).click();
-      await wait(() => panel.querySelector('.source-context-targets button'), 'Definition results did not render');
-      panel.querySelector('.source-context-targets button').click();
       await wait(() => codeText(panel).includes('function related'), 'Definition target did not open');
       const relatedToken=await wait(() => roots(panel).flatMap(root=>[...root.querySelectorAll('[data-char]')]).find(node=>node.textContent.trim()==='related'), 'Definition identifier tokens unavailable');
       relatedToken.dispatchEvent(new MouseEvent('click',{bubbles:true,composed:true}));
