@@ -14,6 +14,7 @@ import { getAppStatus } from './toolStatus'
 import { fetchDiscussions, replyToThread } from './discussions'
 import { createSourceNavigator } from './navigation'
 import { createFileContentLoader, createSourceProjectLoader } from './fileContent'
+import { LocalSourceRepository } from './sourceRepository'
 import { configureSourceAssetsDirectory } from './treeSymbols'
 import { LanguageServers } from './languageServers'
 import { LanguageServerNavigation } from './lspNavigation'
@@ -35,7 +36,13 @@ export async function startReviewerServer(
   const savePull = async (pull: Parameters<ReviewerStore['savePull']>[0]) => store.savePull(pull)
   const checkRevision = createRevisionChecker()
   const loadFileContent = createFileContentLoader()
-  const sourceProject = createSourceProjectLoader()
+  const sourceRepository = new LocalSourceRepository(options.dataDirectory)
+  const sourceProject = createSourceProjectLoader(sourceRepository)
+  function warmSource(pull: Parameters<typeof sourceProject.tree>[0]) {
+    // Warm immutable revisions without delaying the diff or grouping response.
+    for (const sha of new Set([pull.headSha, pull.mergeBaseSha].filter((sha): sha is string => Boolean(sha))))
+      void Promise.resolve().then(() => sourceRepository.tree(pull.owner, pull.repo, sha)).catch(() => {})
+  }
   const languageServers = new LanguageServers(options.dataDirectory)
   let languageNavigation = new LanguageServerNavigation(sourceProject, languageServers)
   let navigateSource = createSourceNavigator(sourceProject, languageNavigation)
@@ -94,6 +101,7 @@ export async function startReviewerServer(
   app.put('/api/language-servers', async (request, response) => {
     await languageServers.save(request.body)
     await languageNavigation.close()
+    navigateSource.close()
     languageNavigation = new LanguageServerNavigation(sourceProject, languageServers)
     navigateSource = createSourceNavigator(sourceProject, languageNavigation)
     response.json(await languageServers.statuses())
@@ -216,10 +224,13 @@ export async function startReviewerServer(
       /* A new revision starts with file ordering. */
     }
     await savePull(pr)
+    warmSource(pr)
     response.json(pr)
   })
   app.get('/api/pulls/:id', async (request, response) => {
-    response.json(await getPull(request.params.id))
+    const pull = await getPull(request.params.id)
+    warmSource(pull)
+    response.json(pull)
   })
   app.get('/api/pulls/:id/threads', async (request, response) => {
     response.json(await fetchDiscussions(await getPull(request.params.id)))
@@ -336,7 +347,8 @@ export async function startReviewerServer(
       closing ??= new Promise<void>((resolve, reject) => {
         for (const job of jobs.values()) job.controller.abort()
         server.close((error) => {
-          void languageNavigation.close().then(() => {
+          void Promise.all([languageNavigation.close(), sourceRepository.close()]).then(() => {
+            navigateSource.close()
             store.close()
             if (error) reject(error)
             else resolve()

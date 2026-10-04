@@ -4,7 +4,7 @@ import type { NavigationRequest, NavigationResult, NavigationTarget } from '../s
 import type { PullRequest } from '../shared/types'
 import type { createSourceProjectLoader } from './fileContent'
 import { getSyntaxIdentifierLocations, sourceLanguage } from './treeSymbols'
-import { navigateTypeScript } from './semanticNavigation'
+import { createTypeScriptNavigator } from './semanticNavigation'
 import type { LanguageServerNavigation } from './lspNavigation'
 
 type SourceProject = ReturnType<typeof createSourceProjectLoader>
@@ -56,6 +56,7 @@ function plainMatches(path: string, content: string, name: string): NavigationTa
 export function createSourceNavigator(project: SourceProject, languageServers?: LanguageServerNavigation) {
   const active = new Map<string, Promise<NavigationResult>>()
   const cache = new Map<string, NavigationResult>()
+  const typeScriptProjects = new Map<string, ReturnType<typeof createTypeScriptNavigator>>()
 
   async function navigate(
     pull: PullRequest,
@@ -204,13 +205,21 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
         allowJs: true,
         ...compilerOptions,
       }
+      const directories = new Set<string>([virtualRoot.slice(0, -1)])
+      for (const path of tree.paths) {
+        let directory = posix.dirname(`${virtualRoot}${path}`)
+        while (!directories.has(directory)) {
+          directories.add(directory)
+          directory = posix.dirname(directory)
+        }
+      }
       const resolver: ts.ModuleResolutionHost = {
         fileExists: (path) => available.has(path.slice(virtualRoot.length)),
         readFile: (path) => files.get(path.slice(virtualRoot.length)),
-        directoryExists: (directory) =>
-          tree.paths.some((path) => `${virtualRoot}${path}`.startsWith(`${directory}/`)),
+        directoryExists: (directory) => directories.has(directory),
         realpath: (path) => path,
       }
+      const resolutions = ts.createModuleResolutionCache(virtualRoot, (path) => path, options)
       const processed = new Set<string>()
       for (let pass = 0; pass < 12; pass++) {
         const imports = new Set<string>()
@@ -223,6 +232,7 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
               `${virtualRoot}${path}`,
               options,
               resolver,
+              resolutions,
             ).resolvedModule
             if (resolved?.resolvedFileName.startsWith(virtualRoot))
               imports.add(resolved.resolvedFileName.slice(virtualRoot.length))
@@ -237,10 +247,24 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
         warnings.add(
           `Navigation analyzed up to ${maximumFiles} files and 8 MiB of source; more results may exist.`,
         )
+      // Source is immutable at this commit. Reuse parsed/type-checked programs across
+      // symbols and navigation kinds when the same bounded file set is available.
+      const projectKey = JSON.stringify([
+        pull.owner, pull.repo, tree.sha, compilerOptions, [...files.keys()].sort(),
+      ])
+      let navigator = typeScriptProjects.get(projectKey)
+      if (!navigator) navigator = createTypeScriptNavigator(files, compilerOptions)
+      typeScriptProjects.delete(projectKey)
+      typeScriptProjects.set(projectKey, navigator)
+      while (typeScriptProjects.size > 3) {
+        const oldest = typeScriptProjects.keys().next().value!
+        typeScriptProjects.get(oldest)!.close()
+        typeScriptProjects.delete(oldest)
+      }
       return {
         language,
         mode: 'semantic',
-        targets: navigateTypeScript(files, request, compilerOptions).slice(0, 500),
+        targets: navigator.navigate(request).slice(0, 500),
         warnings: [...warnings],
       }
     }
@@ -289,7 +313,7 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
     return { language, mode: 'text', targets: targets.slice(0, 500), warnings: [...warnings] }
   }
 
-  return function sourceNavigation(
+  function sourceNavigation(
     pull: PullRequest,
     request: NavigationRequest,
   ): Promise<NavigationResult> {
@@ -316,4 +340,11 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
     active.set(key, result)
     return result
   }
+  return Object.assign(sourceNavigation, {
+    close() {
+      for (const navigator of typeScriptProjects.values()) navigator.close()
+      typeScriptProjects.clear()
+      cache.clear()
+    },
+  })
 }

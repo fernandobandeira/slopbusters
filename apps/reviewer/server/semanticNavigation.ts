@@ -16,11 +16,10 @@ function virtualName(path: string): string | undefined {
 }
 
 /** Resolve symbols using only fetched revision text, with no host filesystem or project execution. */
-export function navigateTypeScript(
+export function createTypeScriptNavigator(
   files: Map<string, string>,
-  request: SemanticRequest,
   options: ts.CompilerOptions = {},
-): NavigationTarget[] {
+) {
   const snapshots = new Map<string, ts.IScriptSnapshot>()
   const text = new Map<string, string>()
   const directories = new Set<string>([root])
@@ -36,17 +35,6 @@ export function navigateTypeScript(
       directory = posix.dirname(directory)
     }
   }
-  const fileName = virtualName(request.path)
-  if (
-    !fileName ||
-    !text.has(fileName) ||
-    !Number.isSafeInteger(request.line) ||
-    !Number.isSafeInteger(request.column) ||
-    request.line < 1 ||
-    request.column < 1
-  )
-    return []
-
   const settings: ts.CompilerOptions = {
     target: ts.ScriptTarget.ESNext,
     module: ts.ModuleKind.ESNext,
@@ -109,7 +97,17 @@ export function navigateTypeScript(
       ),
   }
   const service = ts.createLanguageService(host)
-  try {
+  function navigate(request: SemanticRequest): NavigationTarget[] {
+    const fileName = virtualName(request.path)
+    if (
+      !fileName ||
+      !text.has(fileName) ||
+      !Number.isSafeInteger(request.line) ||
+      !Number.isSafeInteger(request.column) ||
+      request.line < 1 ||
+      request.column < 1
+    )
+      return []
     const program = service.getProgram()
     const source = program?.getSourceFile(fileName)
     if (!source) return []
@@ -157,7 +155,16 @@ export function navigateTypeScript(
     return [...targets.values()].sort(
       (a, b) => a.path.localeCompare(b.path) || a.line - b.line || a.column - b.column,
     )
-  } finally {
-    service.dispose()
   }
+  return { navigate, close: () => service.dispose() }
+}
+
+export function navigateTypeScript(
+  files: Map<string, string>,
+  request: SemanticRequest,
+  options: ts.CompilerOptions = {},
+): NavigationTarget[] {
+  const navigator = createTypeScriptNavigator(files, options)
+  try { return navigator.navigate(request) }
+  finally { navigator.close() }
 }

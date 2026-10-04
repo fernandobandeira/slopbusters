@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createSourceNavigator } from '../server/navigation'
+import * as semanticNavigation from '../server/semanticNavigation'
 import { getRevisionSymbols } from '../server/treeSymbols'
-import { DiffSide } from '../shared/types'
+import { DiffSide, type PullRequest } from '../shared/types'
 import { fixturePull } from './fixtures/pull'
 import type { NavigationRequest } from '../shared/navigation'
 
 function project(contents: Record<string, string>, warnings: string[] = []) {
-  const tree = vi.fn(async () => ({ sha: 'saved-head', paths: Object.keys(contents), warnings }))
+  const tree = vi.fn(async (pull: PullRequest, side: DiffSide) => ({
+    sha: side === DiffSide.left ? pull.mergeBaseSha ?? pull.baseSha : pull.headSha,
+    paths: Object.keys(contents), warnings,
+  }))
   const file = vi.fn(async (_pull, _side, path: string) => ({
     path,
     sha: 'saved-head',
@@ -24,6 +28,30 @@ const request: NavigationRequest = {
 }
 
 describe('revision source navigation', () => {
+  it('reuses TypeScript analysis across symbols and navigation kinds and disposes it on close', async () => {
+    const create = vi.spyOn(semanticNavigation, 'createTypeScriptNavigator')
+    const loader = project({
+      'src/use.ts': "import { run } from './service'\nrun()",
+      'src/service.ts': 'export function run() { return 1 }',
+    })
+    const navigate = createSourceNavigator(loader)
+    try {
+      const pull = fixturePull()
+      await navigate(pull, { ...request, kind: 'references' })
+      expect(create).toHaveBeenCalledTimes(1)
+      const close = vi.spyOn(create.mock.results[0]!.value, 'close')
+      await navigate(pull, { ...request, kind: 'implementation' })
+      await navigate(pull, { ...request, kind: 'references', column: 2 })
+      expect(create).toHaveBeenCalledTimes(1)
+      await navigate({ ...pull, headSha: 'new-revision' }, { ...request, kind: 'references' })
+      expect(create).toHaveBeenCalledTimes(2)
+      navigate.close()
+      expect(close).toHaveBeenCalledOnce()
+    } finally {
+      navigate.close()
+      create.mockRestore()
+    }
+  })
   it('loads implementers outside the selected interface import graph at the saved revision', async () => {
     const loader = project({
       'src/use.ts': 'export interface Runner { run(): number }',

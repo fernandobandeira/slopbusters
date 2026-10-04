@@ -10,6 +10,12 @@ import { DiffSide, LineKind } from '../shared/types'
 import { fixturePull } from './fixtures/pull'
 
 vi.mock('../server/process', () => ({ runCommand: vi.fn() }))
+vi.mock('../server/sourceRepository', () => ({
+  LocalSourceRepository: class {
+    async tree() { throw new Error('Local Git unavailable') }
+    async close() {}
+  },
+}))
 const command = vi.mocked(runCommand)
 const mergeSha = 'a'.repeat(40)
 
@@ -219,7 +225,7 @@ describe('file context API', () => {
       expect(await tree.json()).toMatchObject({
         sha: pull.headSha,
         paths: ['src/helper.ts'],
-        warnings: [],
+        warnings: [expect.stringContaining('Local source cache is unavailable')],
       })
       const absent = await fetch(
         `${server.url}/api/pulls/${pull.id}/source-file?side=RIGHT&path=src%2Fmissing.ts`,

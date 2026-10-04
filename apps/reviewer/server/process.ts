@@ -5,6 +5,7 @@ export function runCommand(params: {
   args: string[]
   input?: string
   cwd?: string
+  env?: NodeJS.ProcessEnv
   timeoutMs?: number
   signal?: AbortSignal
   includeStderr?: boolean
@@ -13,7 +14,7 @@ export function runCommand(params: {
   return new Promise((resolve, reject) => {
     const child = spawn(params.command, params.args, {
       cwd: params.cwd,
-      env: process.env,
+      env: params.env ? { ...process.env, ...params.env } : process.env,
       shell: false,
       stdio: ['pipe', 'pipe', 'pipe'],
     })

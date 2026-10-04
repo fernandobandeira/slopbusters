@@ -6,7 +6,7 @@ Built in TypeScript with React, Vite, and a small Express server. The diff viewe
 
 ## Run
 
-Requires Node 24 or a newer supported version, pnpm 9.15.5, and [GitHub CLI](https://cli.github.com/). The repository root pins Node 24.21.0 and pnpm 9.15.5 in `.tool-versions`; `package.json` also declares the pnpm version. Run these commands from the repository root.
+Requires Node 24 or a newer supported version, pnpm 9.15.5, Git, and [GitHub CLI](https://cli.github.com/). The repository root pins Node 24.21.0 and pnpm 9.15.5 in `.tool-versions`; `package.json` also declares the pnpm version. Run these commands from the repository root.
 
 ```sh
 asdf install
@@ -49,7 +49,9 @@ Use **+20 context** on a file to reveal surrounding unchanged code, or **Browse 
 
 The desktop bundle includes its syntax grammars and parsers. TypeScript/JavaScript use the bundled TypeScript language service for semantic definitions and references. Other languages use installed stdio language servers: `gopls` for Go, `rust-analyzer` for Rust, `pyright-langserver --stdio` for Python, and defaults for C/C++, Java, C#, Ruby, PHP, Bash, Lua, Kotlin, Swift, Dart, HTML, CSS, JSON, and YAML. **Settings → Source navigation** shows availability and lets you change commands, disable servers, or add any other language and its file extensions. PowerShell requires a local Editor Services stdio launcher configured there. Language servers and their toolchains must already be installed; the app does not install them.
 
-Language servers read temporary source snapshots fetched through `gh api` at the exact PR head or merge-base commit. No Git clone is created. Repeated navigation reuses the same revision/language session; idle sessions expire after two minutes, and their processes and temporary files are removed when the app closes. Cmd/Ctrl-click or **Go to definition** opens a single semantic result directly; multiple results appear in the location list. Tree-sitter still provides outlines and labeled syntax/name matches when no semantic server is available. Other text files remain browsable and searchable.
+Opening a review warms a local bare Git cache of its exact head and saved merge-base commits. Shallow fetches use your GitHub CLI credentials and share repository objects across PRs; source navigation reads those objects locally without checking out repository files. Downloaded revisions persist under `source-repositories` in the app's data directory and remain available after restarting. GitHub API loading remains a labeled fallback if Git or a revision fetch is unavailable. The source memory cache retains up to 1,000 files and 32 MiB, avoiding repeated loads during larger searches. TypeScript reuses up to three analyzed projects across navigation kinds and symbols, with indexed directories and cached import resolution.
+
+Installed language servers read temporary source snapshots materialized from this cache. Repeated navigation reuses the same revision/language session; idle sessions expire after two minutes, and their processes and temporary files are removed when the app closes. Cmd/Ctrl-click or **Go to definition** opens a single semantic result directly; multiple results appear in the location list. Tree-sitter still provides outlines and labeled syntax/name matches when no semantic server is available. Other text files remain browsable and searchable.
 
 Repository inboxes have paths such as `/repos/owner/repo/pulls?inbox=others`; PRs use `/repos/owner/repo/pulls/123`. The URL also remembers the revision, selected group, and diff mode. You can bookmark or reload a view, open PR links in another tab, and use browser Back/Forward. “Back to inbox” returns to the same repository and inbox filter.
 

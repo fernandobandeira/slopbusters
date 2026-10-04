@@ -3,6 +3,7 @@ import { DiffSide, type ChangedFile, type PullRequest } from '../shared/types'
 import type { PullFileContent, RevisionFileContent, SourceTree } from '../shared/fileContent'
 import { runCommand } from './process'
 import { getRevisionSymbols } from './treeSymbols'
+import type { SourceRepository } from './sourceRepository'
 
 const commitSha = z.string().regex(/^[a-f\d]{40}(?:[a-f\d]{24})?$/i)
 const repositoryName = z
@@ -202,11 +203,12 @@ export function createFileContentLoader() {
 }
 
 /** Source navigation is limited to regular files present in the saved revision's Git tree. */
-export function createSourceProjectLoader() {
+export function createSourceProjectLoader(repository?: SourceRepository) {
   const trees = new Map<string, SourceTree>()
   const pendingTrees = new Map<string, Promise<SourceTree>>()
   const files = new Map<string, RevisionFileContent>()
   const pendingFiles = new Map<string, Promise<RevisionFileContent>>()
+  const localTrees = new WeakSet<SourceTree>()
   let fileBytes = 0
 
   function tree(pull: PullRequest, side: DiffSide): Promise<SourceTree> {
@@ -247,21 +249,34 @@ export function createSourceProjectLoader() {
                   })
                 ).trim(),
               )
-      const output = await runCommand({
-        command: 'gh',
-        args: ['api', `repos/${pull.owner}/${pull.repo}/git/trees/${sha}?recursive=1`],
-        maxOutputBytes: 16 * 1024 * 1024,
-      })
+      const warnings: string[] = []
+      let raw: unknown
+      let local = false
+      if (repository) {
+        try {
+          raw = await repository.tree(pull.owner, pull.repo, sha)
+          local = true
+        } catch {
+          warnings.push('Local source cache is unavailable; navigation is loading source from GitHub.')
+        }
+      }
+      if (!local) {
+        const output = await runCommand({
+          command: 'gh',
+          args: ['api', `repos/${pull.owner}/${pull.repo}/git/trees/${sha}?recursive=1`],
+          maxOutputBytes: 16 * 1024 * 1024,
+        })
+        raw = JSON.parse(output)
+      }
       const result = z
         .object({
           truncated: z.boolean(),
           tree: z.array(z.object({ path: z.string(), type: z.string(), mode: z.string() })),
         })
-        .parse(JSON.parse(output))
+        .parse(raw)
       const regular = result.tree.filter(
         (item) => item.type === 'blob' && ['100644', '100755'].includes(item.mode),
       )
-      const warnings: string[] = []
       const validPaths: string[] = []
       for (const item of regular) {
         try {
@@ -284,6 +299,7 @@ export function createSourceProjectLoader() {
           'Some source paths use unsupported characters and are unavailable for navigation.',
         )
       const value = { sha, paths, warnings }
+      if (local) localTrees.add(value)
       trees.set(key, value)
       if (trees.size > 20) trees.delete(trees.keys().next().value!)
       return value
@@ -310,7 +326,9 @@ export function createSourceProjectLoader() {
     }
     const active = pendingFiles.get(key)
     if (active) return active
-    const request = (async () => {
+    async function readSource(): Promise<RevisionFileContent> {
+      if (localTrees.has(revision))
+        return readBlob(await repository!.file(pull.owner, pull.repo, revision.sha, path), path, revision.sha)
       const query = `query($owner:String!,$name:String!,$expression:String!) {repository(owner:$owner,name:$name) {file:object(expression:$expression) {__typename ... on Blob {byteSize isBinary isTruncated text}}}}`
       const output = await runCommand({
         command: 'gh',
@@ -332,16 +350,18 @@ export function createSourceProjectLoader() {
         .parse(JSON.parse(output))
       if (result.errors?.length || !result.data?.repository)
         throw new Error('Could not read exact-revision source from GitHub. Please retry.')
-      const value = await readBlob(result.data.repository.file, path, revision.sha)
+      return readBlob(result.data.repository.file, path, revision.sha)
+    }
+    const request = readSource().then((value) => {
       files.set(key, value)
       fileBytes += Buffer.byteLength(value.content)
-      while (files.size > 60 || fileBytes > maxCacheBytes) {
+      while (files.size > 1000 || fileBytes > 32 * 1024 * 1024) {
         const oldest = files.keys().next().value!
         fileBytes -= Buffer.byteLength(files.get(oldest)!.content)
         files.delete(oldest)
       }
       return value
-    })().finally(() => pendingFiles.delete(key))
+    }).finally(() => pendingFiles.delete(key))
     pendingFiles.set(key, request)
     return request
   }
