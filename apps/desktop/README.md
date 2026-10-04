@@ -6,8 +6,12 @@ an unpacked application in `apps/desktop/release`; `pnpm --dir apps/desktop dist
 creates installers for the current platform. Installer signing requires your own
 platform signing configuration. The first desktop build downloads the pinned
 Electron runtime if its installation step has not already done so.
-The application and packaged icons use the existing `assets/slopbusters.png`
-logo. Electron Builder converts this PNG into each platform's native icon format.
+The application and packaged icons use `build/icon.png`, a 1024 × 1024 PNG with
+an 832 × 832 rounded black tile centered on a transparent canvas. The logo has
+extra space inside the tile to keep the monster and lettering clear of the
+corners. Electron Builder converts this PNG into each platform's native icon
+format; `scripts/build.mjs` copies it into `dist/icon.png`. The renderer uses the
+original `assets/slopbusters.png` logo.
 
 Electron starts the local API in its main process using its embedded Node runtime
 and SQLite. The renderer is sandboxed and receives a narrow bridge for application
