@@ -253,21 +253,11 @@ pre {
   display: flex;
   flex-direction: column;
 }
-.repo-picker {
-  width: 100%;
-  justify-content: flex-start;
-}
-.repo-picker span {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: left;
-}
 .sidebar-label {
   color: var(--muted-foreground);
   font-size: 10px;
   letter-spacing: 1px;
-  padding: 22px 8px 9px;
+  padding: 0 8px 9px;
 }
 .nav-row {
   display: flex;
@@ -458,6 +448,82 @@ pre {
 }
 .search-field > svg {
   color: var(--muted-foreground);
+}
+.repository-switcher-trigger {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 100%;
+  justify-content: flex-start;
+  font-size: 14px;
+  font-weight: 550;
+}
+.repository-switcher-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-page-title > button:last-child {
+  margin-left: auto;
+}
+.repository-switcher-positioner {
+  z-index: 50;
+  -webkit-app-region: no-drag;
+}
+.repository-switcher-popup {
+  width: min(420px, calc(100vw - 24px));
+  max-height: var(--available-height);
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 12px 40px #0004;
+  outline: none;
+}
+.repository-switcher-title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.repository-switcher-popup .search-field {
+  flex-shrink: 0;
+}
+.repository-switcher-popup .search-field input {
+  min-width: 0;
+  flex: 1;
+}
+.repository-switcher-popup .repository-list {
+  min-height: 0;
+}
+.repository-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 7px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 500;
+}
+.repository-list section + section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.repository-row[aria-current='true'],
+.repository-row:focus-visible {
+  background: var(--accent);
+}
+.repository-row:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.repository-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .repository-list {
   max-height: 380px;
@@ -1095,8 +1161,6 @@ pre {
     --app-sidebar-width: 56px;
     --review-sidebar-width: 135px;
   }
-  .repo-picker span,
-  .repo-picker > svg:last-child,
   .sidebar-label,
   .nav-row span,
   .sidebar-pulls,
@@ -1104,10 +1168,6 @@ pre {
   .tool-status,
   .sidebar-bottom > button {
     display: none;
-  }
-  .repo-picker {
-    padding: 7px;
-    justify-content: center;
   }
   .nav-row {
     padding: 12px 10px;

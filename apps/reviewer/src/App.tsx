@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { UpdateButton } from './UpdateButton'
 import { AppTitleBar } from './AppTitleBar'
+import { RepositorySwitcher } from './RepositorySwitcher'
+import { loadRepositoryHistory, saveRepositoryHistory, visitRepository } from './repositoryHistory'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { inboxPath, readRoute, reviewPath, routeMatchesPull } from './routes'
 import {
   ArrowUpRight,
   Check,
-  ChevronDown,
-  GitBranch,
   GitPullRequest,
   GitPullRequestDraft,
   LoaderCircle,
   Plus,
-  Search,
   Settings,
 } from 'lucide-react'
 import { Button } from './vendor/t3/components/ui/button'
@@ -53,7 +52,14 @@ export function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const route = readRoute(location)
-  const [lastRepository] = useState(() => localStorage.getItem('slopbusters:repository') ?? '')
+  const [repositoryHistory, setRepositoryHistory] = useState(loadRepositoryHistory)
+  const visitedRepository =
+    route.kind === 'inbox' || route.kind === 'pull' ? route.repository : undefined
+  const recentRepositories = visitedRepository
+    ? visitRepository(repositoryHistory, visitedRepository)
+    : repositoryHistory
+  if (recentRepositories !== repositoryHistory) setRepositoryHistory(recentRepositories)
+  const lastRepository = recentRepositories[0] ?? ''
   const repository =
     route.kind === 'not-found' ? lastRepository : (route.repository ?? lastRepository)
   const filter = route.kind === 'not-found' ? 'mine' : route.filter
@@ -63,8 +69,6 @@ export function App() {
     statuses: { number: number; status: PullStatus }[]
     warnings: string[]
   }>()
-  const [picker, setPicker] = useState(false)
-  const [query, setQuery] = useState('')
   const [urlDialog, setUrlDialog] = useState(false)
   const [url, setUrl] = useState('')
   const [stackTarget, setStackTarget] = useState<{ url: string; number: number }>()
@@ -137,6 +141,10 @@ export function App() {
     return () => controller.abort()
   }, [refresh])
 
+  useEffect(() => {
+    saveRepositoryHistory(recentRepositories)
+  }, [recentRepositories])
+
   const requestKey = `${repository}:${refresh}`
   const statusRequestKey = `${requestKey}:${filter}`
   const coreInbox = inboxResult?.key === requestKey ? inboxResult.data : undefined
@@ -154,7 +162,6 @@ export function App() {
 
   useEffect(() => {
     if (!repository || route.kind !== 'inbox') return
-    localStorage.setItem('slopbusters:repository', repository)
     const controller = new AbortController()
     void api<RepositoryInbox>(`/inbox?repository=${encodeURIComponent(repository)}`, {
       signal: controller.signal,
@@ -308,15 +315,26 @@ export function App() {
       >
         {!pull && (
           <div className="app-page-title">
-            <h1>
-              {route.kind === 'settings'
-                ? 'Settings'
-                : route.kind === 'not-found'
-                  ? 'Page not found'
-                  : route.kind === 'pull'
-                    ? `PR #${route.number}`
-                    : repository || 'Your repositories'}
-            </h1>
+            {route.kind === 'inbox' ? (
+              <RepositorySwitcher
+                repository={repository}
+                repositories={repositories}
+                recentRepositories={recentRepositories}
+                unavailableMessage={status?.github.detail}
+                onSelect={(name) => {
+                  void navigate(inboxPath(name, filter))
+                  setError('')
+                }}
+              />
+            ) : (
+              <h1>
+                {route.kind === 'settings'
+                  ? 'Settings'
+                  : route.kind === 'not-found'
+                    ? 'Page not found'
+                    : `PR #${route.number}`}
+              </h1>
+            )}
             {route.kind === 'inbox' && (
               <Button
                 size="sm"
@@ -335,11 +353,6 @@ export function App() {
       <div className="app-shell">
         {route.kind !== 'pull' && (
           <aside className="app-sidebar">
-            <Button variant="outline" className="repo-picker" onClick={() => setPicker(true)}>
-              <GitBranch size={15} />
-              <span>{repository || 'Choose a repository'}</span>
-              <ChevronDown size={14} />
-            </Button>
             <div className="sidebar-label">PULL REQUESTS</div>
             <nav aria-label="Pull request inbox">
               {filters.map((item) => (
@@ -577,51 +590,6 @@ export function App() {
           section={statusTarget?.section}
           onClose={() => setStatusTarget(undefined)}
         />
-        <Dialog open={picker} onOpenChange={setPicker}>
-          <DialogPopup>
-            <DialogHeader>
-              <DialogTitle>Choose a repository</DialogTitle>
-              <DialogDescription>Repositories available to your GitHub account.</DialogDescription>
-            </DialogHeader>
-            <div className="dialog-body">
-              <div className="search-field">
-                <Search size={16} />
-                <Input
-                  aria-label="Search repositories"
-                  placeholder="Search owner or repository…"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
-              <div className="repository-list">
-                {repositories
-                  .filter((repo) => repo.fullName.toLowerCase().includes(query.toLowerCase()))
-                  .map((repo) => (
-                    <button
-                      className="repository-row"
-                      key={repo.fullName}
-                      onClick={() => {
-                        void navigate(inboxPath(repo.fullName, filter))
-                        setPicker(false)
-                        setError('')
-                      }}
-                    >
-                      <GitBranch size={15} />
-                      <div>
-                        <strong>{repo.fullName}</strong>
-                        <span>{repo.description}</span>
-                      </div>
-                      {repo.private && <Badge variant="outline">Private</Badge>}
-                      {repository === repo.fullName && <Check size={15} />}
-                    </button>
-                  ))}
-                {!repositories.length && (
-                  <p className="muted">{status?.github.detail || 'Loading repositories…'}</p>
-                )}
-              </div>
-            </div>
-          </DialogPopup>
-        </Dialog>
         <Dialog open={urlDialog} onOpenChange={setUrlDialog}>
           <DialogPopup>
             <DialogHeader>
