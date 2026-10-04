@@ -4,7 +4,6 @@
   gap: 8px;
 }
 .file-context-actions button,
-.source-context-toolbar button,
 .source-context-error button {
   color: var(--muted-foreground);
   font-size: 11px;
@@ -14,8 +13,7 @@
   padding: 3px 7px;
   background: var(--background);
 }
-.file-context-actions button:hover,
-.source-context-toolbar button:hover {
+.file-context-actions button:hover {
   color: var(--foreground);
 }
 .file-context-actions button:disabled {
@@ -29,44 +27,15 @@
   display: flex;
   flex-direction: column;
 }
-.source-context-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
-}
-.source-context-toolbar select {
-  max-width: 360px;
-  font-size: 12px;
-  background: var(--background);
-  color: var(--foreground);
-  border: 1px solid var(--border);
-  padding: 4px;
-  border-radius: 4px;
-}
-.source-context-toolbar form {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.source-context-toolbar input {
-  width: 65px;
-  font-size: 12px;
-}
-.source-context-toolbar code {
-  font-size: 11px;
-  color: var(--muted-foreground);
-}
 .source-context-viewer {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
 }
 .source-context-error {
   color: var(--destructive);
-  padding: 12px 0;
+  padding: 12px 24px;
 }
 .source-context-navigation {
   display: flex;
@@ -74,30 +43,15 @@
   gap: 8px;
   flex-wrap: wrap;
   font-size: 12px;
-  padding: 8px 0;
-}
-.source-context-navigation > span:first-child {
-  flex: 1;
-}
-.source-context-navigation button {
-  font-size: 12px;
-  cursor: pointer;
-  color: var(--foreground);
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-.source-context-navigation button:disabled {
-  opacity: 0.5;
-  cursor: default;
+  padding: 8px 24px;
 }
 .source-context-body {
   display: flex;
   flex: 1;
   min-height: 0;
   gap: 8px;
+  margin: 0 24px 24px;
 }
-.source-context-files,
 .source-context-targets {
   width: 240px;
   flex-shrink: 0;
@@ -106,11 +60,6 @@
   padding: 8px;
   font-size: 12px;
 }
-.source-context-files input {
-  width: 100%;
-  margin-bottom: 8px;
-}
-.source-context-files button,
 .source-context-targets button {
   display: block;
   width: 100%;
@@ -121,7 +70,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.source-context-files button:hover,
 .source-context-targets button:hover {
   background: var(--muted);
 }
@@ -131,7 +79,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.source-context-loading {
+  padding: 0 24px;
+}
 .source-context-warnings {
+  padding: 0 24px;
   font-size: 11px;
   color: var(--muted-foreground);
 }
@@ -173,7 +125,6 @@
   .source-context-body {
     flex-wrap: wrap;
   }
-  .source-context-files,
   .source-context-targets {
     width: 100%;
     max-height: 150px;

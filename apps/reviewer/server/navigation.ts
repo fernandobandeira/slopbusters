@@ -6,6 +6,7 @@ import type { createSourceProjectLoader } from './fileContent'
 import { getSyntaxIdentifierLocations, sourceLanguage } from './treeSymbols'
 import { createTypeScriptNavigator } from './semanticNavigation'
 import type { LanguageServerNavigation } from './lspNavigation'
+import { workspacePackagePaths } from './workspacePackages'
 
 type SourceProject = ReturnType<typeof createSourceProjectLoader>
 const virtualRoot = '/review/'
@@ -127,6 +128,37 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
 
     let projectDirectory = ''
     let compilerOptions: ts.CompilerOptions = {}
+    async function optionsFrom(path: string, ancestors = new Set<string>()): Promise<ts.CompilerOptions> {
+      if (ancestors.size > 8 || ancestors.has(path)) return {}
+      await load(path)
+      const text = files.get(path)
+      if (!text) return {}
+      const parsed = ts.parseConfigFileTextToJson(path, text)
+      if (parsed.error || !parsed.config || typeof parsed.config !== 'object') {
+        warnings.add(`Could not read ${path}; default source resolution is in use.`)
+        return {}
+      }
+      const configDirectory = `${virtualRoot}${posix.dirname(path)}`
+      const inherited =
+        typeof parsed.config.extends === 'string' && parsed.config.extends.startsWith('.')
+          ? posix.normalize(posix.join(posix.dirname(path), parsed.config.extends))
+          : undefined
+      if (typeof parsed.config.extends === 'string' && !parsed.config.extends.startsWith('.'))
+        warnings.add(
+          `Package-based inherited configuration for ${path} is unavailable in the saved repository source.`,
+        )
+      let parent: ts.CompilerOptions = {}
+      if (inherited) {
+        const parentPath = available.has(inherited) ? inherited : `${inherited}.json`
+        if (available.has(parentPath)) parent = await optionsFrom(parentPath, new Set([...ancestors, path]))
+        else warnings.add(`The inherited configuration for ${path} is unavailable in this revision.`)
+      }
+      const own = ts.convertCompilerOptionsFromJson(
+        parsed.config.compilerOptions ?? {}, configDirectory,
+      ).options
+      if (own.paths && !own.baseUrl && !parent.baseUrl) own.baseUrl = configDirectory
+      return { ...parent, ...own }
+    }
     if (semantic) {
       let directory = posix.dirname(request.path)
       let config: string | undefined
@@ -143,43 +175,7 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
           warnings.add(
             `Navigation is scoped to the configured project in ${projectDirectory}; other projects may contain additional locations.`,
           )
-        async function optionsFrom(path: string, depth: number): Promise<ts.CompilerOptions> {
-          if (depth > 8 || visited.has(path)) return {}
-          await load(path)
-          const text = files.get(path)
-          if (!text) return {}
-          const parsed = ts.parseConfigFileTextToJson(path, text)
-          if (parsed.error || !parsed.config || typeof parsed.config !== 'object') {
-            warnings.add(`Could not read ${path}; default source resolution is in use.`)
-            return {}
-          }
-          const configDirectory = `${virtualRoot}${posix.dirname(path)}`
-          const inherited =
-            typeof parsed.config.extends === 'string' && parsed.config.extends.startsWith('.')
-              ? posix.normalize(posix.join(posix.dirname(path), parsed.config.extends))
-              : undefined
-          if (typeof parsed.config.extends === 'string' && !parsed.config.extends.startsWith('.'))
-            warnings.add(
-              `Package-based inherited configuration for ${path} is unavailable in the saved repository source.`,
-            )
-          let parent: ts.CompilerOptions = {}
-          if (inherited) {
-            const parentPath = available.has(inherited) ? inherited : `${inherited}.json`
-            if (available.has(parentPath)) parent = await optionsFrom(parentPath, depth + 1)
-            else
-              warnings.add(
-                `The inherited configuration for ${path} is unavailable in this revision.`,
-              )
-          }
-          const converted = ts.convertCompilerOptionsFromJson(
-            parsed.config.compilerOptions ?? {},
-            configDirectory,
-          )
-          const own = converted.options
-          if (own.paths && !own.baseUrl && !parent.baseUrl) own.baseUrl = configDirectory
-          return { ...parent, ...own }
-        }
-        compilerOptions = await optionsFrom(config, 0)
+        compilerOptions = await optionsFrom(config)
       }
     }
     const candidates = tree.paths
@@ -217,9 +213,28 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
         fileExists: (path) => available.has(path.slice(virtualRoot.length)),
         readFile: (path) => files.get(path.slice(virtualRoot.length)),
         directoryExists: (directory) => directories.has(directory),
+        getCurrentDirectory: () => virtualRoot.slice(0, -1),
         realpath: (path) => path,
       }
-      const resolutions = ts.createModuleResolutionCache(virtualRoot, (path) => path, options)
+      let resolutions = ts.createModuleResolutionCache(virtualRoot, (path) => path, options)
+      let packagesScanned = false
+      async function loadWorkspacePackages() {
+        packagesScanned = true
+        const manifests = tree.paths.filter((path) =>
+          /(^|\/)package\.json$/.test(path) && !path.split('/').includes('node_modules'),
+        )
+        await loadMany(manifests)
+        const paths: Record<string, string[]> = {}
+        for (const manifest of manifests) {
+          const text = files.get(manifest)
+          if (!text) continue
+          const config = posix.join(posix.dirname(manifest), 'tsconfig.json')
+          const packageOptions = available.has(config) ? await optionsFrom(config) : {}
+          Object.assign(paths, workspacePackagePaths(manifest, text, available, packageOptions))
+        }
+        options.paths = { ...paths, ...compilerOptions.paths }
+        resolutions = ts.createModuleResolutionCache(virtualRoot, (path) => path, options)
+      }
       const processed = new Set<string>()
       for (let pass = 0; pass < 12; pass++) {
         const imports = new Set<string>()
@@ -227,13 +242,19 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
           if (processed.has(path) || !/\.[cm]?[jt]sx?$/i.test(path)) continue
           processed.add(path)
           for (const imported of ts.preProcessFile(content, true, true).importedFiles) {
-            const resolved = ts.resolveModuleName(
+            let resolved = ts.resolveModuleName(
               imported.fileName,
               `${virtualRoot}${path}`,
               options,
               resolver,
               resolutions,
             ).resolvedModule
+            if (!resolved && !imported.fileName.startsWith('.') && !packagesScanned) {
+              await loadWorkspacePackages()
+              resolved = ts.resolveModuleName(
+                imported.fileName, `${virtualRoot}${path}`, options, resolver, resolutions,
+              ).resolvedModule
+            }
             if (resolved?.resolvedFileName.startsWith(virtualRoot))
               imports.add(resolved.resolvedFileName.slice(virtualRoot.length))
           }
@@ -250,10 +271,10 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
       // Source is immutable at this commit. Reuse parsed/type-checked programs across
       // symbols and navigation kinds when the same bounded file set is available.
       const projectKey = JSON.stringify([
-        pull.owner, pull.repo, tree.sha, compilerOptions, [...files.keys()].sort(),
+        pull.owner, pull.repo, tree.sha, options, [...files.keys()].sort(),
       ])
       let navigator = typeScriptProjects.get(projectKey)
-      if (!navigator) navigator = createTypeScriptNavigator(files, compilerOptions)
+      if (!navigator) navigator = createTypeScriptNavigator(files, options)
       typeScriptProjects.delete(projectKey)
       typeScriptProjects.set(projectKey, navigator)
       while (typeScriptProjects.size > 3) {

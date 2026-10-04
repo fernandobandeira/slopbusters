@@ -1149,7 +1149,6 @@ export function ReviewWorkspace({
         pull={pull}
         fileId={sourceFileId}
         initialRequest={sourceSelection?.request}
-        initialSymbol={sourceSelection?.text}
         content={sourceFileId ? fileContext.contents.get(sourceFileId) : undefined}
         error={sourceFileId ? fileContext.error(sourceFileId) : undefined}
         onRetry={() => {

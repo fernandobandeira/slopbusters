@@ -111,6 +111,48 @@ describe('revision source navigation', () => {
     expect(result.targets.map((target) => target.path)).toEqual(['src/service.ts'])
   })
 
+  it('follows a workspace package re-export to saved source when published build files are absent', async () => {
+    const loader = project({
+      'server/tsconfig.json': '{"extends":"fastify-tsconfig","compilerOptions":{"baseUrl":"./src"}}',
+      'server/src/use.ts': "import { assertTrue } from 'utils'\nassertTrue(true)",
+      'packages/utils/package.json': '{"name":"utils","main":"dist/index.js","types":"dist/index.d.ts"}',
+      'packages/utils/tsconfig.json': '{"extends":"../../tsconfig.base.json","compilerOptions":{"outDir":"dist"}}',
+      'tsconfig.base.json': '{"compilerOptions":{"strict":true}}',
+      'packages/utils/src/index.ts': "export * from './assert-conditions'",
+      'packages/utils/src/assert-conditions.ts': 'export function assertTrue(condition: boolean): asserts condition {}',
+      'server/src/unrelated.ts': 'export function assertTrue() {}',
+    })
+    const navigate = createSourceNavigator(loader)
+    try {
+      const result = await navigate(fixturePull(), { ...request, path: 'server/src/use.ts' })
+      expect(result.mode).toBe('semantic')
+      expect(result.targets).toMatchObject([
+        { path: 'packages/utils/src/assert-conditions.ts', line: 1, column: 17, name: 'assertTrue' },
+      ])
+      expect(result.targets).toHaveLength(1)
+      expect(loader.file.mock.calls.map((call) => call[2])).not.toContain('server/src/unrelated.ts')
+    } finally {
+      navigate.close()
+    }
+  })
+
+  it('resolves scoped workspace subpath exports with a configured source and output directory', async () => {
+    const loader = project({
+      'src/use.ts': "import { run } from './bridge'\nrun()",
+      'src/bridge.ts': "export { run } from '@local/tasks/runner'",
+      'packages/tasks/package.json': '{"name":"@local/tasks","exports":{"./runner":{"types":"./build/runner.d.ts","import":"./build/runner.js"}}}',
+      'packages/tasks/tsconfig.json': '{"compilerOptions":{"rootDir":"lib","outDir":"build"}}',
+      'packages/tasks/lib/runner.ts': 'export function run() { return 1 }',
+    })
+    const navigate = createSourceNavigator(loader)
+    try {
+      const result = await navigate(fixturePull(), request)
+      expect(result.targets).toMatchObject([{ path: 'packages/tasks/lib/runner.ts', name: 'run' }])
+    } finally {
+      navigate.close()
+    }
+  })
+
   it('includes usages in files outside the import graph but excludes unrelated same-name symbols', async () => {
     const loader = project({
       'src/use.ts': "import { run } from './service'\nrun()",
