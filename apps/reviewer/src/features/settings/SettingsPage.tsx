@@ -5,7 +5,10 @@ import { LanguageServerSettings } from './LanguageServerSettings'
 import { ReviewWorkspaceSettings } from './ReviewWorkspaceSettings'
 import { OrganizationSettings } from './OrganizationSettings'
 import { Provider, type AppStatus } from '../../../shared/domain/types'
-import { organizationDefaults, type OrganizationPreferences } from '../../../shared/domain/preferences'
+import {
+  organizationDefaults,
+  type OrganizationPreferences,
+} from '../../../shared/domain/preferences'
 
 export function SettingsPage({
   inboxUrl,

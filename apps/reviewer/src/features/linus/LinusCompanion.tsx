@@ -1,9 +1,31 @@
+import { useClipboard } from '../../lib/useClipboard'
 import * as routes from '../../../shared/api'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowUpRight, Check, ChevronLeft, ChevronRight, Copy, LoaderCircle, Maximize2, X } from 'lucide-react'
-import { recommendationsPrompt, verdictLabels, type LinusResult, type LinusStep, type LinusReplayRequest } from '../../../shared/domain/linus'
-import { Priority, type ChangedFile, type Hunk, type InboxPull, type PullRequest } from '../../../shared/domain/types'
+import {
+  ArrowUpRight,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  LoaderCircle,
+  Maximize2,
+  X,
+} from 'lucide-react'
+import {
+  recommendationsPrompt,
+  verdictLabels,
+  type LinusResult,
+  type LinusStep,
+  type LinusReplayRequest,
+} from '../../../shared/domain/linus'
+import {
+  Priority,
+  type ChangedFile,
+  type Hunk,
+  type InboxPull,
+  type PullRequest,
+} from '../../../shared/domain/types'
 import type { Preferences } from '../../../shared/domain/preferences'
 import { Button } from '~/components/ui/button'
 import { PullDescription } from '../review/PullDescription'
@@ -184,7 +206,9 @@ export function LinusCompanion({
   const selecting = selection?.active ?? false
   const [cursor, setCursor] = useState<{ sessionId: string; index: number }>()
   const [hiddenEvidenceTurn, setHiddenEvidenceTurn] = useState<string>()
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'fallback'>('idle')
+  const { state: clipboardState, copy: copyClipboard, reset: resetClipboard } = useClipboard()
+  const [copyFallback, setCopyFallback] = useState(false)
+  const copyState = copyFallback ? 'fallback' : clipboardState
   const [copyText, setCopyText] = useState('')
   const [replayed, setReplayed] = useState<{ request: LinusReplayRequest; result: LinusResult }>()
   const [replayError, setReplayError] = useState<{ request: LinusReplayRequest; message: string }>()
@@ -257,7 +281,8 @@ export function LinusCompanion({
         setReplayError(undefined)
         setCursor({ sessionId: `saved:${saved.id}:${result.pull.url}`, index: 0 })
         setHiddenEvidenceTurn(undefined)
-        setCopyState('idle')
+        setCopyFallback(false)
+        resetClipboard()
         setMode('review')
         setOpen(true)
       })
@@ -270,7 +295,7 @@ export function LinusCompanion({
     return () => {
       controller.abort()
     }
-  }, [replayRequest])
+  }, [replayRequest, resetClipboard])
 
   useEffect(() => {
     if (!open) return
@@ -287,15 +312,6 @@ export function LinusCompanion({
       window.removeEventListener('keydown', escape)
     }
   }, [open, turnKey, selection])
-  useEffect(() => {
-    if (copyState !== 'copied') return
-    const timer = setTimeout(() => {
-      setCopyState('idle')
-    }, 2500)
-    return () => {
-      clearTimeout(timer)
-    }
-  }, [copyState])
 
   if (!repository || (!available && !session && !replayRequest)) return null
   function close() {
@@ -318,17 +334,13 @@ export function LinusCompanion({
   async function copy(completed?: LinusResult) {
     const text = recommendationsPrompt(completed ? [completed] : results)
     setCopyText(text)
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopyState('copied')
-    } catch {
-      setCopyState('fallback')
-    }
+    setCopyFallback(!(await copyClipboard(text)))
   }
   const canSelect = available && !active && session?.status !== 'partial'
   function choosePulls() {
     setHiddenEvidenceTurn(turnKey)
-    setCopyState('idle')
+    setCopyFallback(false)
+    resetClipboard()
     selection?.onChoose()
   }
   return (
@@ -578,7 +590,8 @@ export function LinusCompanion({
                 />
                 <button
                   onClick={() => {
-                    setCopyState('idle')
+                    setCopyFallback(false)
+                    resetClipboard()
                   }}
                 >
                   Close export

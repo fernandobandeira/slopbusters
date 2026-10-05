@@ -1,3 +1,7 @@
+import { useClipboard } from '../../lib/useClipboard'
+import { DescriptionDialog } from './DescriptionDialog'
+import { ExportFeedbackDialog } from './ExportFeedbackDialog'
+import { useCommentEditor } from './useCommentEditor'
 import { useReviewDiff } from './useReviewDiff'
 import { ReviewDiffViewer } from './ReviewDiffViewer'
 import { GroupSidebar } from './GroupSidebar'
@@ -14,7 +18,6 @@ import { Link } from 'react-router'
 import { Check, Copy, MessageSquare, ArrowLeft, ArrowRight } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import { Badge } from '~/components/ui/badge'
-import { Dialog, DialogPopup, DialogHeader, DialogTitle, DialogDescription } from '~/components/ui/dialog'
 
 import { message } from '../../lib/api'
 
@@ -22,7 +25,11 @@ import { SourceContextDialog } from '../source-navigation/SourceContextDialog'
 import { SymbolContextMenu, type SymbolMenuSelection } from '../source-navigation/SymbolContextMenu'
 
 import type { NavigationRequest } from '../../../shared/domain/navigation'
-import { annotateDiscussions, discussionGroup, type LineDiscussion } from './discussions/discussions'
+import {
+  annotateDiscussions,
+  discussionGroup,
+  type LineDiscussion,
+} from './discussions/discussions'
 
 import { DiscussionsTray } from './discussions/DiscussionsTray'
 import { CompactReviewHeader, ReviewPullDetails } from './CompactReviewHeader'
@@ -34,13 +41,13 @@ import { usePullStack } from '../stacks/usePullStack'
 import { usePullStatus } from '../pull-status/usePullStatus'
 import { PullStatusDialog } from '../pull-status/PullStatusDialog'
 import type { PullStatusSection } from '../pull-status/PullStatusIcons'
-import { PullDescription } from './PullDescription'
+
 import { StackDialog } from '../stacks/StackPanel'
 import { readRoute } from '../../lib/routes'
 
 import { exportFeedback } from '../../../shared/domain/review'
 import { pullHasUpdates } from '../../../shared/domain/updates'
-import { DiffSide, type DraftComment, type PullRequest, type ReviewDraft } from '../../../shared/domain/types'
+import { DiffSide, type PullRequest, type ReviewDraft } from '../../../shared/domain/types'
 
 export interface ReviewCompanionContext {
   draft: ReviewDraft
@@ -118,8 +125,6 @@ export function ReviewWorkspace({
   const [discussionTray, setDiscussionTray] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [editor, setEditor] = useState<Omit<DraftComment, 'body'> | null>(null)
-  const [body, setBody] = useState('')
   const viewerRef = useRef<CodeViewHandle<LineDiscussion, undefined>>(null)
   const { discussions, discussionError, refreshDiscussions, postReply, setDiscussionError } =
     useDiscussions(pull.id, setNotice)
@@ -147,20 +152,28 @@ export function ReviewWorkspace({
     refreshDiscussions,
     setDiscussionError,
   })
+  const {
+    editor,
+    setEditor,
+    body,
+    setBody,
+    editComment,
+    deleteComment,
+    commentOnLine,
+    saveComment,
+  } = useCommentEditor(pull, {
+    selected,
+    changeView,
+    setFileCollapsed,
+    setDraft,
+    setNotice,
+    setSubmitted,
+  })
   const [exportOpen, setExportOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const clipboard = useClipboard()
+  const copied = clipboard.state === 'copied'
   const [descriptionOpen, setDescriptionOpen] = useState(false)
   const hasFeedback = draft.comments.length > 0 || draft.summary.trim().length > 0
-  useEffect(() => {
-    if (!copied) return
-    const timer = setTimeout(() => {
-      setCopied(false)
-    }, 2500)
-    return () => {
-      clearTimeout(timer)
-    }
-  }, [copied])
-
   const annotated = useMemo(
     () =>
       annotateDiscussions({
@@ -192,30 +205,6 @@ export function ReviewWorkspace({
       setError(message(error))
     }
   }
-  function editComment(comment: DraftComment) {
-    const file = pull.files.find((file) => file.path === comment.path)
-    if (!file) return
-    const group = discussionGroup({
-      pull,
-      path: comment.path,
-      line: comment.line,
-      side: comment.side,
-    })
-    if (!group) {
-      setNotice('Organize changes before editing line comments.')
-      return
-    }
-    setFileCollapsed(file.id, false, group.id)
-    changeView({ groupId: group.id })
-    setEditor(comment)
-    setBody(comment.body)
-  }
-  function deleteComment(comment: DraftComment) {
-    setDraft((previous) => ({
-      ...previous,
-      comments: previous.comments.filter((item) => item.id !== comment.id),
-    }))
-  }
   const transfers = pull.transfers.filter((transfer) =>
     selected?.fileIds.some(
       (id) =>
@@ -224,42 +213,8 @@ export function ReviewWorkspace({
     ),
   )
 
-  function addComment(location: { path: string; line: number; side: DiffSide; code?: string }) {
-    if (!selected) return
-    setBody('')
-    setEditor({
-      id: crypto.randomUUID(),
-      headSha: pull.headSha,
-      ...location,
-    })
-  }
-  function commentOnLine(params: { fileId: string; line: number; side: DiffSide }) {
-    const file = pull.files.find((file) => file.id === params.fileId)
-    const source = file?.hunks
-      .flatMap((hunk) => hunk.lines)
-      .find((line) =>
-        params.side === DiffSide.left ? line.oldLine === params.line : line.newLine === params.line,
-      )
-    if (file && source)
-      addComment({ path: file.path, line: params.line, side: params.side, code: source.text })
-  }
-  function saveComment() {
-    if (!editor || !body.trim()) return
-    const comment = { ...editor, body: body.trim() }
-    setDraft((previous) => ({
-      ...previous,
-      comments: [...previous.comments.filter((item) => item.id !== comment.id), comment],
-    }))
-    setEditor(null)
-    setSubmitted(undefined)
-  }
   async function copyFeedback() {
-    try {
-      await navigator.clipboard.writeText(exportFeedback(pull, draft))
-      setCopied(true)
-    } catch {
-      setExportOpen(true)
-    }
+    if (!(await clipboard.copy(exportFeedback(pull, draft)))) setExportOpen(true)
   }
   if (!draftReady)
     return (
@@ -628,25 +583,12 @@ export function ReviewWorkspace({
         }}
         onSubmit={() => void submit()}
       />
-      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-        <DialogPopup>
-          <DialogHeader>
-            <DialogTitle>Copy your feedback</DialogTitle>
-            <DialogDescription>Select and copy this text into your coding agent.</DialogDescription>
-          </DialogHeader>
-          <div className="dialog-body">
-            <textarea
-              aria-label="Exported feedback"
-              rows={14}
-              readOnly
-              value={exportFeedback(pull, draft)}
-              onFocus={(event) => {
-                event.target.select()
-              }}
-            />
-          </div>
-        </DialogPopup>
-      </Dialog>
+      <ExportFeedbackDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        pull={pull}
+        draft={draft}
+      />
       <StackDialog
         url={stackOpen ? pull.url : undefined}
         stack={stack ?? undefined}
@@ -690,17 +632,7 @@ export function ReviewWorkspace({
           setStatusOpen(false)
         }}
       />
-      <Dialog open={descriptionOpen} onOpenChange={setDescriptionOpen}>
-        <DialogPopup className="description-dialog">
-          <DialogHeader>
-            <DialogTitle>PR description</DialogTitle>
-            <DialogDescription>{pull.title}</DialogDescription>
-          </DialogHeader>
-          <div className="dialog-body description-body">
-            <PullDescription pull={pull} />
-          </div>
-        </DialogPopup>
-      </Dialog>
+      <DescriptionDialog open={descriptionOpen} onOpenChange={setDescriptionOpen} pull={pull} />
     </div>
   )
 }

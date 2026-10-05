@@ -1,5 +1,11 @@
 import { X } from 'lucide-react'
-import { DiffSide, type DraftComment, type PullRequest, type ReviewDraft, type ReviewThread } from '../../../../shared/domain/types'
+import {
+  DiffSide,
+  type DraftComment,
+  type PullRequest,
+  type ReviewDraft,
+  type ReviewThread,
+} from '../../../../shared/domain/types'
 import { Button } from '~/components/ui/button'
 import { Badge } from '~/components/ui/badge'
 import { DraftDiscussion, ThreadDiscussion } from './InlineDiscussion'

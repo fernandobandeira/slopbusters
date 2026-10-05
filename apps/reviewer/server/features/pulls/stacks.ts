@@ -1,3 +1,4 @@
+import { MAX_REPOSITORY_CACHE_ENTRIES } from '../../limits'
 import { z } from 'zod'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import {
@@ -159,7 +160,7 @@ export function createStackService(
   statuses = createPullStatusService(github),
 ) {
   const cache = createCache<{ stacks: NativeStack[]; warnings: string[] }>({
-    max: 30,
+    max: MAX_REPOSITORY_CACHE_ENTRIES,
     ttlMs: STACK_TTL_MS,
   })
   const fetchPullStatuses = statuses.fetchPullStatuses

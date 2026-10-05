@@ -1,6 +1,11 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '~/components/ui/button'
-import { bobSeverityLabels, bobSnapshotMatches, bobVerdictLabels, type BobResult } from '../../../shared/domain/bob'
+import {
+  bobSeverityLabels,
+  bobSnapshotMatches,
+  bobVerdictLabels,
+  type BobResult,
+} from '../../../shared/domain/bob'
 import type { PullRequest, ReviewDraft } from '../../../shared/domain/types'
 import { BobComment, saveBobComment } from './BobComment'
 

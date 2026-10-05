@@ -1,3 +1,4 @@
+import { MAX_NAVIGATION_CACHE_ENTRIES } from '../../limits'
 import type { NavigationRequest, NavigationResult } from '../../../shared/domain/navigation'
 import type { PullRequest } from '../../../shared/domain/types'
 import type { createSourceProjectLoader } from './fileContent'
@@ -16,7 +17,7 @@ export function createSourceNavigator(
 ) {
   const snapshot = createSnapshotNavigator(project)
   const cache = createCache<NavigationResult>({
-    max: 40,
+    max: MAX_NAVIGATION_CACHE_ENTRIES,
     cacheable: (value) =>
       (!languageServers || value.mode === 'semantic') &&
       !value.warnings.some((warning) =>

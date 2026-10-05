@@ -1,5 +1,6 @@
 import type { Request, Response, Router } from 'express'
-import type { z } from 'zod'
+import { z } from 'zod'
+import { UserError } from '../errors'
 import type { ApiContract, RouteInput } from '../../shared/api/contract'
 
 export function handle<C extends ApiContract>(
@@ -14,11 +15,7 @@ export function handle<C extends ApiContract>(
   router[contract.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete'](
     contract.path,
     async (request, response) => {
-      const input = {
-        params: contract.params.parse(request.params),
-        query: contract.query.parse(request.query),
-        body: contract.request.parse(request.body),
-      } as RouteInput<C>
+      const input = requestInput(contract, request)
       const result = await handler(input, request, response)
       const validated = contract.response.safeParse(result)
       if (!validated.success)
@@ -28,4 +25,17 @@ export function handle<C extends ApiContract>(
       response.json(validated.data)
     },
   )
+}
+
+function requestInput<C extends ApiContract>(contract: C, request: Request): RouteInput<C> {
+  try {
+    return {
+      params: contract.params.parse(request.params),
+      query: contract.query.parse(request.query),
+      body: contract.request.parse(request.body),
+    } as RouteInput<C>
+  } catch (error) {
+    if (error instanceof z.ZodError) throw new UserError('The request contained invalid data.')
+    throw error
+  }
 }

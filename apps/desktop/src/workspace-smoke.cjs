@@ -1,7 +1,7 @@
 const { mkdtemp, mkdir, readFile, realpath, rm, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
-const { WorkspaceTypeScriptNavigation } = require('../../reviewer/server/workspaceNavigation.ts')
+const { WorkspaceTypeScriptNavigation } = require('../../reviewer/server/adapters/workspaceNavigation.ts')
 
 async function verifyWorkspaceWorker(options) {
   const directory = await realpath(await mkdtemp(join(tmpdir(), 'slopbusters-worker-smoke-')))

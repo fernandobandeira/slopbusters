@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import type { NavigationRequest, NavigationResult, NavigationTarget } from '../../../shared/domain/navigation'
+import type {
+  NavigationRequest,
+  NavigationResult,
+  NavigationTarget,
+} from '../../../shared/domain/navigation'
 
 interface Props {
   navigation: NavigationResult & { kind: NavigationRequest['kind'] }

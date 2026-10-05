@@ -1,5 +1,14 @@
 import * as routes from '../../../shared/api'
-import { Circle, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, Layers, RotateCw, X } from 'lucide-react'
+import {
+  Circle,
+  GitMerge,
+  GitPullRequest,
+  GitPullRequestClosed,
+  GitPullRequestDraft,
+  Layers,
+  RotateCw,
+  X,
+} from 'lucide-react'
 import { Link } from 'react-router'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { PullStack, PullStackResult, StackPull } from '../../../shared/domain/stacks'
@@ -9,7 +18,13 @@ import { call, message } from '../../lib/api'
 import { PullStatusPanel, readinessPresentation } from '../pull-status/PullStatusPanel'
 import { PullStatusIcons, type PullStatusSection } from '../pull-status/PullStatusIcons'
 import { Button } from '~/components/ui/button'
-import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from '~/components/ui/dialog'
+import {
+  Dialog,
+  DialogDescription,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from '~/components/ui/dialog'
 import '../../stacks.css'
 
 interface StackPanelProps {

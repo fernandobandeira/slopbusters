@@ -1,3 +1,4 @@
+import { PROVIDER_TIMEOUT_MS } from '../limits'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -58,7 +59,7 @@ export async function runStructured<T>(
           input: prompt,
           cwd: repository?.directory ?? directory,
           signal,
-          timeoutMs: 300_000,
+          timeoutMs: PROVIDER_TIMEOUT_MS,
         })
         output = JSON.parse(await readFile(resultPath, 'utf8'))
         break
@@ -104,7 +105,7 @@ export async function runStructured<T>(
           input: prompt,
           cwd: repository?.directory ?? directory,
           signal,
-          timeoutMs: 300_000,
+          timeoutMs: PROVIDER_TIMEOUT_MS,
         })
         const envelope = z.object({ structured_output: z.unknown() }).parse(JSON.parse(text))
         output = envelope.structured_output

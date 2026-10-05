@@ -13,9 +13,9 @@
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "lint:code": "eslint . --max-warnings 0",
-    "lint:prune": "eslint . --prune-suppressions",
+    "lint:prune": "eslint . --prune-suppressions && prettier --write eslint-suppressions.json",
     "architecture": "depcruise src server shared --config .dependency-cruiser.cjs --ignore-known .dependency-cruiser-baseline.json",
-    "architecture:prune": "depcruise src server shared --config .dependency-cruiser.cjs --baseline .dependency-cruiser-baseline.json --baseline-mode shrink-only",
+    "architecture:prune": "depcruise src server shared --config .dependency-cruiser.cjs --baseline .dependency-cruiser-baseline.json --baseline-mode shrink-only && prettier --write .dependency-cruiser-baseline.json",
     "unused": "knip --config knip.json"
   },
   "keywords": [],

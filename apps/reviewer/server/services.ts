@@ -55,19 +55,11 @@ export function createServices(options: ReviewerServerOptions) {
   let languageNavigation = new LanguageServerNavigation(sourceProject, languageServers, workspaces)
   let typeScriptNavigation = new WorkspaceTypeScriptNavigation(sourceProject, workspaces, options)
   let navigator = createSourceNavigator(sourceProject, languageNavigation, typeScriptNavigation)
-  const openRepository = async (pull: PullRequest, signal: AbortSignal) => {
-    signal.throwIfAborted()
-    const lease = await workspaces.acquire(pull, pull.headSha)
-    try {
-      signal.throwIfAborted()
-      return await startRepositoryTools(pull, lease, sourceProject, (pull, request) =>
-        navigator(pull, request),
-      )
-    } catch (error) {
-      lease.release()
-      throw error
-    }
-  }
+  const openRepository = repositoryOpener({
+    workspaces,
+    sourceProject,
+    navigate: (pull, request) => navigator(pull, request),
+  })
   const linusJobs = new LinusJobs(
     store,
     options.staticDirectory,
@@ -99,13 +91,8 @@ export function createServices(options: ReviewerServerOptions) {
     organizationJobs,
     navigateSource: (pull: PullRequest, request: Parameters<typeof navigator>[1]) =>
       navigator(pull, request),
-    warmSource(pull: PullRequest) {
-      for (const sha of new Set(
-        [pull.headSha, pull.mergeBaseSha].filter((sha): sha is string => Boolean(sha)),
-      ))
-        void repository.tree(pull.owner, pull.repo, sha).catch((error: unknown) => {
-          logError('Warming source cache', error)
-        })
+    warmSource: (pull: PullRequest) => {
+      warmSource(repository, pull)
     },
     async removeWorkspace(identity: { owner: string; repo: string; sha: string }) {
       await typeScriptNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
@@ -134,3 +121,30 @@ export function createServices(options: ReviewerServerOptions) {
   }
 }
 export type Services = ReturnType<typeof createServices>
+
+function repositoryOpener(options: {
+  workspaces: ReviewWorkspaces
+  sourceProject: ReturnType<typeof createSourceProjectLoader>
+  navigate: Parameters<typeof startRepositoryTools>[3]
+}) {
+  return async (pull: PullRequest, signal: AbortSignal) => {
+    signal.throwIfAborted()
+    const lease = await options.workspaces.acquire(pull, pull.headSha)
+    try {
+      signal.throwIfAborted()
+      return await startRepositoryTools(pull, lease, options.sourceProject, options.navigate)
+    } catch (error) {
+      lease.release()
+      throw error
+    }
+  }
+}
+
+function warmSource(repository: LocalSourceRepository, pull: PullRequest) {
+  for (const sha of new Set(
+    [pull.headSha, pull.mergeBaseSha].filter((sha): sha is string => Boolean(sha)),
+  ))
+    void repository.tree(pull.owner, pull.repo, sha).catch((error: unknown) => {
+      logError('Warming source cache', error)
+    })
+}

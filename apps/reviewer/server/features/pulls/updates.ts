@@ -1,3 +1,4 @@
+import { MAX_REVISION_CACHE_ENTRIES } from '../../limits'
 import type { PullRequest } from '../../../shared/domain/types'
 import type { PullRevision } from '../../../shared/domain/updates'
 import { fetchPullRevision } from './github'
@@ -9,7 +10,11 @@ export function createRevisionChecker(
   fetchRevision: (pull: PullRequest) => Promise<PullRevision> = fetchPullRevision,
   now: () => number = Date.now,
 ) {
-  const cache = createCache<PullRevision>({ max: 100, ttlMs: INBOX_TTL_MS, now })
+  const cache = createCache<PullRevision>({
+    max: MAX_REVISION_CACHE_ENTRIES,
+    ttlMs: INBOX_TTL_MS,
+    now,
+  })
   return (pull: PullRequest) =>
     cache.load(`${pull.owner}/${pull.repo}/${pull.number}`, () => fetchRevision(pull))
 }

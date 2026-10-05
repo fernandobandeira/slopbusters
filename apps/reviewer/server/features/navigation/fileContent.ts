@@ -1,3 +1,11 @@
+import {
+  MAX_DIFF_FILE_CACHE_ENTRIES,
+  MAX_SOURCE_TREE_CACHE_ENTRIES,
+  MAX_SOURCE_FILE_CACHE_ENTRIES,
+  MAX_GITHUB_TREE_OUTPUT_BYTES,
+  MAX_GITHUB_GRAPHQL_OUTPUT_BYTES,
+  MAX_GITHUB_BLOB_OUTPUT_BYTES,
+} from '../../limits'
 import { z } from 'zod'
 import { DiffSide, type ChangedFile, type PullRequest } from '../../../shared/domain/types'
 import type {
@@ -83,7 +91,7 @@ export function createFileContentLoader(
   mergeBase = createMergeBaseLookup(github),
 ) {
   const cache = createCache<PullFileContent>({
-    max: 60,
+    max: MAX_DIFF_FILE_CACHE_ENTRIES,
     maxBytes: MAX_FILE_CACHE_BYTES,
     sizeOf: (value) =>
       Buffer.byteLength(value.old?.content ?? '') + Buffer.byteLength(value.new?.content ?? ''),
@@ -128,7 +136,7 @@ export function createFileContentLoader(
       }
     }`
     const output = await github.graphql(query, variables, false, {
-      maxOutputBytes: 8 * 1024 * 1024,
+      maxOutputBytes: MAX_GITHUB_TREE_OUTPUT_BYTES,
     })
     const result = z
       .object({
@@ -188,9 +196,9 @@ export function createSourceProjectLoader(
   github: GitHub = createGitHub(),
   mergeBase = createMergeBaseLookup(github),
 ) {
-  const trees = createCache<SourceTree>({ max: 20 })
+  const trees = createCache<SourceTree>({ max: MAX_SOURCE_TREE_CACHE_ENTRIES })
   const files = createCache<RevisionFileContent>({
-    max: 1000,
+    max: MAX_SOURCE_FILE_CACHE_ENTRIES,
     maxBytes: MAX_SOURCE_CACHE_BYTES,
     sizeOf: (file) => Buffer.byteLength(file.content),
   })
@@ -227,7 +235,7 @@ export function createSourceProjectLoader(
       }
       if (!local) {
         raw = await github.rest(`repos/${pull.owner}/${pull.repo}/git/trees/${sha}?recursive=1`, {
-          maxOutputBytes: 16 * 1024 * 1024,
+          maxOutputBytes: MAX_GITHUB_GRAPHQL_OUTPUT_BYTES,
         })
       }
       const result = z
@@ -290,7 +298,7 @@ export function createSourceProjectLoader(
         query,
         { owner: pull.owner, name: pull.repo, expression: `${revision.sha}:${path}` },
         false,
-        { maxOutputBytes: 4 * 1024 * 1024 },
+        { maxOutputBytes: MAX_GITHUB_BLOB_OUTPUT_BYTES },
       )
       const result = z
         .object({

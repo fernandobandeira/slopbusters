@@ -1,3 +1,4 @@
+import { sourceIdentitySchema } from '../domain/sourceIdentity'
 import { z } from 'zod'
 import { preferencesSchema } from '../domain/preferences'
 import { languageExtensions } from '../domain/languages'
@@ -81,6 +82,6 @@ export const getWorkspaces = defineRoute('GET', '/workspaces', {
   response: z.array(workspaceInfo.extend({ owner: z.string(), repo: z.string() })),
 })
 export const removeWorkspace = defineRoute('DELETE', '/workspaces', {
-  request: z.object({ owner: z.string(), repo: z.string(), sha: z.string() }).strict(),
+  request: sourceIdentitySchema,
   response: okSchema,
 })

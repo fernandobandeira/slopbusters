@@ -1,6 +1,9 @@
 import * as routes from '../../../shared/api'
 import { useEffect, useState } from 'react'
-import type { LanguageServerConfig, LanguageServerStatus } from '../../../shared/domain/languageServers'
+import type {
+  LanguageServerConfig,
+  LanguageServerStatus,
+} from '../../../shared/domain/languageServers'
 import { call, message } from '../../lib/api'
 
 export function LanguageServerSettings() {

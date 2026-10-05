@@ -1,4 +1,18 @@
-import { Check, CheckCircle2, ChevronRight, CircleDashed, Clock3, ExternalLink, GitMerge, GitPullRequestClosed, GitPullRequestDraft, HelpCircle, ShieldCheck, Users, XCircle } from 'lucide-react'
+import {
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  CircleDashed,
+  Clock3,
+  ExternalLink,
+  GitMerge,
+  GitPullRequestClosed,
+  GitPullRequestDraft,
+  HelpCircle,
+  ShieldCheck,
+  Users,
+  XCircle,
+} from 'lucide-react'
 import type { PullCheck, PullReviewer, PullStatus } from '../../../shared/domain/pullStatus'
 import type { PullStatusSection } from './PullStatusIcons'
 import '../../pullStatus.css'

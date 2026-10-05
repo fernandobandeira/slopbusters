@@ -3,7 +3,13 @@ import { usePullStatus } from './usePullStatus'
 import { PullStatusPanel } from './PullStatusPanel'
 import type { PullStatusSection } from './PullStatusIcons'
 import { Button } from '~/components/ui/button'
-import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from '~/components/ui/dialog'
+import {
+  Dialog,
+  DialogDescription,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from '~/components/ui/dialog'
 
 interface Props {
   url: string | undefined

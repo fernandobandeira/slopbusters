@@ -12,9 +12,10 @@ export interface GitHubOptions {
   signal?: AbortSignal
 }
 export interface GitHub {
-  rest(endpoint: string, options?: GitHubOptions): Promise<unknown>
-  paginate(endpoint: string, options?: GitHubOptions): Promise<unknown[]>
+  rest(this: void, endpoint: string, options?: GitHubOptions): Promise<unknown>
+  paginate(this: void, endpoint: string, options?: GitHubOptions): Promise<unknown[]>
   graphql(
+    this: void,
     query: string,
     variables: Record<string, unknown>,
     paginate?: boolean,

@@ -1,7 +1,8 @@
+import { TOOL_STATUS_TIMEOUT_MS, TOOL_VERSION_TIMEOUT_MS } from '../limits'
 import { z } from 'zod'
-import type { AppStatus, ToolStatus } from '../shared/domain/types'
-import { runCommand } from './adapters/process'
-import { createGitHub, type GitHub } from './adapters/github'
+import type { AppStatus, ToolStatus } from '../../shared/domain/types'
+import { runCommand } from './process'
+import { createGitHub, type GitHub } from './github'
 
 const profileSchema = z.object({ login: z.string().min(1), avatarUrl: z.url(), url: z.url() })
 
@@ -9,7 +10,7 @@ async function githubStatus(github: GitHub): Promise<AppStatus['github']> {
   try {
     const output = await github.rest('user', {
       jq: '{login:.login,avatarUrl:.avatar_url,url:.html_url}',
-      timeoutMs: 10_000,
+      timeoutMs: TOOL_STATUS_TIMEOUT_MS,
     })
     const profile = profileSchema.parse(output)
     return { available: true, authenticated: true, detail: profile.login, profile }
@@ -50,7 +51,7 @@ async function providerAuthentication(provider: 'codex' | 'claude'): Promise<boo
       command: provider,
       args: provider === 'codex' ? ['login', 'status'] : ['auth', 'status', '--json'],
       includeStderr: provider === 'codex',
-      timeoutMs: 5_000,
+      timeoutMs: TOOL_VERSION_TIMEOUT_MS,
     })
     return parse(output)
   } catch (cause: unknown) {
@@ -66,7 +67,11 @@ async function providerAuthentication(provider: 'codex' | 'claude'): Promise<boo
 
 async function providerStatus(provider: 'codex' | 'claude'): Promise<ToolStatus> {
   try {
-    const output = await runCommand({ command: provider, args: ['--version'], timeoutMs: 5_000 })
+    const output = await runCommand({
+      command: provider,
+      args: ['--version'],
+      timeoutMs: TOOL_VERSION_TIMEOUT_MS,
+    })
     const authenticated = await providerAuthentication(provider)
     return { available: true, detail: output.trim().split('\n')[0] || 'Installed', authenticated }
   } catch {

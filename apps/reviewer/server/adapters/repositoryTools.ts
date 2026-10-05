@@ -1,3 +1,9 @@
+import {
+  MAX_FILE_BYTES,
+  MAX_SOURCE_CACHE_BYTES,
+  SOURCE_SEARCH_TIMEOUT_MS,
+  MAX_SOURCE_READ_LINES,
+} from '../limits'
 import express from 'express'
 import { randomBytes } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
@@ -34,7 +40,7 @@ const schemas = {
     .object({
       path: pathSchema,
       startLine: z.number().int().positive().default(1),
-      lines: z.number().int().min(1).max(500).default(200),
+      lines: z.number().int().min(1).max(MAX_SOURCE_READ_LINES).default(200),
     })
     .strict(),
   search_text: z
@@ -86,7 +92,7 @@ export async function startRepositoryTools(
     if (!lease.workspace.paths.has(path))
       throw new Error('This path is not a regular file in the reviewed commit.')
     const target = workspacePath(lease.workspace.directory, path)
-    if ((await stat(target)).size > 512 * 1024)
+    if ((await stat(target)).size > MAX_FILE_BYTES)
       throw new Error('File inspection supports text files up to 512 KiB.')
     const text = await readFile(target, 'utf8')
     if (text.includes('\0')) throw new Error('Binary files cannot be inspected as text.')
@@ -124,8 +130,8 @@ export async function startRepositoryTools(
       for (const path of paths.filter((path) => path.startsWith(prefix))) {
         if (
           matches.length >= 200 ||
-          scannedBytes >= 32 * 1024 * 1024 ||
-          Date.now() - started > 10_000 ||
+          scannedBytes >= MAX_SOURCE_CACHE_BYTES ||
+          Date.now() - started > SOURCE_SEARCH_TIMEOUT_MS ||
           closed
         ) {
           truncated = true

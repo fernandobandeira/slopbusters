@@ -7,6 +7,11 @@ on:
       - 'apps/desktop/**'
       - 'scripts/write-distribution-notices.mjs'
       - 'scripts/reviewer-license-inventory.mjs'
+      - 'scripts/audit-*'
+      - 'scripts/check-staged-reviewer.mjs'
+      - '.npmrc'
+      - '.tool-versions'
+      - '.githooks/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -19,6 +24,11 @@ on:
       - 'apps/desktop/**'
       - 'scripts/write-distribution-notices.mjs'
       - 'scripts/reviewer-license-inventory.mjs'
+      - 'scripts/audit-*'
+      - 'scripts/check-staged-reviewer.mjs'
+      - '.npmrc'
+      - '.tool-versions'
+      - '.githooks/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -41,7 +51,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit
+      - run: pnpm audit:check
       - run: pnpm dedupe:check
       - run: pnpm licenses:check
       - run: pnpm lint

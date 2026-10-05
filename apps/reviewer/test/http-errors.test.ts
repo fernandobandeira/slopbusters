@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { startReviewerServer } from '../server/app'
+import { z } from 'zod'
 import { UserError } from '../server/errors'
 import type { GitHub } from '../server/adapters/github'
 
@@ -55,6 +56,16 @@ describe('HTTP error boundary', () => {
           })
         ).status,
       ).toBe(400)
+    })
+  })
+
+  it('treats upstream schema failures as server errors', async () => {
+    const invalid = z.object({ token: z.string() }).safeParse({ token: 123 })
+    if (invalid.success) throw new Error('Expected the fixture to be invalid')
+    await withServer(invalid.error, async (url) => {
+      const response = await fetch(`${url}/api/repositories`)
+      expect(response.status).toBe(500)
+      expect(await response.json()).toEqual({ error: 'Something went wrong. Please retry.' })
     })
   })
 

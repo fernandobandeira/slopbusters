@@ -1,3 +1,9 @@
+import {
+  MAX_SYMBOL_SOURCE_CHARS,
+  SYNTAX_TIMEOUT_MICROS,
+  MAX_SYNTAX_DEPTH,
+  MAX_NAVIGATION_TARGETS,
+} from '../limits'
 import * as TreeSitter from '@vscode/tree-sitter-wasm'
 import type { Node } from '@vscode/tree-sitter-wasm'
 import { createRequire } from 'node:module'
@@ -101,7 +107,7 @@ async function withSyntaxTree<T>(
   read: (root: Node) => T,
 ): Promise<T | undefined> {
   const language = sourceLanguage(path)
-  if (!grammarLanguages.has(language) || content.length > 500_000) return undefined
+  if (!grammarLanguages.has(language) || content.length > MAX_SYMBOL_SOURCE_CHARS) return undefined
   const directory = assetsDirectory()
   initialized ??= Parser.init({ locateFile: (file) => resolve(directory, file) })
   await initialized
@@ -117,7 +123,7 @@ async function withSyntaxTree<T>(
   }
   const parser = new Parser()
   parser.setLanguage(await grammar)
-  parser.setTimeoutMicros(100_000)
+  parser.setTimeoutMicros(SYNTAX_TIMEOUT_MICROS)
   let tree: ReturnType<Parser['parse']> = null
   try {
     tree = parser.parse(content)
@@ -135,7 +141,7 @@ export async function getRevisionSymbols(path: string, content: string): Promise
     (await withSyntaxTree(path, content, (root) => {
       const symbols: SourceSymbol[] = []
       function visit(node: Node, scope: string[], depth: number) {
-        if (depth > 100 || symbols.length >= 400) return
+        if (depth > MAX_SYNTAX_DEPTH || symbols.length >= 400) return
         const kind: SourceSymbol['kind'] | undefined = classNodes.has(node.type)
           ? 'class'
           : functionNodes.has(node.type)
@@ -169,7 +175,7 @@ export async function getSyntaxIdentifierLocations(
   return withSyntaxTree(path, content, (root) => {
     const targets: NavigationTarget[] = []
     function visit(node: Node, depth: number) {
-      if (depth > 100 || targets.length >= 500) return
+      if (depth > MAX_SYNTAX_DEPTH || targets.length >= MAX_NAVIGATION_TARGETS) return
       if (
         node.namedChildCount === 0 &&
         /identifier|name|constant|word/.test(node.type) &&

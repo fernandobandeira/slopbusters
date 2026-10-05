@@ -40,8 +40,39 @@ export function useOrganizeJob(
     [pull.id, onUpdate, setError, setNotice],
   )
 
+  useOrganizationPoll({
+    job,
+    pullId: pull.id,
+    onUpdate,
+    setError,
+    setJob,
+    setOrganizing,
+    setOrganizationFailed,
+  })
+  useEffect(() => {
+    if (grouped || !options.configured || autoStarted.current) return
+    autoStarted.current = true
+    void organize()
+  }, [grouped, options.configured, organize])
+  const cancel = useCallback(async () => {
+    if (job) await call(routes.cancelJob, { params: { id: job } })
+  }, [job])
+  return { job, organizing, organizationFailed, organize, cancel }
+}
+
+function useOrganizationPoll(options: {
+  job?: string
+  pullId: string
+  onUpdate: (pull: PullRequest) => void
+  setError: (message: string) => void
+  setJob: (id: string | undefined) => void
+  setOrganizing: (value: boolean) => void
+  setOrganizationFailed: (value: boolean) => void
+}) {
+  const { job, pullId, onUpdate, setError, setJob, setOrganizing, setOrganizationFailed } = options
   useEffect(() => {
     if (!job) return
+    const jobId = job
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout>
     const fail = (error: unknown) => {
@@ -54,7 +85,7 @@ export function useOrganizeJob(
       try {
         const result = await call(
           routes.getJob,
-          { params: { id: job! } },
+          { params: { id: jobId } },
           { signal: controller.signal },
         )
         if (controller.signal.aborted) return
@@ -65,14 +96,13 @@ export function useOrganizeJob(
         if (result.status === 'complete') {
           const updated = await call(
             routes.getPull,
-            { params: { id: pull.id } },
+            { params: { id: pullId } },
             { signal: controller.signal },
           )
-          if (!controller.signal.aborted) {
-            onUpdate(updated)
-            setJob(undefined)
-            setOrganizing(false)
-          }
+          controller.signal.throwIfAborted()
+          onUpdate(updated)
+          setJob(undefined)
+          setOrganizing(false)
         } else timer = setTimeout(() => void poll(), 1500)
       } catch (error) {
         if (!controller.signal.aborted) fail(error)
@@ -83,14 +113,5 @@ export function useOrganizeJob(
       controller.abort()
       clearTimeout(timer)
     }
-  }, [job, pull.id, onUpdate, setError])
-  useEffect(() => {
-    if (grouped || !options.configured || autoStarted.current) return
-    autoStarted.current = true
-    void organize()
-  }, [grouped, options.configured, organize])
-  const cancel = useCallback(async () => {
-    if (job) await call(routes.cancelJob, { params: { id: job } })
-  }, [job])
-  return { job, organizing, organizationFailed, organize, cancel }
+  }, [job, pullId, onUpdate, setError, setJob, setOrganizing, setOrganizationFailed])
 }

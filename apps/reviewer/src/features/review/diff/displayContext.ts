@@ -1,5 +1,10 @@
 import type { PullFileContent } from '../../../../shared/domain/fileContent'
-import { LineKind, type ChangedFile, type Hunk, type PullRequest } from '../../../../shared/domain/types'
+import {
+  LineKind,
+  type ChangedFile,
+  type Hunk,
+  type PullRequest,
+} from '../../../../shared/domain/types'
 
 export const CONTEXT_STEP = 20
 export const MAX_CONTEXT = 200

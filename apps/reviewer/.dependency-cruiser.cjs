@@ -1,12 +1,8 @@
-const features = [
-  'inbox',
-  'review',
-  'source-navigation',
-  'pull-status',
-  'stacks',
-  'linus',
-  'settings',
-]
+const { readdirSync } = require('node:fs')
+const { join } = require('node:path')
+const features = readdirSync(join(__dirname, 'src/features'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
 module.exports = {
   forbidden: [
     { name: 'no-circular', severity: 'error', from: {}, to: { circular: true } },

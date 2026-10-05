@@ -30,7 +30,8 @@ export async function listen(
       closing ??= new Promise<void>((resolve, reject) => {
         server.close((error) => {
           void services.close().then(() => {
-            error ? reject(error) : resolve()
+            if (error) reject(error)
+            else resolve()
           }, reject)
         })
         server.closeIdleConnections()

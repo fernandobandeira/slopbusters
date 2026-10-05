@@ -4,10 +4,27 @@ import DiffsWorker from '../features/review/diff/diff.worker.ts?worker'
 import { createResilientDiffWorker } from '../features/review/diff/resilientDiffWorker'
 import { contextMenuToken } from '../features/review/diff/codeSymbols'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { message } from '../lib/api'
 import { registerReviewFlusher } from '../lib/persistenceLifecycle'
-import { createThemePreferenceWriter, DEFAULT_THEME, getTheme, isThemeId, loadThemePalette, type ThemeId, type ThemeType } from '../lib/themes'
+import {
+  createThemePreferenceWriter,
+  DEFAULT_THEME,
+  getTheme,
+  isThemeId,
+  loadThemePalette,
+  type ThemeId,
+  type ThemeType,
+} from '../lib/themes'
 
 interface ReviewerTheme {
   themeId: ThemeId
@@ -25,7 +42,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [selectionId, setThemeId] = useState<ThemeId>()
   const themeId = selectionId ?? (isThemeId(preferences?.theme) ? preferences.theme : DEFAULT_THEME)
   const [error, setError] = useState<string>()
-  const selectedByUser = useRef(false)
   const latestSelection = useRef<ThemeId | undefined>(undefined)
   const selection = useRef(0)
   const writer = useMemo(() => createThemePreferenceWriter((theme) => save({ theme })), [save])
@@ -62,7 +78,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = useCallback(
     (id: ThemeId) => {
       latestSelection.current = id
-      selectedByUser.current = true
       const current = ++selection.current
       setThemeId(id)
       setError(undefined)

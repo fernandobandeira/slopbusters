@@ -1,7 +1,12 @@
 import { useId, useState, type FormEvent } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { Provider, type AppStatus } from '../../../shared/domain/types'
-import { organizationDefaults, organizationSchema, providerLabel, type OrganizationPreferences } from '../../../shared/domain/preferences'
+import {
+  organizationDefaults,
+  organizationSchema,
+  providerLabel,
+  type OrganizationPreferences,
+} from '../../../shared/domain/preferences'
 import { OpenAI, ClaudeAI } from '~/components/ProviderLogos'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'

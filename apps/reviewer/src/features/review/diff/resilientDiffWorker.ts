@@ -1,4 +1,10 @@
-import type { InitializeWorkerRequest, ResolvedLanguage, SetRenderOptionsWorkerRequest, WorkerRequest, WorkerResponse } from '@pierre/diffs/worker'
+import type {
+  InitializeWorkerRequest,
+  ResolvedLanguage,
+  SetRenderOptionsWorkerRequest,
+  WorkerRequest,
+  WorkerResponse,
+} from '@pierre/diffs/worker'
 import { createDiffWorkerHandler } from './diffWorkerHandler'
 
 /** Preserve the contextual renderer if a browser refuses workers or a worker crashes. */

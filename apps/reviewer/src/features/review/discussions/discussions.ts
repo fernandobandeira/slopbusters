@@ -1,5 +1,12 @@
 import type { CodeViewItem, DiffLineAnnotation } from '@pierre/diffs'
-import { DiffSide, type DraftComment, type PullRequest, type PullDiscussions, type ReviewThread, type ChangeGroup } from '../../../../shared/domain/types'
+import {
+  DiffSide,
+  type DraftComment,
+  type PullRequest,
+  type PullDiscussions,
+  type ReviewThread,
+  type ChangeGroup,
+} from '../../../../shared/domain/types'
 
 export type CommentEditor = Omit<DraftComment, 'body'>
 export interface LineDiscussion {

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useClipboard } from '../../lib/useClipboard'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import Markdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
@@ -55,24 +56,8 @@ function DescriptionCode({
   text: string
   language?: string
 }) {
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
-  useEffect(() => {
-    if (copyState === 'idle') return
-    const timer = setTimeout(() => {
-      setCopyState('idle')
-    }, 2500)
-    return () => {
-      clearTimeout(timer)
-    }
-  }, [copyState])
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopyState('copied')
-    } catch {
-      setCopyState('failed')
-    }
-  }
+  const { state: copyState, copy: copyText } = useClipboard()
+  const copy = () => copyText(text)
   return (
     <div className="description-code-block">
       <div className="description-code-toolbar">

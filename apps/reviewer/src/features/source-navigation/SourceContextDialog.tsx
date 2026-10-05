@@ -2,7 +2,11 @@ import * as routes from '../../../shared/api'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import type { CodeViewHandle } from '@pierre/diffs/react'
-import type { NavigationRequest, NavigationResult, NavigationTarget } from '../../../shared/domain/navigation'
+import type {
+  NavigationRequest,
+  NavigationResult,
+  NavigationTarget,
+} from '../../../shared/domain/navigation'
 import type { PullFileContent } from '../../../shared/domain/fileContent'
 import { DiffSide, type PullRequest } from '../../../shared/domain/types'
 import { Dialog, DialogPopup, DialogHeader, DialogTitle } from '~/components/ui/dialog'
@@ -13,7 +17,12 @@ import { clickedSymbol, type CodeSymbol } from '../review/diff/codeSymbols'
 import { SymbolContextMenu, type SymbolMenuSelection } from './SymbolContextMenu'
 import { SourceNavigationResults } from './SourceNavigationResults'
 import { destinationStyles, highlightDestination } from './sourceDestination'
-import { emptySourceHistory, isCurrentDefinition, navigationOutcome, visitSource } from './sourceNavigationHistory'
+import {
+  emptySourceHistory,
+  isCurrentDefinition,
+  navigationOutcome,
+  visitSource,
+} from './sourceNavigationHistory'
 import type { ReviewWorkspaceInfo } from '../../../shared/domain/workspace'
 import '../../sourceContext.css'
 

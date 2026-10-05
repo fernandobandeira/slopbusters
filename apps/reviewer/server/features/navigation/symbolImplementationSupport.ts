@@ -1,3 +1,4 @@
+import { MAX_SYMBOL_SOURCE_CHARS } from '../../limits'
 import ts from 'typescript'
 
 /** Unknown means resolving imports or another language provider would be required. */
@@ -7,7 +8,7 @@ export function symbolImplementationSupport(
   line: number,
   column: number,
 ): boolean | null {
-  if (!/\.[cm]?[jt]sx?$/i.test(path) || content.length > 500_000) return null
+  if (!/\.[cm]?[jt]sx?$/i.test(path) || content.length > MAX_SYMBOL_SOURCE_CHARS) return null
   const source = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true)
   const start = source.getLineStarts()[line - 1]
   const text = content.split('\n')[line - 1]?.replace(/\r$/, '')
@@ -42,12 +43,7 @@ export function symbolImplementationSupport(
   if (!symbol || symbol.flags & ts.SymbolFlags.Alias) return null
   if (symbol.flags & (ts.SymbolFlags.Interface | ts.SymbolFlags.Class | ts.SymbolFlags.Method))
     return true
-  if (symbol.flags & ts.SymbolFlags.Property)
-    return (
-      symbol.declarations?.some(
-        (node) => ts.isPropertySignature(node) || ts.isPropertyDeclaration(node),
-      ) ?? null
-    )
+  if (symbol.flags & ts.SymbolFlags.Property) return propertyImplementationSupport(symbol)
   if (symbol.flags & ts.SymbolFlags.TypeAlias)
     return implementableType(checker.getDeclaredTypeOfSymbol(symbol))
   return false
@@ -69,4 +65,12 @@ function implementableType(type: ts.Type): boolean | null {
   )
     return null
   return false
+}
+
+function propertyImplementationSupport(symbol: ts.Symbol): boolean | null {
+  return (
+    symbol.declarations?.some(
+      (node) => ts.isPropertySignature(node) || ts.isPropertyDeclaration(node),
+    ) ?? null
+  )
 }

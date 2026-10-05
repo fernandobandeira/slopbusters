@@ -1,3 +1,4 @@
+import { LSP_IDLE_MS, MAX_IDLE_LANGUAGE_SESSIONS } from '../limits'
 import { logError } from '../errors'
 import type { NavigationRequest, NavigationResult } from '../../shared/domain/navigation'
 import type { PullRequest } from '../../shared/domain/types'
@@ -88,11 +89,11 @@ export class LanguageServerNavigation {
       if (!entry.users && !entry.closing) {
         entry.timer = setTimeout(() => {
           void this.retire(key, entry)
-        }, 2 * 60_000)
+        }, LSP_IDLE_MS)
         entry.timer.unref()
       }
       for (const [candidateKey, candidate] of this.entries) {
-        if (this.entries.size <= 3) break
+        if (this.entries.size <= MAX_IDLE_LANGUAGE_SESSIONS) break
         if (!candidate.users) await this.retire(candidateKey, candidate)
       }
     }

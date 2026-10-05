@@ -53,7 +53,7 @@ describe('review submission', () => {
   it.each(Object.values(ReviewEvent))(
     'publishes %s after saving the draft and clears published feedback',
     async (event) => {
-      const fetch = vi.fn(async () => response())
+      const fetch = vi.fn(() => Promise.resolve(response()))
       vi.stubGlobal('fetch', fetch)
       const hook = setup()
       act(() => {
@@ -99,14 +99,13 @@ describe('review submission', () => {
     expect(hook.result.current.draft.summary).toBe('New feedback')
     expect(hook.result.current.submitted).toBeUndefined()
   })
+})
+
+describe('submission failures and confirmation', () => {
   it('keeps feedback and skips publication when saving the draft fails', async () => {
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)
-    const hook = setup(
-      vi.fn(async () => {
-        throw new Error('Save failed')
-      }),
-    )
+    const hook = setup(vi.fn(() => Promise.reject(new Error('Save failed'))))
     await act(() => hook.result.current.submit())
     expect(fetch).not.toHaveBeenCalled()
     expect(hook.result.current.draft).toEqual(draft)
@@ -115,7 +114,7 @@ describe('review submission', () => {
   it('keeps feedback when GitHub rejects the review', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => Response.json({ error: 'Please retry' }, { status: 503 })),
+      vi.fn(() => Promise.resolve(Response.json({ error: 'Please retry' }, { status: 503 }))),
     )
     const hook = setup()
     await act(() => hook.result.current.submit())
@@ -124,11 +123,10 @@ describe('review submission', () => {
     expect(hook.setError).toHaveBeenLastCalledWith(expect.stringContaining('Please retry'))
   })
   it('does not publish twice when saving the cleared draft fails', async () => {
-    const fetch = vi.fn(async () => response())
+    const fetch = vi.fn(() => Promise.resolve(response()))
     vi.stubGlobal('fetch', fetch)
-    const flush = vi.fn(async () => {}).mockRejectedValueOnce(new Error('Save failed'))
-    flush
-      .mockReset()
+    const flush = vi
+      .fn<() => Promise<void>>()
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('Save failed'))
     const hook = setup(flush)

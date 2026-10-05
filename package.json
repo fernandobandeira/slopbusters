@@ -19,8 +19,8 @@
     "desktop:smoke": "pnpm --dir apps/desktop smoke",
     "licenses:reviewer": "node scripts/reviewer-license-inventory.mjs",
     "prepare": "git config core.hooksPath .githooks",
-    "audit": "node scripts/audit-dependencies.mjs",
     "dedupe:check": "pnpm dedupe --check",
-    "licenses:check": "node scripts/reviewer-license-inventory.mjs --check"
+    "licenses:check": "node scripts/reviewer-license-inventory.mjs --check",
+    "audit:check": "node scripts/audit-dependencies.mjs"
   }
 }

@@ -1,4 +1,14 @@
-import { CircleCheck, CircleHelp, CircleX, Clock3, GitMerge, MessageCircle, MessageSquareWarning, UserRoundCheck, Users } from 'lucide-react'
+import {
+  CircleCheck,
+  CircleHelp,
+  CircleX,
+  Clock3,
+  GitMerge,
+  MessageCircle,
+  MessageSquareWarning,
+  UserRoundCheck,
+  Users,
+} from 'lucide-react'
 import type { PullStatus } from '../../../shared/domain/pullStatus'
 import '../../pullStatus.css'
 

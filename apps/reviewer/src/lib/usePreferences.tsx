@@ -15,23 +15,23 @@ const PreferencesContext = createContext<
 >(undefined)
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
-  const query = useApiQuery(routes.getPreferences, {})
+  const { data, error, setData, reload } = useApiQuery(routes.getPreferences, {})
   const save = useCallback(
     async (changes: Preferences) => {
       const result = await call(routes.savePreferences, { body: changes })
-      query.setData(result)
+      setData(result)
       return result
     },
-    [query.setData],
+    [setData],
   )
   const value = useMemo(
     () => ({
-      preferences: query.data,
-      preferencesError: query.error ?? '',
+      preferences: data,
+      preferencesError: error ?? '',
       save,
-      reload: query.reload,
+      reload: reload,
     }),
-    [query.data, query.error, query.reload, save],
+    [data, error, reload, save],
   )
   return <PreferencesContext value={value}>{children}</PreferencesContext>
 }

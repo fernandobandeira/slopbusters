@@ -1,3 +1,4 @@
+import { SOURCE_WORKSPACE_TIMEOUT_MS } from '../limits'
 import { Worker } from 'node:worker_threads'
 import { createRequire } from 'node:module'
 import { dirname } from 'node:path'
@@ -124,7 +125,7 @@ export class WorkspaceTypeScriptNavigation {
         const id = ++this.sequence
         const timer = setTimeout(() => {
           void this.retire(key, current)
-        }, 60_000)
+        }, SOURCE_WORKSPACE_TIMEOUT_MS)
         current.pending.set(id, { resolve, reject, timer })
         current.worker.postMessage({ id, request })
       })

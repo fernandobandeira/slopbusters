@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { runCommand } from '../server/adapters/process'
-import { getAppStatus } from '../server/toolStatus'
+import { getAppStatus } from '../server/adapters/toolStatus'
 
 vi.mock('../server/adapters/process', () => ({ runCommand: vi.fn() }))
 const command = vi.mocked(runCommand)

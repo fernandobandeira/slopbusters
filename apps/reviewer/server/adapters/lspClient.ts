@@ -1,3 +1,4 @@
+import { LSP_INITIALIZE_TIMEOUT_MS, LSP_INDEX_TIMEOUT_MS, LSP_INDEX_POLL_MS } from '../limits'
 import { MAX_NAVIGATION_TARGETS } from '../limits'
 import { spawn } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -345,7 +346,7 @@ export async function startLanguageServer(
         },
         initializationOptions: settings,
       },
-      45_000,
+      LSP_INITIALIZE_TIMEOUT_MS,
     )
     const capabilities = initialize.capabilities
     if (capabilities.definitionProvider) providers.add('textDocument/definition')
@@ -399,7 +400,7 @@ export async function startLanguageServer(
               new Promise<never>((_resolve, reject) => {
                 timer = setTimeout(() => {
                   reject(new Error('Rust project loading timed out.'))
-                }, 45_000)
+                }, LSP_INITIALIZE_TIMEOUT_MS)
               }),
             ])
           } finally {
@@ -412,7 +413,7 @@ export async function startLanguageServer(
         if (!providers.has(method))
           throw new Error(`The installed ${server.command} does not support ${request.kind}.`)
         const warnings = new Set(workspace.warnings)
-        const deadline = Date.now() + 25_000
+        const deadline = Date.now() + LSP_INDEX_TIMEOUT_MS
         let value: unknown
         while (true) {
           try {
@@ -431,7 +432,7 @@ export async function startLanguageServer(
               Date.now() >= deadline
             )
               throw error
-            await new Promise((resolve) => setTimeout(resolve, 150))
+            await new Promise((resolve) => setTimeout(resolve, LSP_INDEX_POLL_MS))
           }
         }
         return {

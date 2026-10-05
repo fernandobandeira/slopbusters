@@ -1,6 +1,7 @@
+import { sourceIdentitySchema } from '../../shared/domain/sourceIdentity'
+import { MAX_SOURCE_TREE_CACHE_ENTRIES } from '../limits'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { z } from 'zod'
 import { createCache } from '../cache'
 import { UserError } from '../errors'
 import { hardenedGit } from './git'
@@ -18,17 +19,8 @@ interface GitTree {
   tree: GitEntry[]
 }
 
-const name = z
-  .string()
-  .max(100)
-  .regex(/^[\w.-]+$/)
-  .refine((value) => value !== '.' && value !== '..')
-const commit = z.string().regex(/^[a-f\d]{40}(?:[a-f\d]{24})?$/i)
-
 export function validateSourceIdentity(owner: string, repo: string, sha: string) {
-  name.parse(owner)
-  name.parse(repo)
-  commit.parse(sha)
+  sourceIdentitySchema.parse({ owner, repo, sha })
 }
 
 /** Bare, shallow snapshots share objects across PRs without checking out or running repository files. */
@@ -36,7 +28,9 @@ export class LocalSourceRepository {
   private readonly controller = new AbortController()
   private readonly repositories = new Map<string, Promise<void>>()
   private readonly queues = new Map<string, Promise<void>>()
-  private readonly trees = createCache<{ tree: GitTree; directory: string }>({ max: 20 })
+  private readonly trees = createCache<{ tree: GitTree; directory: string }>({
+    max: MAX_SOURCE_TREE_CACHE_ENTRIES,
+  })
 
   constructor(
     private readonly dataDirectory: string,

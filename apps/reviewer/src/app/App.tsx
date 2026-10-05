@@ -1,3 +1,8 @@
+import type { Repository } from '../../shared/domain/types'
+import { BobCompanion } from '../features/bob/BobCompanion'
+import { AppSidebar } from './AppSidebar'
+import { InboxPullActions } from './InboxPullActions'
+import { useApiQuery } from '../lib/useApiQuery'
 import { usePullReview } from '../features/review/usePullReview'
 import { InboxPage } from '../features/inbox/InboxPage'
 import { usePreferences } from '../lib/usePreferences'
@@ -7,37 +12,43 @@ import { useCallback, useEffect, useState } from 'react'
 import { UpdateButton } from '../components/UpdateButton'
 import { AppTitleBar } from './AppTitleBar'
 import { RepositorySwitcher } from '../features/inbox/RepositorySwitcher'
-import { loadRepositoryHistory, saveRepositoryHistory, visitRepository } from '../features/inbox/repositoryHistory'
+import {
+  loadRepositoryHistory,
+  saveRepositoryHistory,
+  visitRepository,
+} from '../features/inbox/repositoryHistory'
 import { Link, Routes, Route, useLocation, useNavigate } from 'react-router'
 import { inboxPath, readRoute, reviewPath } from '../lib/routes'
-import { GitPullRequest, LoaderCircle, Plus, Settings } from 'lucide-react'
+import { LoaderCircle } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 
 import { Input } from '~/components/ui/input'
-import { Dialog, DialogPopup, DialogHeader, DialogTitle, DialogDescription } from '~/components/ui/dialog'
-import { call, message } from '../lib/api'
-import { inboxPulls, inboxFilters as filters } from '../features/inbox/inbox'
+import {
+  Dialog,
+  DialogPopup,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '~/components/ui/dialog'
+import { message } from '../lib/api'
+import { inboxPulls } from '../features/inbox/inbox'
 import { ReviewWorkspace } from '../features/review/ReviewWorkspace'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { OrganizationSettings } from '../features/settings/OrganizationSettings'
 
-import { StackBadge } from '../features/stacks/StackBadge'
 import { StackDialog } from '../features/stacks/StackPanel'
 import { PullStatusDialog } from '../features/pull-status/PullStatusDialog'
-import { PullStatusIcons, type PullStatusSection } from '../features/pull-status/PullStatusIcons'
+import { type PullStatusSection } from '../features/pull-status/PullStatusIcons'
 
-import { ConnectionStatus } from '../components/ConnectionStatus'
-import { BobCompanion } from '../features/bob/BobCompanion'
 import { LinusCompanion } from '../features/linus/LinusCompanion'
-import { LinusRecommendationBadge } from '../features/linus/LinusRecommendationBadge'
+
 import { useLinusRecommendations } from '../features/linus/useLinusRecommendations'
 import type { LinusReplayRequest } from '../../shared/domain/linus'
-import type { AppStatus, Repository } from '../../shared/domain/types'
+
+const emptyRepositories: Repository[] = []
 
 export function App() {
   const [titlebarTarget, setTitlebarTarget] = useState<HTMLDivElement | null>(null)
-  const [status, setStatus] = useState<AppStatus>()
-  const [repositories, setRepositories] = useState<Repository[]>([])
   const location = useLocation()
   const navigate = useNavigate()
   const route = readRoute(location)
@@ -58,6 +69,10 @@ export function App() {
   const [statusTarget, setStatusTarget] = useState<{ url: string; section?: PullStatusSection }>()
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const statusQuery = useApiQuery(routes.getStatus, {}, { refresh })
+  const repositoryQuery = useApiQuery(routes.getRepositories, {}, { refresh })
+  const status = statusQuery.data
+  const repositories = repositoryQuery.data?.repositories ?? emptyRepositories
   const [linusSelection, setLinusSelection] = useState<{ repository: string; urls: string[] }>()
   const [linusRefresh, setLinusRefresh] = useState(0)
   const [linusReplay, setLinusReplay] = useState<LinusReplayRequest & { repository: string }>()
@@ -91,35 +106,14 @@ export function App() {
     refresh,
     enabled: route.kind === 'inbox',
   })
-  const displayError = error || inboxError || pullError
+  const displayError =
+    error || inboxError || pullError || statusQuery.error || repositoryQuery.error
   useEffect(() => {
     const initialRepository = repository || repositories[0]?.fullName
     if (location.pathname === '/' && initialRepository) {
       void navigate(inboxPath(initialRepository, filter), { replace: true })
     }
   }, [location.pathname, repository, repositories, filter, navigate])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void call(routes.getStatus, {}, { signal: controller.signal })
-      .then((result) => {
-        if (!controller.signal.aborted) setStatus(result)
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) setError(message(error))
-      })
-    void call(routes.getRepositories, {}, { signal: controller.signal })
-      .then((result) => {
-        if (controller.signal.aborted) return
-        setRepositories(result.repositories)
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) setError(message(error))
-      })
-    return () => {
-      controller.abort()
-    }
-  }, [refresh])
 
   useEffect(() => {
     saveRepositoryHistory(recentRepositories)
@@ -154,49 +148,20 @@ export function App() {
       }}
       onFilter={(next) => void navigate(inboxPath(repository, next))}
       renderPullActions={(pr) => (
-        <>
-          {recommendations.has(pr.url) && (
-            <LinusRecommendationBadge
-              recommendation={recommendations.get(pr.url)!}
-              headSha={pr.headSha}
-              onOpen={() => {
-                const recommendation = recommendations.get(pr.url)!
-                setLinusSelection(undefined)
-                setLinusReplay({
-                  repository,
-                  sessionId: recommendation.sessionId,
-                  url: pr.url,
-                })
-              }}
-            />
-          )}
-          {pr.stack && (
-            <StackBadge
-              summary={pr.stack}
-              onClick={() => {
-                setStackTarget({ url: pr.url, number: pr.number })
-              }}
-            />
-          )}
-          {pr.status ? (
-            <PullStatusIcons
-              status={pr.status}
-              onSelect={(section) => {
-                setStatusTarget({ url: pr.url, section })
-              }}
-            />
-          ) : (
-            <Button
-              size="xs"
-              variant="ghost"
-              onClick={() => {
-                setStatusTarget({ url: pr.url })
-              }}
-            >
-              Checks and reviews
-            </Button>
-          )}
-        </>
+        <InboxPullActions
+          pull={pr}
+          recommendation={recommendations.get(pr.url)}
+          onReplay={(recommendation) => {
+            setLinusSelection(undefined)
+            setLinusReplay({ repository, sessionId: recommendation.sessionId, url: pr.url })
+          }}
+          onStack={() => {
+            setStackTarget({ url: pr.url, number: pr.number })
+          }}
+          onStatus={(section) => {
+            setStatusTarget({ url: pr.url, section })
+          }}
+        />
       )}
     />
   )
@@ -247,42 +212,19 @@ export function App() {
       </AppTitleBar>
       <div className="app-shell">
         {route.kind !== 'pull' && (
-          <aside className="app-sidebar">
-            <div className="sidebar-label">PULL REQUESTS</div>
-            <nav aria-label="Pull request inbox">
-              {filters.map((item) => (
-                <button
-                  key={item.id}
-                  className={`nav-row ${filter === item.id && route.kind === 'inbox' ? 'active' : ''}`}
-                  onClick={() => void navigate(inboxPath(repository, item.id))}
-                >
-                  <GitPullRequest size={15} />
-                  <span>{item.label}</span>
-                  <span className="count">{inbox ? inboxPulls(inbox, item.id).length : '—'}</span>
-                </button>
-              ))}
-            </nav>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="open-url"
-              onClick={() => {
-                setUrlDialog(true)
-              }}
-            >
-              <Plus size={14} />
-              Open PR by URL
-            </Button>
-            <div className="sidebar-bottom">
-              <Link
-                className={`nav-row ${route.kind === 'settings' ? 'active' : ''}`}
-                to="/settings"
-              >
-                <Settings size={15} /> Settings
-              </Link>
-              <ConnectionStatus status={status} />
-            </div>
-          </aside>
+          <AppSidebar
+            filter={filter}
+            inbox={inbox}
+            status={status}
+            settings={route.kind === 'settings'}
+            inboxPage={route.kind === 'inbox'}
+            onFilter={(next) => {
+              void navigate(inboxPath(repository, next))
+            }}
+            onOpenUrl={() => {
+              setUrlDialog(true)
+            }}
+          />
         )}
         <main className="app-main">
           {preferencesError && (

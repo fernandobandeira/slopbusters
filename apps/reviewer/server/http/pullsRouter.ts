@@ -2,15 +2,15 @@ import { Router } from 'express'
 import { z } from 'zod'
 import * as routes from '../../shared/api/pulls'
 import { fetchDiscussions, replyToThread } from '../features/pulls/discussions'
-import { getAppStatus } from '../toolStatus'
+import { getAppStatus } from '../adapters/toolStatus'
 import { ReviewNotFoundError } from '../adapters/store'
-import { logError } from '../errors'
+import { UserError, logError } from '../errors'
 import type { Services } from '../services'
 import { handle } from './contractRouter'
 
 export function pullsRouter(services: Services) {
   const router = Router()
-  const { store, pulls, statuses, stacks, checkRevision, organizationJobs, github } = services
+  const { store, pulls, statuses, stacks, checkRevision, github } = services
   handle(router, routes.getStatus, () => getAppStatus(github))
   handle(router, routes.getRepositories, () => pulls.listRepositories())
   handle(router, routes.getInbox, ({ query }) => pulls.getInbox(query.repository))
@@ -59,19 +59,25 @@ export function pullsRouter(services: Services) {
     stacks.getStackForPull(query.url, { refresh: query.refresh === '1' }),
   )
   handle(router, routes.getPullRevision, ({ params }) => checkRevision(store.getPull(params.id)))
+  registerReviewRoutes(router, services)
+  return router
+}
+
+function registerReviewRoutes(router: Router, services: Services) {
+  const { store, pulls, organizationJobs, github } = services
   handle(router, routes.getDraft, ({ params }) => store.getDraft(params.id))
   handle(router, routes.saveDraft, ({ params, body }, request) => {
     const writerId = request.get('X-Review-Writer')
     const sequence = request.get('X-Review-Sequence')
-    const write =
-      writerId == null && sequence == null
-        ? undefined
-        : z
-            .object({
-              writerId: z.string().min(1).max(100),
-              sequence: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
-            })
-            .parse({ writerId, sequence })
+    const parsed = z
+      .object({
+        writerId: z.string().min(1).max(100),
+        sequence: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+      })
+      .safeParse({ writerId, sequence })
+    const hasMetadata = writerId != null || sequence != null
+    if (hasMetadata && !parsed.success) throw new UserError('The draft writer metadata is invalid.')
+    const write = parsed.success ? parsed.data : undefined
     return store.saveDraft(params.id, body, write)
   })
   handle(router, routes.getThreads, ({ params }) =>

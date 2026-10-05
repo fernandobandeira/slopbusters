@@ -30,10 +30,11 @@ async function verifyContextRenderer(window) {
       const url=new URL(typeof input==='string'?input:input.url,location.href);
       if(url.pathname==='/api/pulls/'+pull.id)return Response.json(pull);
       if(url.pathname==='/api/pulls/'+pull.id+'/draft')return Response.json({draft,exists:false});
-      if(url.pathname==='/api/pulls/'+pull.id+'/threads')return Response.json({threads:[]});
+      if(url.pathname==='/api/pulls/'+pull.id+'/threads')return Response.json({headSha:pull.headSha,baseSha:pull.baseSha,threads:[]});
       if(url.pathname==='/api/pulls/'+pull.id+'/files/example-file/content'){contentRequests++;return Response.json({fileId:'example-file',old:{...source,sha:pull.baseSha,content:oldLines.join('\n')+'\n'},new:source});}
       if(url.pathname==='/api/pulls/'+pull.id+'/source-tree')return Response.json({sha,paths:[source.path,'src/related.ts'],warnings:[]});
       if(url.pathname==='/api/pulls/'+pull.id+'/source-file'){sourceRequests++;return Response.json(url.searchParams.get('path')==='src/related.ts'?{path:'src/related.ts',sha,content:'export function related() { return 42 }\n',symbols:[{name:'related',kind:'function',line:1,endLine:1}]}:source);}
+      if(url.pathname==='/api/pulls/'+pull.id+'/symbol-actions')return Response.json({implementation:true});
       if(url.pathname==='/api/pulls/'+pull.id+'/navigation'){navigationRequests.push(JSON.parse(init.body));return Response.json({language:'typescript',mode:'semantic',targets:noLocations?[]:[{path:'src/related.ts',line:1,column:17,endLine:1,endColumn:24,name:'related'}],warnings:[]});}
       if(url.pathname.startsWith('/api/pulls/'+pull.id+'/') || url.pathname==='/api/stack' || url.pathname==='/api/inbox' || url.pathname==='/api/inbox-status')return Response.json({error:'Synthetic fixture metadata unavailable'},{status:400});
       return originalFetch(input,init);
@@ -65,7 +66,7 @@ async function verifyContextRenderer(window) {
       const diffToken = await wait(() => roots(view).flatMap(root=>[...root.querySelectorAll('[data-char]')]).find(node=>node.textContent.trim()==='inspect'), 'Diff identifier tokens unavailable');
       rightClick(diffToken);
       await wait(() => menuItem('Show references'), 'Diff symbol menu did not open');
-      if(!menuItem('Go to definition') || !menuItem('Go to implementations'))throw new Error('Diff symbol menu actions unavailable');
+      await wait(() => menuItem('Go to definition') && menuItem('Show implementations'), 'Diff symbol menu actions unavailable');
       menuItem('Show references').click();
       const panel=await wait(() => document.querySelector('.source-context-dialog'), 'Source panel did not open');
       await wait(() => navigationRequests.some(request=>request.kind==='references' && request.path===source.path && request.line===40), 'Diff references did not use the clicked source position');
@@ -104,8 +105,8 @@ async function verifyContextRenderer(window) {
       await wait(() => !panel.querySelector('.source-context-navigation[role="status"]'), 'Reference lookup did not finish');
       const implementationToken=await wait(() => roots(panel).flatMap(root=>[...root.querySelectorAll('[data-char]')]).find(node=>node.textContent.trim()==='related'), 'Implementation identifier tokens unavailable');
       rightClick(implementationToken);
-      await wait(() => menuItem('Go to implementations'), 'Implementation menu did not open');
-      menuItem('Go to implementations').click();
+      await wait(() => menuItem('Show implementations'), 'Implementation menu did not open');
+      menuItem('Show implementations').click();
       await wait(() => navigationRequests.some(request=>request.kind==='implementation'), 'Implementation request did not use selected source token');
       await wait(() => !panel.querySelector('.source-context-navigation[role="status"]'), 'Implementation lookup did not finish');
       if(navigationRequests[0].column<1 || navigationRequests[0].side!=='RIGHT')throw new Error('Source navigation coordinate or revision incorrect');

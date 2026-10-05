@@ -5,13 +5,13 @@ import { call, message } from '../../../lib/api'
 import { useApiQuery } from '../../../lib/useApiQuery'
 
 export function useDiscussions(pullId: string, setNotice: (notice: string) => void) {
-  const query = useApiQuery(routes.getThreads, { params: { id: pullId } })
+  const { data, error, setData } = useApiQuery(routes.getThreads, { params: { id: pullId } })
   const [refreshError, setRefreshError] = useState('')
   const refreshDiscussions = useCallback(async () => {
     const value = await call(routes.getThreads, { params: { id: pullId } })
-    query.setData(value)
+    setData(value)
     setRefreshError('')
-  }, [pullId, query.setData])
+  }, [pullId, setData])
   const postReply = useCallback(
     async (thread: ReviewThread, body: string) => {
       await call(routes.replyToThread, {
@@ -26,8 +26,8 @@ export function useDiscussions(pullId: string, setNotice: (notice: string) => vo
     [pullId, refreshDiscussions, setNotice],
   )
   return {
-    discussions: query.data,
-    discussionError: refreshError || query.error || '',
+    discussions: data,
+    discussionError: refreshError || error || '',
     refreshDiscussions,
     postReply,
     setDiscussionError: setRefreshError,

@@ -1,10 +1,11 @@
+import { MAX_REVISION_CACHE_ENTRIES } from '../../limits'
 import { z } from 'zod'
 import type { PullRequest } from '../../../shared/domain/types'
 import type { GitHub } from '../../adapters/github'
 import { createCache } from '../../cache'
 
 export function createMergeBaseLookup(github: GitHub) {
-  const cache = createCache<string>({ max: 100 })
+  const cache = createCache<string>({ max: MAX_REVISION_CACHE_ENTRIES })
   const sha = z.string().regex(/^[a-f\d]{40}(?:[a-f\d]{24})?$/i)
   return (pull: Pick<PullRequest, 'owner' | 'repo' | 'baseSha' | 'headSha' | 'mergeBaseSha'>) => {
     if (pull.mergeBaseSha) return Promise.resolve(sha.parse(pull.mergeBaseSha))

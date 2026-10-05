@@ -57,7 +57,7 @@ jobs:
           JS
           git merge-base --is-ancestor HEAD origin/main
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit
+      - run: pnpm audit:check
       - run: pnpm dedupe:check
       - run: pnpm licenses:check
       - run: pnpm lint

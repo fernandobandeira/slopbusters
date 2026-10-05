@@ -1,3 +1,4 @@
+import { MAX_WORKSPACE_STATUS_OUTPUT_BYTES } from '../limits'
 import { mkdir, mkdtemp, readdir, realpath, rename, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PullRequest } from '../../shared/domain/types'
@@ -5,7 +6,7 @@ import type { LocalReviewCheckout, ReviewWorkspaceInfo } from '../../shared/doma
 import { hardenedGit } from './git'
 import { validateSourceIdentity, type LocalSourceRepository } from './sourceRepository'
 import { UserError, publicError } from '../errors'
-import { workspacePath } from './sourceWorkspace'
+import { workspacePath } from './workspacePath'
 
 export interface ReviewWorkspace {
   directory: string
@@ -95,7 +96,7 @@ export class ReviewWorkspaces {
     const changes = await this.git(
       directory,
       ['status', '--porcelain', '--untracked-files=all'],
-      1024 * 1024,
+      MAX_WORKSPACE_STATUS_OUTPUT_BYTES,
     )
     if (changes.trim())
       throw new UserError(

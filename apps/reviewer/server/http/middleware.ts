@@ -1,5 +1,4 @@
 import type { RequestHandler, ErrorRequestHandler } from 'express'
-import { z } from 'zod'
 import { UserError, logError } from '../errors'
 
 export function localOnly(ownOrigin: () => string, allowedOrigins: string[] = []): RequestHandler {
@@ -37,10 +36,7 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, _request, resp
     response.status(error.status).json({ error: error.message })
     return
   }
-  if (
-    error instanceof z.ZodError ||
-    (error instanceof SyntaxError && 'status' in error && error.status === 400)
-  ) {
+  if (error instanceof SyntaxError && 'status' in error && error.status === 400) {
     response.status(400).json({ error: 'The request contained invalid data.' })
     return
   }

@@ -1,3 +1,5 @@
+import { MAX_REPOSITORY_CACHE_ENTRIES } from '../../limits'
+import { MAX_PULL_STATUS_CACHE_ENTRIES } from '../../limits'
 import { z } from 'zod'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import {
@@ -298,18 +300,7 @@ export function normalizePullStatus(value: unknown, defaultBranch: unknown = nul
 }
 
 function data(value: unknown): Record<string, unknown> {
-  const response = z
-    .object({
-      data: z.record(z.string(), z.unknown()).nullable().optional(),
-      errors: z.array(z.object({ message: z.string() })).optional(),
-    })
-    .parse(value)
-  if (response.errors?.length || !response.data)
-    throw new Error(
-      response.errors?.map((error) => error.message).join('; ') ??
-        'GitHub status metadata is unavailable.',
-    )
-  return response.data
+  return z.object({ data: z.record(z.string(), z.unknown()) }).parse(value).data
 }
 const inboxStatusSchema = statusSchema
   .omit({ baseRef: true, commits: true, latestReviews: true, reviewRequests: true })
@@ -348,8 +339,14 @@ function normalizeInboxStatus(value: unknown): PullStatus {
 
 export function createPullStatusService(github: GitHub = createGitHub()) {
   const graphql = github.graphql
-  const cached = createCache<PullStatus>({ max: 1000, ttlMs: STATUS_TTL_MS })
-  const inboxCache = createCache<Map<number, PullStatus>>({ max: 30, ttlMs: INBOX_TTL_MS })
+  const cached = createCache<PullStatus>({
+    max: MAX_PULL_STATUS_CACHE_ENTRIES,
+    ttlMs: STATUS_TTL_MS,
+  })
+  const inboxCache = createCache<Map<number, PullStatus>>({
+    max: MAX_REPOSITORY_CACHE_ENTRIES,
+    ttlMs: INBOX_TTL_MS,
+  })
   function remember(repository: string, number: number, status: PullStatus) {
     cached.set(`${repository.toLowerCase()}#${number}`, status)
   }

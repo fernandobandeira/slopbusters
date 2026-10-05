@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { NavigateFunction } from 'react-router'
 import type { PullRequest } from '../../../shared/domain/types'
 import * as routes from '../../../shared/api'
@@ -17,7 +17,6 @@ export function usePullReview(
     error?: string
   }>()
   const pullCache = useRef(new Map<string, PullRequest>())
-  const [reloading, setReloading] = useState(false)
   const pullUrl =
     route.kind === 'pull' ? `https://github.com/${route.repository}/pull/${route.number}` : ''
   const revision = route.kind === 'pull' ? route.revision : undefined
@@ -29,26 +28,13 @@ export function usePullReview(
     const controller = new AbortController()
     const fromGitHub = () =>
       call(routes.loadPull, { body: { url: pullUrl } }, { signal: controller.signal })
-    const cached = revision ? pullCache.current.get(pullKey) : undefined
-    let load: Promise<PullRequest>
-    if (cached) load = Promise.resolve(cached)
-    else if (revision) {
-      load = call(routes.getPull, { params: { id: revision } }, { signal: controller.signal })
-        .then((pr) => {
-          if (
-            !routeMatchesPull(
-              readRoute({ pathname: window.location.pathname, search: window.location.search }),
-              pr,
-            )
-          )
-            throw new Error('This snapshot belongs to another PR.')
-          return pr
-        })
-        .catch((error) => {
-          if (controller.signal.aborted) throw error
-          return fromGitHub()
-        })
-    } else load = fromGitHub()
+    const load = loadSnapshot({
+      revision,
+      pullKey,
+      pullCache: pullCache.current,
+      fromGitHub,
+      signal: controller.signal,
+    })
     void load
       .then((pr) => {
         if (controller.signal.aborted) return
@@ -64,7 +50,7 @@ export function usePullReview(
           )
         }
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (!controller.signal.aborted) setPullResult({ key: pullKey, error: message(error) })
       })
     return () => {
@@ -80,6 +66,37 @@ export function usePullReview(
     [pullKey],
   )
 
+  const { reloadPull, reloading } = useReloadPull({
+    pull,
+    revision,
+    pathname,
+    navigate,
+    updatePull,
+    pullCache,
+    setError,
+  })
+
+  return {
+    pull,
+    loading,
+    pullError: pullResult?.key === pullKey ? pullResult.error : undefined,
+    updatePull,
+    reloadPull,
+    reloading,
+  }
+}
+
+function useReloadPull(options: {
+  pull?: PullRequest
+  revision?: string
+  pathname: string
+  navigate: NavigateFunction
+  updatePull: (pull: PullRequest) => void
+  pullCache: RefObject<Map<string, PullRequest>>
+  setError: (message: string) => void
+}) {
+  const { pull, revision, pathname, navigate, updatePull, pullCache, setError } = options
+  const [reloading, setReloading] = useState(false)
   async function reloadPull() {
     if (!pull) return
     const stillViewingSnapshot = () => {
@@ -112,12 +129,36 @@ export function usePullReview(
     }
   }
 
-  return {
-    pull,
-    loading,
-    pullError: pullResult?.key === pullKey ? pullResult.error : undefined,
-    updatePull,
-    reloadPull,
-    reloading,
-  }
+  return { reloadPull, reloading }
+}
+
+function loadSnapshot(options: {
+  revision?: string
+  pullKey: string
+  pullCache: Map<string, PullRequest>
+  fromGitHub: () => Promise<PullRequest>
+  signal: AbortSignal
+}) {
+  const { revision, pullKey, pullCache, fromGitHub, signal } = options
+  const cached = revision ? pullCache.get(pullKey) : undefined
+  let load: Promise<PullRequest>
+  if (cached) load = Promise.resolve(cached)
+  else if (revision) {
+    load = call(routes.getPull, { params: { id: revision } }, { signal: signal })
+      .then((pr) => {
+        if (
+          !routeMatchesPull(
+            readRoute({ pathname: window.location.pathname, search: window.location.search }),
+            pr,
+          )
+        )
+          throw new Error('This snapshot belongs to another PR.')
+        return pr
+      })
+      .catch((error: unknown) => {
+        if (signal.aborted) throw error
+        return fromGitHub()
+      })
+  } else load = fromGitHub()
+  return load
 }

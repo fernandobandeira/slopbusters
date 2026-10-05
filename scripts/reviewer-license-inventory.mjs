@@ -21,6 +21,20 @@ const packages = Object.entries(report)
   )
   .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))
 
+const allowedLicenses = new Set([
+  'MIT', 'Apache-2.0', 'apache-2.0', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause',
+  '0BSD', 'Python-2.0', 'CC-BY-4.0', 'BlueOak-1.0.0', 'MPL-2.0',
+  'WTFPL', 'WTFPL OR ISC', '(WTFPL OR MIT)', '(MIT OR CC0-1.0)',
+])
+const forbidden = packages.filter((entry) => !allowedLicenses.has(entry.license))
+if (forbidden.length) {
+  throw new Error(`Unapproved dependency licenses: ${forbidden.map((entry) => `${entry.name}: ${entry.license}`).join(', ')}`)
+}
+if (process.argv.includes('--check')) {
+  console.log(`Checked approved licenses for ${packages.length} installed dependency entries.`)
+  process.exit(0)
+}
+
 mkdirSync(new URL('../docs/', import.meta.url), { recursive: true })
 writeFileSync(
   new URL('../docs/reviewer-dependency-licenses.json', import.meta.url),

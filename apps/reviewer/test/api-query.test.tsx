@@ -20,7 +20,7 @@ it('aborts a replaced request and ignores its late result', async () => {
   const fetch = vi
     .fn((_url: string, _options?: RequestInit) => oldResponse)
     .mockImplementationOnce(() => oldResponse)
-    .mockImplementationOnce(async () => Response.json({ name: 'Current' }))
+    .mockImplementationOnce(() => Promise.resolve(Response.json({ name: 'Current' })))
   vi.stubGlobal('fetch', fetch)
   const hook = renderHook(({ id }) => useApiQuery(route, { params: { id } }), {
     initialProps: { id: 'old' },

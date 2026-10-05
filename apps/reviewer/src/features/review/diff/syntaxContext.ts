@@ -1,4 +1,11 @@
-import { cleanLastNewline, renderDiffWithHighlighter, type CodeToHastOptions, type DiffsHighlighter, type FileDiffMetadata, type RenderDiffOptions } from '@pierre/diffs'
+import {
+  cleanLastNewline,
+  renderDiffWithHighlighter,
+  type CodeToHastOptions,
+  type DiffsHighlighter,
+  type FileDiffMetadata,
+  type RenderDiffOptions,
+} from '@pierre/diffs'
 import type { PullFileContent } from '../../../../shared/domain/fileContent'
 
 export interface ContextualFileDiff extends FileDiffMetadata {

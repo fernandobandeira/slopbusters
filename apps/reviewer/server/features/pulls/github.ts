@@ -1,3 +1,4 @@
+import { MAX_DIFF_SEED_CHARS } from '../../limits'
 import { createHash } from 'node:crypto'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import { z } from 'zod'
@@ -174,7 +175,7 @@ export function createPullService(
                 headers: ['Accept: application/vnd.github.raw+json'],
               }),
             )
-            if (content.length <= 150_000) file.oldContent = content
+            if (content.length <= MAX_DIFF_SEED_CHARS) file.oldContent = content
             else unavailableOriginals++
           } catch {
             unavailableOriginals++

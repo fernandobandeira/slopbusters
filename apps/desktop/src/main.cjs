@@ -178,7 +178,7 @@ async function verifySmoke(window) {
   const value = sqlite.prepare('SELECT 42 AS answer').get().answer
   sqlite.close()
   if (value !== 42) throw new Error('Electron SQLite runtime is unavailable.')
-  const { getRevisionSymbols } = require('../../reviewer/server/treeSymbols.ts')
+  const { getRevisionSymbols } = require('../../reviewer/server/adapters/treeSymbols.ts')
   const sourceSymbols = await getRevisionSymbols('sample.py', 'class Example:\n    def inspect(self):\n        return 42\n')
   if (!sourceSymbols.some((symbol) => symbol.kind === 'class' && symbol.name === 'Example') || !sourceSymbols.some((symbol) => symbol.name.endsWith('inspect'))) throw new Error('The bundled source parser did not load its WASM grammar.')
   smokeStage('parsers-ready')

@@ -1,11 +1,14 @@
+import { SOURCE_WORKSPACE_TIMEOUT_MS } from '../limits'
 import { MAX_PROJECT_FILE_BYTES, MAX_SOURCE_CACHE_BYTES } from '../limits'
 import { mkdir, mkdtemp, readFile, realpath, stat, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, posix, relative, resolve } from 'node:path'
+import { dirname, join, posix } from 'node:path'
 import type { LanguageServerConfig } from '../../shared/domain/languageServers'
 import type { NavigationRequest } from '../../shared/domain/navigation'
 import type { PullRequest } from '../../shared/domain/types'
 import type { createSourceProjectLoader } from '../features/navigation/fileContent'
+import { workspacePath } from './workspacePath'
+export { workspacePath } from './workspacePath'
 import type { ReviewWorkspaces } from './reviewWorkspaces'
 
 export type SourceProject = ReturnType<typeof createSourceProjectLoader>
@@ -23,22 +26,6 @@ const manifests: Record<string, string[]> = {
   java: ['pom.xml'],
   c_sharp: [],
   python: [],
-}
-
-/** Repository paths are never allowed to escape a workspace or create symlinks. */
-export function workspacePath(directory: string, path: string): string {
-  if (!path || path.includes('\\') || path.includes('\0') || isAbsolute(path))
-    throw new Error('Invalid source workspace path.')
-  const target = resolve(directory, path)
-  const local = relative(directory, target)
-  if (
-    !local ||
-    local === '..' ||
-    local.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
-    isAbsolute(local)
-  )
-    throw new Error('Source path escapes the review workspace.')
-  return target
 }
 
 export function projectRoot(paths: Set<string>, path: string, language: string): string {
@@ -141,7 +128,8 @@ export async function createSourceWorkspace(
   const started = Date.now()
   try {
     for (let index = 0; index < Math.min(candidates.length, 1000); index += 6) {
-      if (bytes >= MAX_SOURCE_CACHE_BYTES || Date.now() - started > 60_000) break
+      if (bytes >= MAX_SOURCE_CACHE_BYTES || Date.now() - started > SOURCE_WORKSPACE_TIMEOUT_MS)
+        break
       const batch = await Promise.all(
         candidates.slice(index, Math.min(index + 6, 1000)).map(async (path) => {
           try {

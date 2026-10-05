@@ -1,7 +1,8 @@
+import { MAX_SYMBOL_SOURCE_CHARS } from '../../limits'
 import ts from 'typescript'
 import type { SourceSymbol } from '../../../shared/domain/sourceSymbols'
 
-const maximumSourceLength = 500_000
+const maximumSourceLength = MAX_SYMBOL_SOURCE_CHARS
 const maximumSymbols = 400
 const maximumDepth = 100
 

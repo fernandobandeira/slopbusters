@@ -1,0 +1,211 @@
+[
+  {
+    "type": "dependency",
+    "from": "src/features/linus/LinusCompanion.tsx",
+    "to": "src/features/review/diff/diffItems.ts",
+    "unresolvedTo": "../review/diff/diffItems",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-linus"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/linus/LinusCompanion.tsx",
+    "to": "src/features/review/PullDescription.tsx",
+    "unresolvedTo": "../review/PullDescription",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-linus"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/CompactReviewHeader.tsx",
+    "to": "src/features/pull-status/PullStatusIcons.tsx",
+    "unresolvedTo": "../pull-status/PullStatusIcons",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/CompactReviewHeader.tsx",
+    "to": "src/features/stacks/StackBadge.tsx",
+    "unresolvedTo": "../stacks/StackBadge",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/ReviewDiffViewer.tsx",
+    "to": "src/features/source-navigation/SymbolContextMenu.tsx",
+    "unresolvedTo": "../source-navigation/SymbolContextMenu",
+    "dependencyTypes": ["local", "type-only", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/ReviewWorkspace.tsx",
+    "to": "src/features/pull-status/PullStatusDialog.tsx",
+    "unresolvedTo": "../pull-status/PullStatusDialog",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/ReviewWorkspace.tsx",
+    "to": "src/features/pull-status/PullStatusIcons.tsx",
+    "unresolvedTo": "../pull-status/PullStatusIcons",
+    "dependencyTypes": ["local", "type-only", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/ReviewWorkspace.tsx",
+    "to": "src/features/pull-status/usePullStatus.ts",
+    "unresolvedTo": "../pull-status/usePullStatus",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/ReviewWorkspace.tsx",
+    "to": "src/features/pull-status/usePullUpdates.ts",
+    "unresolvedTo": "../pull-status/usePullUpdates",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/ReviewWorkspace.tsx",
+    "to": "src/features/source-navigation/SourceContextDialog.tsx",
+    "unresolvedTo": "../source-navigation/SourceContextDialog",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/ReviewWorkspace.tsx",
+    "to": "src/features/source-navigation/SymbolContextMenu.tsx",
+    "unresolvedTo": "../source-navigation/SymbolContextMenu",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/ReviewWorkspace.tsx",
+    "to": "src/features/stacks/StackPanel.tsx",
+    "unresolvedTo": "../stacks/StackPanel",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/review/ReviewWorkspace.tsx",
+    "to": "src/features/stacks/usePullStack.ts",
+    "unresolvedTo": "../stacks/usePullStack",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-review"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/source-navigation/SourceContextDialog.tsx",
+    "to": "src/features/review/diff/codeSymbols.ts",
+    "unresolvedTo": "../review/diff/codeSymbols",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-source-navigation"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/source-navigation/sourceNavigationHistory.ts",
+    "to": "src/features/review/diff/codeSymbols.ts",
+    "unresolvedTo": "../review/diff/codeSymbols",
+    "dependencyTypes": ["local", "type-only", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-source-navigation"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/source-navigation/SymbolContextMenu.tsx",
+    "to": "src/features/review/diff/codeSymbols.ts",
+    "unresolvedTo": "../review/diff/codeSymbols",
+    "dependencyTypes": ["local", "type-only", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-source-navigation"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/stacks/StackPanel.tsx",
+    "to": "src/features/inbox/inbox.ts",
+    "unresolvedTo": "../inbox/inbox",
+    "dependencyTypes": ["local", "type-only", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-stacks"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/stacks/StackPanel.tsx",
+    "to": "src/features/pull-status/PullStatusIcons.tsx",
+    "unresolvedTo": "../pull-status/PullStatusIcons",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-stacks"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/features/stacks/StackPanel.tsx",
+    "to": "src/features/pull-status/PullStatusPanel.tsx",
+    "unresolvedTo": "../pull-status/PullStatusPanel",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "isolate-stacks"
+    }
+  }
+]

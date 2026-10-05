@@ -1,4 +1,8 @@
-import { renderFileWithHighlighter, replaceCustomExtensions, type DiffsHighlighter } from '@pierre/diffs'
+import {
+  renderFileWithHighlighter,
+  replaceCustomExtensions,
+  type DiffsHighlighter,
+} from '@pierre/diffs'
 import { createHighlighterCore } from 'shiki/core'
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma'

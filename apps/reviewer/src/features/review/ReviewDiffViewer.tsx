@@ -2,7 +2,12 @@ import type { RefObject, Dispatch, SetStateAction } from 'react'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { StyledDiffCodeView } from '~/components/diffs/StyledDiffCodeView'
-import { DiffSide, type PullRequest, type DraftComment, type ReviewThread } from '../../../shared/domain/types'
+import {
+  DiffSide,
+  type PullRequest,
+  type DraftComment,
+  type ReviewThread,
+} from '../../../shared/domain/types'
 import type { NavigationRequest } from '../../../shared/domain/navigation'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { InlineDiscussion, ThreadDiscussion } from './discussions/InlineDiscussion'
