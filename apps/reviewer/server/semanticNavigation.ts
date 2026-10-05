@@ -1,3 +1,4 @@
+import { findTypeScriptReferences } from './typeScriptReferences'
 import { posix } from 'node:path'
 import ts from 'typescript'
 import type { NavigationRequest, NavigationTarget } from '../shared/navigation'
@@ -125,15 +126,7 @@ export function createTypeScriptNavigator(
         ? definitions
         : request.kind === 'implementation'
           ? (service.getImplementationAtPosition(fileName, position) ?? [])
-          : [
-              ...(service.findReferences(fileName, position) ?? []),
-              // Searching an import alias alone only finds that local alias's uses.
-              // Search its resolved declaration too to include references across the project.
-              ...definitions.flatMap(
-                (definition) =>
-                  service.findReferences(definition.fileName, definition.textSpan.start) ?? [],
-              ),
-            ].flatMap((symbol) => symbol.references)
+          : findTypeScriptReferences(service, fileName, position, definitions)
     const targets = new Map<string, NavigationTarget>()
     for (const occurrence of occurrences) {
       const targetName = virtualName(occurrence.fileName)
@@ -165,6 +158,9 @@ export function navigateTypeScript(
   options: ts.CompilerOptions = {},
 ): NavigationTarget[] {
   const navigator = createTypeScriptNavigator(files, options)
-  try { return navigator.navigate(request) }
-  finally { navigator.close() }
+  try {
+    return navigator.navigate(request)
+  } finally {
+    navigator.close()
+  }
 }

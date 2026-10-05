@@ -1,3 +1,5 @@
+import { symbolActionRequest, symbolActionResponse } from '../shared/symbolActions'
+import { symbolImplementationSupport } from './symbolImplementationSupport'
 import express from 'express'
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
@@ -271,6 +273,24 @@ export async function startReviewerServer(
     const lease = await workspaces.acquire(pull, tree.sha)
     lease.release()
     response.json(workspaces.status(pull, tree.sha))
+  })
+  app.post('/api/pulls/:id/symbol-actions', async (request, response) => {
+    const selection = symbolActionRequest.parse(request.body)
+    const file = await sourceProject.file(
+      store.getPull(request.params.id),
+      selection.side,
+      selection.path,
+    )
+    response.json(
+      symbolActionResponse.parse({
+        implementation: symbolImplementationSupport(
+          file.path,
+          file.content,
+          selection.line,
+          selection.column,
+        ),
+      }),
+    )
   })
   app.post('/api/pulls/:id/navigation', async (request, response) => {
     const selection = z

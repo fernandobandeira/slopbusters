@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { LoaderCircle } from 'lucide-react'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import type { NavigationRequest, NavigationResult, NavigationTarget } from '../shared/navigation'
 import type { PullFileContent, RevisionFileContent } from '../shared/fileContent'
@@ -9,6 +10,8 @@ import { useReviewerTheme } from './ThemeProvider'
 import { api, message } from './api'
 import { clickedSymbol, type CodeSymbol } from './codeSymbols'
 import { SymbolContextMenu, type SymbolMenuSelection } from './SymbolContextMenu'
+import { SourceNavigationResults } from './SourceNavigationResults'
+import { destinationStyles, highlightDestination } from './sourceDestination'
 import {
   emptySourceHistory,
   isCurrentDefinition,
@@ -28,27 +31,6 @@ interface Props {
   onClose: () => void
 }
 
-const destinationStyles = `
-[data-line][data-source-destination] {
-  background: color-mix(in srgb, var(--primary) 16%, transparent);
-  box-shadow: inset 3px 0 var(--primary);
-  animation: source-destination-arrival 900ms ease-out;
-}
-[data-source-destination-token] {
-  background: color-mix(in srgb, var(--primary) 26%, transparent);
-  outline: 1px solid color-mix(in srgb, var(--primary) 55%, transparent);
-  border-radius: 3px;
-  font-weight: 700;
-}
-@keyframes source-destination-arrival {
-  from { background: color-mix(in srgb, var(--primary) 36%, transparent); }
-  to { background: color-mix(in srgb, var(--primary) 16%, transparent); }
-}
-@media (prefers-reduced-motion: reduce) {
-  [data-line][data-source-destination] { animation: none; }
-}
-`
-
 export function SourceContextDialog({
   pull,
   fileId,
@@ -66,9 +48,14 @@ export function SourceContextDialog({
   const [notice, setNotice] = useState('')
   const [workspace, setWorkspace] = useState<ReviewWorkspaceInfo>()
   const [busy, setBusy] = useState(Boolean(initialRequest))
+  const [loadingMessage, setLoadingMessage] = useState(
+    initialRequest ? navigationLoadingMessage(initialRequest.kind) : 'Loading source…',
+  )
   const [sourceError, setSourceError] = useState('')
   const [symbolMenu, setSymbolMenu] = useState<SymbolMenuSelection>()
-  const [navigation, setNavigation] = useState<NavigationResult>()
+  const [navigation, setNavigation] = useState<
+    NavigationResult & { kind: NavigationRequest['kind'] }
+  >()
   const requestVersion = useRef(0)
   const savedRevision = content?.[side] ?? content?.old ?? content?.new
   const revision = visit?.file ?? savedRevision
@@ -109,7 +96,9 @@ export function SourceContextDialog({
         align: 'center',
       }),
     )
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(frame)
+    }
   }, [revision, sourceId, targetLine])
   useEffect(
     () => () => {
@@ -128,7 +117,7 @@ export function SourceContextDialog({
     })
       .then(async (result) => {
         if (version !== requestVersion.current) return
-        setNavigation(result)
+        setNavigation({ ...result, kind: initialRequest.kind })
         setNotice(navigationOutcome(initialRequest.kind, result.targets.length))
         if (
           initialRequest.kind !== 'references' &&
@@ -136,6 +125,8 @@ export function SourceContextDialog({
           result.targets.length === 1
         ) {
           const target = result.targets[0]
+          if (!target) return
+          setLoadingMessage('Opening source…')
           const source = await api<RevisionFileContent>(
             `/pulls/${encodeURIComponent(pull.id)}/source-file?side=${initialRequest.side}&path=${encodeURIComponent(target.path)}`,
             { signal: controller.signal },
@@ -152,17 +143,23 @@ export function SourceContextDialog({
       .finally(() => {
         if (!controller.signal.aborted && version === requestVersion.current) setBusy(false)
       })
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+    }
   }, [initialRequest, pull.id])
   async function openSource(target: NavigationTarget) {
     const version = ++requestVersion.current
     setBusy(true)
+    setLoadingMessage('Opening source…')
     setSourceError('')
     setNotice('')
     try {
-      const result = await api<RevisionFileContent>(
-        `/pulls/${encodeURIComponent(pull.id)}/source-file?side=${actualSide}&path=${encodeURIComponent(target.path)}`,
-      )
+      const result =
+        revision?.path === target.path
+          ? revision
+          : await api<RevisionFileContent>(
+              `/pulls/${encodeURIComponent(pull.id)}/source-file?side=${actualSide}&path=${encodeURIComponent(target.path)}`,
+            )
       if (version !== requestVersion.current) return
       setHistory((current) => visitSource(current, { file: result, target }))
     } catch (failure) {
@@ -172,9 +169,10 @@ export function SourceContextDialog({
     }
   }
   async function navigate(kind: NavigationRequest['kind'], selection?: CodeSymbol) {
-    if (!revision || !selection) return
+    if (busy || !revision || !selection) return
     const version = ++requestVersion.current
     setBusy(true)
+    setLoadingMessage(navigationLoadingMessage(kind))
     setSourceError('')
     setNotice('')
     setNavigation(undefined)
@@ -192,15 +190,20 @@ export function SourceContextDialog({
           }),
         },
       )
-      if (version === requestVersion.current) {
-        setNavigation(result)
-        setNotice(navigationOutcome(kind, result.targets.length))
-        if (kind !== 'references' && result.mode === 'semantic' && result.targets.length === 1) {
-          if (isCurrentDefinition(revision.path, selection, result.targets[0]))
-            setNotice('Already at this definition.')
-          else await openSource(result.targets[0])
-        }
-      }
+      if (version !== requestVersion.current) return
+      setNavigation({ ...result, kind })
+      setNotice(navigationOutcome(kind, result.targets.length))
+      const target = result.targets[0]
+      if (
+        kind === 'references' ||
+        result.mode !== 'semantic' ||
+        result.targets.length !== 1 ||
+        !target
+      )
+        return
+      if (isCurrentDefinition(revision.path, selection, target))
+        setNotice('Already at this definition.')
+      else await openSource(target)
     } catch (failure) {
       if (version === requestVersion.current) setSourceError(message(failure))
     } finally {
@@ -210,14 +213,12 @@ export function SourceContextDialog({
   async function prepareLocalSource() {
     const version = ++requestVersion.current
     setBusy(true)
+    setLoadingMessage('Preparing local source…')
     setSourceError('')
     try {
       const prepared = await api<ReviewWorkspaceInfo>(
         `/pulls/${encodeURIComponent(pull.id)}/workspace`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ side: actualSide }),
-        },
+        { method: 'POST', body: JSON.stringify({ side: actualSide }) },
       )
       if (version === requestVersion.current) {
         setWorkspace(prepared)
@@ -236,7 +237,7 @@ export function SourceContextDialog({
         if (!open) onClose()
       }}
     >
-      <DialogPopup className="source-context-dialog">
+      <DialogPopup className="source-context-dialog" aria-busy={busy}>
         <DialogHeader>
           <DialogTitle>{revision?.path ?? file?.path ?? 'Source'}</DialogTitle>
         </DialogHeader>
@@ -250,8 +251,11 @@ export function SourceContextDialog({
             )}
           </div>
         )}
-        {!revision && !error && (
-          <p className="source-context-loading muted">Loading exact source…</p>
+        {(busy || (!revision && !error && !sourceError)) && (
+          <div className="source-context-navigation" role="status">
+            <LoaderCircle size={14} className="source-context-spinner" aria-hidden="true" />
+            {busy ? loadingMessage : 'Loading exact source…'}
+          </div>
         )}
         {revision && (
           <>
@@ -292,11 +296,6 @@ export function SourceContextDialog({
                 </button>
               )}
             </nav>
-            {busy && (
-              <div className="source-context-navigation" role="status">
-                Loading…
-              </div>
-            )}
             {notice && (
               <p className="source-context-notice" role="status">
                 {notice}
@@ -324,29 +323,7 @@ export function SourceContextDialog({
                 }}
                 options={{
                   onPostRender: (node) => {
-                    const target = visit?.target
-                    for (const row of node.shadowRoot?.querySelectorAll<HTMLElement>(
-                      '[data-line]',
-                    ) ?? []) {
-                      const line = Number(row.dataset.line)
-                      const focused = Boolean(
-                        target && line >= target.line && line <= target.endLine,
-                      )
-                      row.toggleAttribute('data-source-destination', focused)
-                      for (const token of row.querySelectorAll<HTMLElement>('[data-char]')) {
-                        const start = Number(token.dataset.char)
-                        const end = start + (token.textContent?.length ?? 0)
-                        token.toggleAttribute(
-                          'data-source-destination-token',
-                          Boolean(
-                            focused &&
-                            target &&
-                            (line !== target.line || end > target.column - 1) &&
-                            (line !== target.endLine || start < target.endColumn - 1),
-                          ),
-                        )
-                      }
-                    }
+                    if (node.shadowRoot) highlightDestination(node.shadowRoot, visit?.target)
                   },
                   theme: themeId,
                   themeType: resolvedTheme,
@@ -359,41 +336,42 @@ export function SourceContextDialog({
                   },
                 }}
               />
-              {navigation && (
-                <aside className="source-context-targets">
-                  <strong>
-                    {navigation.mode === 'semantic' ? 'Source locations' : 'Text matches'} ·{' '}
-                    {navigation.targets.length}
-                  </strong>
-                  {!navigation.targets.length && <p>No locations found.</p>}
-                  {navigation.targets.map((target, index) => (
-                    <button
-                      type="button"
-                      key={`${target.path}:${target.line}:${target.column}:${index}`}
-                      disabled={busy}
-                      onClick={() => void openSource(target)}
-                      title={target.name}
-                    >
-                      <span>
-                        {target.path}:{target.line}:{target.column}
-                      </span>
-                      <small>{target.name}</small>
-                    </button>
-                  ))}
-                </aside>
-              )}
+              {navigation &&
+                navigation.targets.length > 0 &&
+                (navigation.kind !== 'definition' ||
+                  navigation.mode === 'text' ||
+                  navigation.targets.length > 1) && (
+                  <SourceNavigationResults
+                    key={JSON.stringify(navigation)}
+                    navigation={navigation}
+                    selected={visit?.target}
+                    busy={busy}
+                    onOpen={(target) => void openSource(target)}
+                  />
+                )}
             </div>
           </>
         )}
         <SymbolContextMenu
           selection={symbolMenu}
+          source={revision ? { pullId: pull.id, side: actualSide, path: revision.path } : undefined}
           onNavigate={(kind) => {
             void navigate(kind, symbolMenu)
             setSymbolMenu(undefined)
           }}
-          onClose={() => setSymbolMenu(undefined)}
+          onClose={() => {
+            setSymbolMenu(undefined)
+          }}
         />
       </DialogPopup>
     </Dialog>
   )
+}
+
+function navigationLoadingMessage(kind: NavigationRequest['kind']) {
+  return kind === 'references'
+    ? 'Finding references…'
+    : kind === 'implementation'
+      ? 'Finding implementations…'
+      : 'Finding definition…'
 }

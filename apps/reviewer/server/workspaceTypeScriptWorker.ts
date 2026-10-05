@@ -1,3 +1,4 @@
+import { findTypeScriptReferences } from './typeScriptReferences.ts'
 import ts from 'typescript'
 import { parentPort, workerData } from 'node:worker_threads'
 import { realpathSync, statSync } from 'node:fs'
@@ -158,12 +159,7 @@ function navigate(request: NavigationRequest): NavigationResult {
       ? definitions
       : request.kind === 'implementation'
         ? (service.getImplementationAtPosition(fileName, position) ?? [])
-        : [
-            ...(service.findReferences(fileName, position) ?? []),
-            ...definitions.flatMap(
-              (item) => service.findReferences(item.fileName, item.textSpan.start) ?? [],
-            ),
-          ].flatMap((item) => item.references)
+        : findTypeScriptReferences(service, fileName, position, definitions)
   const targets = new Map<string, NavigationTarget>()
   const warnings = new Set(diagnostics)
   for (const occurrence of occurrences) {

@@ -1141,6 +1141,9 @@ export function ReviewWorkspace({
       />
       <SymbolContextMenu
         selection={symbolMenu}
+        source={
+          symbolMenu ? { pullId: pull.id, side: symbolMenu.side, path: symbolMenu.path } : undefined
+        }
         onNavigate={navigateSymbol}
         onClose={() => setSymbolMenu(undefined)}
       />
