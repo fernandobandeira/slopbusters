@@ -3,7 +3,8 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import type { BobSession } from '../../../shared/domain/bob'
 import { call, message } from '../../lib/api'
 
-export function useBobSession(repository: string, url: string) {
+export function useBobSession(repository: string, url: string, replaySessionId?: string) {
+  const [activeId, setActiveId] = useState(replaySessionId)
   const [session, setSession] = useState<BobSession>()
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -12,7 +13,11 @@ export function useBobSession(repository: string, url: string) {
   useEffect(() => {
     if (!repository) return
     const controller = new AbortController()
-    void call(routes.latestBob, { query: { repository, url } }, { signal: controller.signal })
+    const options = { signal: controller.signal }
+    const request = activeId
+      ? call(routes.getBob, { params: { id: activeId } }, options).then((session) => ({ session }))
+      : call(routes.latestBob, { query: { repository, url } }, options)
+    void request
       .then((result) => {
         if (!controller.signal.aborted) {
           setSession(result.session ?? undefined)
@@ -29,7 +34,7 @@ export function useBobSession(repository: string, url: string) {
     return () => {
       controller.abort()
     }
-  }, [repository, url, refresh])
+  }, [repository, url, refresh, activeId])
   useBobPolling(session, { setSession, setError })
 
   async function act(action: 'start' | 'retry' | 'continue' | 'cancel', urls?: string[]) {
@@ -47,6 +52,7 @@ export function useBobSession(repository: string, url: string) {
               ? await call(routes.retryBob, { params })
               : await call(routes.continueBob, { params })
       setSession(next)
+      setActiveId(next.id)
     } catch (cause) {
       setError(message(cause))
     } finally {

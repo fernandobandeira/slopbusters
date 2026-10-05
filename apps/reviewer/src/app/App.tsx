@@ -77,6 +77,16 @@ export function App() {
   const [linusRefresh, setLinusRefresh] = useState(0)
   const [linusReplay, setLinusReplay] = useState<LinusReplayRequest & { repository: string }>()
   const savedLinus = useLinusRecommendations(repository, refresh + linusRefresh)
+  const savedBob = useApiQuery(
+    routes.savedBobReviews,
+    { query: { repository } },
+    {
+      enabled: Boolean(repository) && route.kind === 'inbox',
+      refresh,
+    },
+  )
+  const bobReviews = new Map(savedBob.data?.reviews.map((review) => [review.url, review]))
+  const bobReplayId = new URLSearchParams(location.search).get('bob') ?? undefined
   const recommendations = new Map(
     savedLinus.recommendations.map((recommendation) => [recommendation.url, recommendation]),
   )
@@ -141,6 +151,7 @@ export function App() {
       inboxLoading={inboxLoading}
       statusLoading={inboxStatusLoading}
       recommendationsError={savedLinus.error}
+      bobReviewsError={savedBob.error}
       selectingForLinus={selectingForLinus}
       selectedLinusUrls={selectedLinusUrls}
       onSelectionChange={(urls) => {
@@ -151,6 +162,12 @@ export function App() {
         <InboxPullActions
           pull={pr}
           recommendation={recommendations.get(pr.url)}
+          bobReview={bobReviews.get(pr.url)}
+          onBobReplay={(review) => {
+            const target = new URL(reviewPath({ url: pr.url, filter }), window.location.origin)
+            target.searchParams.set('bob', review.sessionId)
+            void navigate(target.pathname + target.search)
+          }}
           onReplay={(recommendation) => {
             setLinusSelection(undefined)
             setLinusReplay({ repository, sessionId: recommendation.sessionId, url: pr.url })
@@ -307,14 +324,16 @@ export function App() {
                     onReload={() => void reloadPull()}
                     reloading={reloading}
                     inboxUrl={inboxPath(repository, filter)}
-                    renderCompanion={({ draft, setDraft, ready, openReview }) => (
+                    renderCompanion={({ draft, setDraft, ready, openReview, focusLine }) => (
                       <BobCompanion
-                        key={pull.id}
+                        key={`${pull.id}:${bobReplayId ?? ''}`}
+                        replaySessionId={bobReplayId}
                         pull={pull}
                         draft={draft}
                         setDraft={setDraft}
                         ready={ready}
                         openReview={openReview}
+                        focusLine={focusLine}
                       />
                     )}
                     titlebarTarget={titlebarTarget}

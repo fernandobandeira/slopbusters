@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { bobAdviceSchema, type BobSession } from '../domain/bob'
+import { bobAdviceSchema, bobReviewSummarySchema, type BobSession } from '../domain/bob'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, repositoryQuery, pullUrlSchema } from './contract'
 import { pullSchema } from './reviewSchemas'
@@ -40,6 +40,10 @@ const session = z.object({
 export const latestBob = defineRoute('GET', '/bob/latest', {
   query: repositoryQuery.extend({ url: pullUrlSchema.optional() }),
   response: z.object({ session: session.nullable() }),
+})
+export const savedBobReviews = defineRoute('GET', '/bob/reviews', {
+  query: repositoryQuery,
+  response: z.object({ reviews: z.array(bobReviewSummarySchema) }),
 })
 export const startBob = defineRoute('POST', '/bob', {
   request: repositoryQuery.extend({ urls: z.array(pullUrlSchema).min(1).max(20) }).strict(),

@@ -5,9 +5,12 @@ import {
   bobSnapshotMatches,
   bobVerdictLabels,
   type BobResult,
+  type BobFinding,
 } from '../../../shared/domain/bob'
-import type { PullRequest, ReviewDraft } from '../../../shared/domain/types'
+import { DiffSide, type PullRequest, type ReviewDraft } from '../../../shared/domain/types'
+import type { ReviewLocation } from '../../../shared/domain/review'
 import { BobComment, saveBobComment } from './BobComment'
+import { BobText } from './BobText'
 
 export interface BobDraftContext {
   pull: PullRequest
@@ -15,6 +18,7 @@ export interface BobDraftContext {
   setDraft: (action: (previous: ReviewDraft) => ReviewDraft) => void
   ready: boolean
   openReview: () => void
+  focusLine: (location: ReviewLocation | undefined) => void
 }
 
 export function BobTour({
@@ -22,63 +26,58 @@ export function BobTour({
   index,
   advance,
   context,
-  showEvidence,
 }: {
   result: BobResult
   index: number
   advance: (index: number) => void
   context: BobDraftContext
-  showEvidence: () => void
 }) {
   const { advice } = result
   const finding = advice.findings[index - 1]
   const stale = !bobSnapshotMatches(context.pull, result.pull)
   return (
-    <>
+    <div className="bob-tour">
       <div className="linus-turn-meta">
         <span>PR #{result.pull.number}</span>
         <span>
           {index + 1} / {advice.findings.length + 1}
         </span>
       </div>
-      <strong className="linus-verdict">
-        {finding
-          ? `${bobSeverityLabels[finding.severity]} · ${finding.title}`
-          : bobVerdictLabels[advice.verdict]}
-      </strong>
-      <p className="linus-speech" aria-live="polite">
-        {finding?.body ?? advice.summary}
-      </p>
-      {!finding && <BobReviewNotes result={result} />}
-      {stale && (
-        <p className="linus-notice">
-          This PR changed after Bob’s review. Review it again before adding comments.
-        </p>
-      )}
-      {finding && (
-        <BobComment
-          key={`${result.fingerprint}:${finding.id}`}
-          pull={result.pull}
-          finding={finding}
-          comments={context.draft.comments}
-          disabled={stale || !context.ready}
-          onSave={(comment) => {
-            context.setDraft((draft) => saveBobComment(draft, comment))
-          }}
-          onDelete={(id) => {
-            context.setDraft((draft) => ({
-              ...draft,
-              comments: draft.comments.filter((comment) => comment.id !== id),
-            }))
-          }}
-        />
-      )}
-      <BobTourControls
-        index={index}
-        count={advice.findings.length + 1}
-        advance={advance}
-        showEvidence={showEvidence}
-      />
+      <div className="bob-tour-content" aria-live="polite">
+        {finding && <span className="bob-severity">{bobSeverityLabels[finding.severity]}</span>}
+        <h2 className="bob-finding-title">{finding?.title ?? bobVerdictLabels[advice.verdict]}</h2>
+        {finding && (
+          <p className="bob-location">
+            <code>
+              {finding.path}:{finding.line}
+            </code>{' '}
+            · {finding.side === DiffSide.left ? 'original' : 'updated'} code
+          </p>
+        )}
+        <BobText>{finding?.body ?? advice.summary}</BobText>
+        {!finding && <BobReviewNotes result={result} />}
+        {finding && (
+          <div className="bob-suggestion">
+            <h3>Suggested improvement</h3>
+            <BobText>{finding.suggestion}</BobText>
+          </div>
+        )}
+        {stale && (
+          <p className="linus-notice">
+            This PR changed after Bob’s review. Review it again before adding comments.
+          </p>
+        )}
+        {finding && (
+          <BobDraftAnnotation
+            key={`${result.fingerprint}:${finding.id}`}
+            result={result}
+            finding={finding}
+            context={context}
+            stale={stale}
+          />
+        )}
+      </div>
+      <BobTourControls index={index} count={advice.findings.length + 1} advance={advance} />
       {context.draft.comments.length > 0 && (
         <Button
           className="bob-submit"
@@ -91,7 +90,37 @@ export function BobTour({
           {context.draft.comments.length === 1 ? 'comment' : 'comments'}
         </Button>
       )}
-    </>
+    </div>
+  )
+}
+
+function BobDraftAnnotation({
+  result,
+  finding,
+  context,
+  stale,
+}: {
+  result: BobResult
+  finding: BobFinding
+  context: BobDraftContext
+  stale: boolean
+}) {
+  return (
+    <BobComment
+      pull={result.pull}
+      finding={finding}
+      comments={context.draft.comments}
+      disabled={stale || !context.ready}
+      onSave={(comment) => {
+        context.setDraft((draft) => saveBobComment(draft, comment))
+      }}
+      onDelete={(id) => {
+        context.setDraft((draft) => ({
+          ...draft,
+          comments: draft.comments.filter((comment) => comment.id !== id),
+        }))
+      }}
+    />
   )
 }
 
@@ -110,7 +139,9 @@ function BobReviewNotes({ result }: { result: BobResult }) {
             <summary>{title}</summary>
             <ul>
               {entries.map((text, index) => (
-                <li key={index}>{text}</li>
+                <li key={index}>
+                  <BobText>{text}</BobText>
+                </li>
               ))}
             </ul>
           </details>
@@ -123,20 +154,13 @@ function BobTourControls({
   index,
   count,
   advance,
-  showEvidence,
 }: {
   index: number
   count: number
   advance: (index: number) => void
-  showEvidence: () => void
 }) {
   return (
-    <div className="linus-tour-controls">
-      {index > 0 && (
-        <Button size="sm" variant="ghost" onClick={showEvidence}>
-          Show code
-        </Button>
-      )}
+    <div className="linus-tour-controls bob-tour-controls">
       <div className="linus-actions">
         <Button
           size="sm"

@@ -1,20 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import { LoaderCircle, X } from 'lucide-react'
 import { Button } from '~/components/ui/button'
-import { BobEvidence } from './BobEvidence'
+import { bobSnapshotMatches } from '../../../shared/domain/bob'
 import { BobTour, type BobDraftContext } from './BobTour'
 import { useBobTour } from './useBobTour'
 import { useBobSession } from './useBobSession'
 import '../../linus.css'
 import './bob.css'
 
-export function BobCompanion(context: BobDraftContext) {
+export function BobCompanion(context: BobDraftContext & { replaySessionId?: string }) {
   const { pull } = context
-  const job = useBobSession(`${pull.owner}/${pull.repo}`, pull.url)
+  const job = useBobSession(`${pull.owner}/${pull.repo}`, pull.url, context.replaySessionId)
   const tour = useBobTour(pull, job.session)
-  const [open, setOpen] = useState(false)
-  const [evidence, setEvidence] = useState(true)
+  const [open, setOpen] = useState(Boolean(context.replaySessionId))
   const finding = tour.result?.advice.findings[tour.index - 1]
+  const current = tour.result && bobSnapshotMatches(pull, tour.result.pull)
+  const focusLine = useEffectEvent(context.focusLine)
+  useEffect(() => {
+    focusLine(open && current ? finding : undefined)
+    return () => {
+      focusLine(undefined)
+    }
+  }, [open, current, finding])
   useEffect(() => {
     if (!open) return
     function closeOnEscape(event: KeyboardEvent) {
@@ -25,50 +32,32 @@ export function BobCompanion(context: BobDraftContext) {
       window.removeEventListener('keydown', closeOnEscape)
     }
   }, [open])
-  function advance(index: number) {
-    tour.advance(index)
-    setEvidence(true)
-  }
   return (
-    <>
-      {open && evidence && tour.result && finding && (
-        <BobEvidence
-          result={tour.result}
-          finding={finding}
-          onClose={() => {
-            setEvidence(false)
+    <aside
+      className={`linus-companion bob-companion ${open ? 'linus-open' : 'linus-minimized'}`}
+      aria-label="Bob code review companion"
+    >
+      {open && (
+        <BobPanel
+          job={job}
+          tour={tour}
+          context={context}
+          close={() => {
+            setOpen(false)
           }}
         />
       )}
-      <aside
-        className={`linus-companion bob-companion ${open ? 'linus-open' : 'linus-minimized'}`}
-        aria-label="Bob code review companion"
+      <button
+        className="linus-portrait"
+        aria-label={open ? 'Minimize Bob' : 'Open Bob code review'}
+        onClick={() => {
+          setOpen(!open)
+        }}
       >
-        {open && (
-          <BobPanel
-            job={job}
-            tour={{ ...tour, advance }}
-            context={context}
-            close={() => {
-              setOpen(false)
-            }}
-            showEvidence={() => {
-              setEvidence(true)
-            }}
-          />
-        )}
-        <button
-          className="linus-portrait"
-          aria-label={open ? 'Minimize Bob' : 'Open Bob code review'}
-          onClick={() => {
-            setOpen(!open)
-          }}
-        >
-          <img src={`/unclebob/${tour.emotion}.png`} alt={`Bob, ${tour.emotion}`} />
-          {!open && <span>Bob{job.session?.status === 'running' ? ' · reviewing' : ''}</span>}
-        </button>
-      </aside>
-    </>
+        <img src={`/unclebob/${tour.emotion}.png`} alt={`Bob, ${tour.emotion}`} />
+        {!open && <span>Bob{job.session?.status === 'running' ? ' · reviewing' : ''}</span>}
+      </button>
+    </aside>
   )
 }
 
@@ -77,13 +66,11 @@ function BobPanel({
   tour,
   context,
   close,
-  showEvidence,
 }: {
   job: ReturnType<typeof useBobSession>
   tour: ReturnType<typeof useBobTour>
   context: BobDraftContext
   close: () => void
-  showEvidence: () => void
 }) {
   const { session, loading, busy, error, act } = job
   const { result, index, advance } = tour
@@ -98,15 +85,7 @@ function BobPanel({
         </button>
       </header>
       <BobJobControls job={job} hasResult={Boolean(result)} />
-      {result && (
-        <BobTour
-          result={result}
-          index={index}
-          advance={advance}
-          context={context}
-          showEvidence={showEvidence}
-        />
-      )}
+      {result && <BobTour result={result} index={index} advance={advance} context={context} />}
       {!result && (
         <p className="linus-speech">
           Let’s check how the code reads: clear functions, familiar names, shared helpers, and

@@ -12,6 +12,7 @@ interface Props {
   inboxLoading: boolean
   statusLoading: boolean
   recommendationsError?: string
+  bobReviewsError?: string
   selectingForLinus: boolean
   selectedLinusUrls: string[]
   onSelectionChange: (urls: string[]) => void
@@ -25,6 +26,7 @@ export function InboxPage({
   inboxLoading,
   statusLoading,
   recommendationsError,
+  bobReviewsError,
   selectingForLinus,
   selectedLinusUrls,
   onSelectionChange,
@@ -58,6 +60,11 @@ export function InboxPage({
         {recommendationsError && (
           <p role="status" className="inbox-warning">
             Could not load Linus recommendations: {recommendationsError}
+          </p>
+        )}
+        {bobReviewsError && (
+          <p role="status" className="inbox-warning">
+            Could not load saved Bob reviews: {bobReviewsError}
           </p>
         )}
         {inbox?.warnings?.map((warning) => (

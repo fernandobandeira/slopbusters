@@ -1,46 +1,101 @@
-.bob-evidence {
-  position: fixed;
-  z-index: 42;
-  top: 65px;
-  bottom: 22px;
-  left: 270px;
-  right: 430px;
+.bob-companion .linus-bubble {
   display: flex;
   flex-direction: column;
+  width: 400px;
+  max-height: calc(100dvh - 190px);
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--background);
-  box-shadow: 0 12px 42px #0003;
 }
-.bob-evidence header {
-  align-items: center;
+.bob-tour {
   display: flex;
-  justify-content: space-between;
-  padding: 18px 22px 0;
-  gap: 12px;
+  flex-direction: column;
+  min-height: 0;
 }
-.bob-evidence h2 {
+.bob-tour-content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 6px;
+}
+.bob-companion .linus-bubble > header,
+.bob-companion .linus-footer,
+.bob-tour .linus-turn-meta {
+  flex-shrink: 0;
+}
+.bob-severity {
+  display: inline-block;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.bob-finding-title {
   font-size: 16px;
-  margin: 8px 0;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+}
+.bob-prose {
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.bob-prose p + p {
+  margin-top: 12px;
+}
+.bob-prose code,
+.bob-location code {
+  font-size: 0.9em;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border-radius: 3px;
+  padding: 1px 3px;
+}
+.bob-prose pre {
+  overflow-x: auto;
+  padding: 10px;
+  margin: 10px 0;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.bob-prose pre code {
+  background: none;
+  padding: 0;
+}
+.bob-prose ul,
+.bob-prose ol,
+.bob-notes > ul {
+  padding-left: 20px;
+  margin: 10px 0;
+  display: grid;
+  gap: 10px;
+  list-style-type: disc;
+}
+.bob-prose ol {
+  list-style-type: decimal;
+}
+.bob-prose a {
+  color: var(--primary);
+  text-decoration: underline;
 }
 .bob-location {
   font-size: 11px;
+  line-height: 1.5;
   color: var(--muted-foreground);
-  padding: 0 22px;
+  margin: 0 0 14px;
   overflow-wrap: anywhere;
 }
 .bob-suggestion {
-  padding: 16px 22px;
-  overflow: auto;
-  max-height: 30%;
+  margin-top: 18px;
+  padding-top: 14px;
   border-top: 1px solid var(--border);
-  font-size: 12px;
 }
-.bob-suggestion pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.bob-suggestion h3 {
   font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 .bob-comment {
   margin: 16px 0;
@@ -62,28 +117,35 @@
 .bob-notes {
   font-size: 12px;
   line-height: 1.6;
-  margin: 10px 0;
+  margin: 14px 0;
+}
+.bob-notes summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.bob-notes .bob-prose {
+  font-size: 13px;
+}
+.bob-tour-controls {
+  flex-shrink: 0;
+  justify-content: flex-end;
+  padding-top: 12px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
 }
 .bob-submit {
+  flex-shrink: 0;
   margin-top: 14px;
 }
-@media (max-width: 1150px) {
-  .bob-evidence {
-    left: 22px;
-  }
+.review-focusing-line .review-body {
+  padding-right: 428px;
 }
 @media (max-width: 760px) {
-  .bob-evidence {
-    left: 12px;
-    right: 12px;
-    top: 55px;
-    bottom: 350px;
+  .bob-companion .linus-bubble {
+    max-height: 290px;
   }
-  .bob-evidence header {
-    align-items: center;
-    padding: 12px 12px 0;
-  }
-  .bob-location {
-    padding: 0 12px;
+  .review-focusing-line .review-body {
+    padding-right: 0;
+    padding-bottom: 400px;
   }
 }

@@ -7,6 +7,9 @@ import { handle } from './contractRouter'
 
 export function bobRouter({ bobJobs, store }: Services) {
   const router = Router()
+  handle(router, routes.savedBobReviews, ({ query }) => ({
+    reviews: store.bobReviews(query.repository),
+  }))
   handle(router, routes.latestBob, ({ query }) => {
     const saved = store.latestBobSession(query.repository, query.url)
     return { session: saved ? bobJobs.get(saved.id) : null }

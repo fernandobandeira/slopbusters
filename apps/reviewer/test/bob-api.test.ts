@@ -8,8 +8,9 @@ import { fetchPull } from '../server/features/pulls/github'
 import { ReviewerStore } from '../server/adapters/store'
 import * as routes from '../shared/api/bob'
 import { Provider } from '../shared/domain/types'
-import { fixtureBobAdvice } from './fixtures/bob'
+import { fixtureBobAdvice, required } from './fixtures/bob'
 import { fixturePull } from './fixtures/pull'
+import type { BobSession } from '../shared/domain/bob'
 
 vi.mock('../server/features/bob/bobReview', () => ({
   loadBobSkill: vi.fn(),
@@ -102,6 +103,8 @@ describe('Bob API contracts and persistent tours', () => {
       )
       expect(latest.session?.id).toBe(id)
       expect(latest.session?.results[0]?.advice.findings).toEqual(fixtureBobAdvice().findings)
+      saveFailedRetry(directory, required(latest.session))
+      await expectSavedReviews(app.url, id)
       const missing = await fetch(
         `${app.url}/api/bob/latest?repository=review-room/example&url=https://github.com/review-room/example/pull/129`,
       )
@@ -112,3 +115,37 @@ describe('Bob API contracts and persistent tours', () => {
     }
   })
 })
+
+function saveFailedRetry(directory: string, completed: BobSession) {
+  const store = new ReviewerStore({ dataDirectory: directory })
+  try {
+    store.saveBobSession({
+      ...completed,
+      id: 'later-failed',
+      createdAt: '2099-01-01T00:00:00Z',
+      status: 'failed',
+      results: [],
+      error: 'Provider unavailable',
+    })
+  } finally {
+    store.close()
+  }
+}
+
+async function expectSavedReviews(url: string, id: string) {
+  const reviews = routes.savedBobReviews.response.parse(
+    await (await fetch(`${url}/api/bob/reviews?repository=review-room/example`)).json(),
+  )
+  expect(reviews.reviews).toEqual([
+    expect.objectContaining({
+      sessionId: id,
+      url: fixturePull().url,
+      findingCount: 1,
+      verdict: 'changes',
+    }),
+  ])
+  const elsewhere = routes.savedBobReviews.response.parse(
+    await (await fetch(`${url}/api/bob/reviews?repository=elsewhere/repo`)).json(),
+  )
+  expect(elsewhere.reviews).toEqual([])
+}

@@ -3,9 +3,12 @@ import {
   LineKind,
   ReviewEvent,
   type ChangeGroup,
+  type DraftComment,
   type PullRequest,
   type ReviewDraft,
 } from './types'
+
+export type ReviewLocation = Pick<DraftComment, 'path' | 'line' | 'side'>
 
 /** Preserve any feedback edited while the submitted review was in flight. */
 export function clearSubmittedFeedback(current: ReviewDraft, submitted: ReviewDraft): ReviewDraft {

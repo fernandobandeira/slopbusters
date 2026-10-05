@@ -34,6 +34,17 @@ export type BobResult = ReviewResult<BobAdvice>
 export type BobSession = ReviewSession<BobAdvice>
 export type BobPending = PendingReview<BobAdvice>
 
+export const bobReviewSummarySchema = z.object({
+  sessionId: z.string(),
+  createdAt: z.string(),
+  url: z.string(),
+  number: z.number().int().positive(),
+  headSha: z.string(),
+  verdict: bobAdviceSchema.shape.verdict,
+  findingCount: z.number().int().nonnegative(),
+})
+export type BobReviewSummary = z.infer<typeof bobReviewSummarySchema>
+
 export const bobVerdictLabels: Record<BobAdvice['verdict'], string> = {
   clean: 'Code reads well',
   changes: 'Improvements to make',

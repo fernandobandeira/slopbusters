@@ -3,6 +3,7 @@ import { DescriptionDialog } from './DescriptionDialog'
 import { ExportFeedbackDialog } from './ExportFeedbackDialog'
 import { useCommentEditor } from './useCommentEditor'
 import { useReviewDiff } from './useReviewDiff'
+import { useReviewFocus } from './useReviewFocus'
 import { ReviewDiffViewer } from './ReviewDiffViewer'
 import { GroupSidebar } from './GroupSidebar'
 import { SubmitReviewDialog } from './SubmitReviewDialog'
@@ -46,6 +47,7 @@ import { StackDialog } from '../stacks/StackPanel'
 import { readRoute } from '../../lib/routes'
 
 import { exportFeedback } from '../../../shared/domain/review'
+import type { ReviewLocation } from '../../../shared/domain/review'
 import { pullHasUpdates } from '../../../shared/domain/updates'
 import { DiffSide, type PullRequest, type ReviewDraft } from '../../../shared/domain/types'
 
@@ -54,6 +56,7 @@ export interface ReviewCompanionContext {
   setDraft: (action: (previous: ReviewDraft) => ReviewDraft) => void
   ready: boolean
   openReview: () => void
+  focusLine: (location: ReviewLocation | undefined) => void
 }
 interface Props {
   pull: PullRequest
@@ -126,6 +129,14 @@ export function ReviewWorkspace({
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const viewerRef = useRef<CodeViewHandle<LineDiscussion, undefined>>(null)
+  const focus = useReviewFocus(pull, {
+    searchParams,
+    setSearchParams,
+    setFileCollapsed,
+    selected,
+    items,
+    viewerRef,
+  })
   const { discussions, discussionError, refreshDiscussions, postReply, setDiscussionError } =
     useDiscussions(pull.id, setNotice)
   const { job, organizing, organizationFailed, organize, cancel } = useOrganizeJob(pull, {
@@ -281,7 +292,7 @@ export function ReviewWorkspace({
     </div>
   )
   return (
-    <div className="review-workspace">
+    <div className={`review-workspace ${focus.active ? 'review-focusing-line' : ''}`}>
       {grouped && organizing && (
         <div className="organization-overlay">
           <OrganizationEmptyState
@@ -564,6 +575,7 @@ export function ReviewWorkspace({
         draft,
         setDraft,
         ready: draftReady,
+        focusLine: focus.focusLine,
         openReview: () => {
           setSubmitOpen(true)
         },

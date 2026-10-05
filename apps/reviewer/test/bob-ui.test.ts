@@ -5,13 +5,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BobCompanion } from '../src/features/bob/BobCompanion'
 import { useBobSession } from '../src/features/bob/useBobSession'
 import { BobTour } from '../src/features/bob/BobTour'
+import { BobReviewBadge } from '../src/features/bob/BobReviewBadge'
+import { BobText } from '../src/features/bob/BobText'
 import type { BobResult } from '../shared/domain/bob'
-import type { ReviewDraft } from '../shared/domain/types'
+import { Provider, type ReviewDraft } from '../shared/domain/types'
 import { fixtureBobAdvice } from './fixtures/bob'
 import { fixturePull } from './fixtures/pull'
 
 vi.mock('../src/features/bob/useBobSession', () => ({ useBobSession: vi.fn() }))
-vi.mock('../src/features/bob/BobEvidence', () => ({ BobEvidence: () => null }))
 afterEach(() => {
   cleanup()
   localStorage.clear()
@@ -32,16 +33,96 @@ function Tour({ stale = false }: { stale?: boolean }) {
     result,
     index: 1,
     advance: vi.fn(),
-    showEvidence: vi.fn(),
     context: {
       pull: stale ? { ...result.pull, baseSha: 'changed' } : result.pull,
       draft,
       setDraft,
       ready: true,
       openReview: vi.fn(),
+      focusLine: vi.fn(),
     },
   })
 }
+
+describe('Bob tour navigation and readability', () => {
+  it('focuses the existing diff on a finding and clears it when minimized', () => {
+    const focusLine = vi.fn()
+    vi.mocked(useBobSession).mockReturnValue({
+      session: {
+        id: 'saved',
+        repository: 'review-room/example',
+        urls: [result.pull.url],
+        primary: { provider: Provider.codex, model: 'codex' },
+        companion: { provider: Provider.claude, model: 'claude' },
+        status: 'complete',
+        progress: '',
+        createdAt: '',
+        results: [result],
+      },
+      loading: false,
+      busy: false,
+      error: '',
+      act: vi.fn(),
+      reload: vi.fn(),
+    })
+    render(
+      createElement(BobCompanion, {
+        pull: result.pull,
+        draft: { comments: [], summary: '', viewedFileIds: [] },
+        setDraft: vi.fn(),
+        ready: true,
+        openReview: vi.fn(),
+        focusLine,
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Bob code review' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(focusLine).toHaveBeenLastCalledWith(result.advice.findings[0])
+    expect(screen.queryByRole('button', { name: 'Show code' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Bob finding evidence' })).toBeNull()
+    expect(screen.getByText('Suggested improvement')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Minimize Bob' }))
+    expect(focusLine).toHaveBeenLastCalledWith(undefined)
+  })
+  it('opens the requested saved review from its listing badge and marks a changed revision', () => {
+    const onOpen = vi.fn()
+    render(
+      createElement(BobReviewBadge, {
+        review: {
+          sessionId: 'saved',
+          createdAt: '',
+          url: result.pull.url,
+          number: result.pull.number,
+          headSha: result.pull.headSha,
+          verdict: 'changes',
+          findingCount: 1,
+        },
+        headSha: 'changed',
+        onOpen,
+      }),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: /Open saved Bob review.*changed after Bob/ }),
+    )
+    expect(onOpen).toHaveBeenCalledOnce()
+  })
+  it('renders code identifiers, paragraphs and suggestions as readable Markdown without HTML', () => {
+    const view = render(
+      createElement(BobText, {
+        children:
+          'Reuse `createProvisionedAccount()`.\n\n- Arrange the account\n- Assert the balance\n\n```ts\nawait provision(account)\n```\n<script>alert(1)</script>',
+      }),
+    )
+
+    expect(screen.getByText('createProvisionedAccount()').tagName).toBe('CODE')
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    expect(view.container.querySelector('pre code')?.textContent).toContain(
+      'await provision(account)',
+    )
+    expect(view.container.querySelector('script')).toBeNull()
+  })
+})
 
 describe('Bob comment collection during the tour', () => {
   it('invites the user to review the open PR with the supplied portraits', () => {
@@ -61,6 +142,7 @@ describe('Bob comment collection during the tour', () => {
         setDraft: vi.fn(),
         ready: true,
         openReview: vi.fn(),
+        focusLine: vi.fn(),
       }),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Open Bob code review' }))

@@ -12,6 +12,7 @@ import {
 import type { PullRequest, ReviewDraft } from '../../shared/domain/types'
 import type { Preferences } from '../../shared/domain/preferences'
 import type { BobSession } from '../../shared/domain/bob'
+import { readSavedBobReviews } from './savedBobReviews'
 import type { LinusRecommendation, LinusSession } from '../../shared/domain/linus'
 
 export class ReviewNotFoundError extends UserError {
@@ -218,6 +219,9 @@ export class ReviewerStore {
       ON CONFLICT(id) DO UPDATE SET session = excluded.session`,
       )
       .run(session.id, session.repository, session.createdAt, JSON.stringify(session))
+  }
+  bobReviews(repository: string) {
+    return readSavedBobReviews(this.database, repository)
   }
   getBobSession(id: string): BobSession | undefined {
     const row = this.database.prepare('SELECT session FROM bob_sessions WHERE id = ?').get(id)
