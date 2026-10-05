@@ -1,18 +1,10 @@
-.bob-companion {
-  left: 22px;
-  right: auto;
-  align-items: flex-start;
-}
-.bob-companion .linus-bubble {
-  border-radius: 16px 16px 16px 4px;
-}
 .bob-evidence {
   position: fixed;
   z-index: 42;
   top: 65px;
   bottom: 22px;
-  left: 430px;
-  right: 105px;
+  left: 270px;
+  right: 430px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -75,16 +67,12 @@
 .bob-submit {
   margin-top: 14px;
 }
-@media (max-width: 900px) {
+@media (max-width: 1150px) {
   .bob-evidence {
-    right: 12px;
+    left: 22px;
   }
 }
 @media (max-width: 760px) {
-  .bob-companion {
-    left: 12px;
-    right: auto;
-  }
   .bob-evidence {
     left: 12px;
     right: 12px;
