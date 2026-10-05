@@ -1,8 +1,8 @@
 "use client";
 
-import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
+import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area"
 
-import { cn } from "~/lib/utils";
+import { cn } from "~/lib/utils"
 
 function getVirtualizedScrollFadeClassName({ top, bottom }: { top: boolean; bottom: boolean }) {
   if (!top && !bottom) return undefined;

@@ -1,18 +1,12 @@
 /* oxlint-disable eslint/no-restricted-imports -- This is the single styled adapter around Pierre's raw viewer. */
-import {
-  CodeView,
-  type CodeViewHandle,
-  type CodeViewProps,
-  type ControlledCodeViewProps,
-  type UncontrolledCodeViewProps,
-} from "@pierre/diffs/react";
+import { CodeView, type CodeViewHandle, type CodeViewProps, type ControlledCodeViewProps, type UncontrolledCodeViewProps } from "@pierre/diffs/react"
 /* oxlint-enable eslint/no-restricted-imports */
-import type { Ref } from "react";
-import type { CodeViewItem, DiffTokenEventBaseProps } from "@pierre/diffs";
-import { contextMenuToken } from "../../../../codeSymbols";
+import type { Ref } from "react"
+import type { CodeViewItem, DiffTokenEventBaseProps } from "@pierre/diffs"
+import { useTheme } from "../../hooks/useTheme"
 
-import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
-import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
+import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering"
+import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider"
 
 const DIFF_LINE_HEIGHT = 22;
 
@@ -333,6 +327,7 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
   onTokenContextMenu,
   ...props
 }: StyledDiffCodeViewProps<LAnnotation>) {
+  const { contextMenuToken } = useTheme();
   return (
     <DiffWorkerPoolProvider>
       <CodeView<LAnnotation>
@@ -349,7 +344,7 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
           ...options,
           onPostRender: (node, _instance, phase, context) => {
             node.oncontextmenu = onTokenContextMenu ? (event) => {
-              const token = contextMenuToken(event);
+              const token = contextMenuToken?.(event);
               if (token) onTokenContextMenu(token, event, context.item);
             } : null;
             // Whitespace-only word decorations add noise around indentation without

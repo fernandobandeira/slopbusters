@@ -1,17 +1,11 @@
 "use client";
 
-import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { XIcon } from "lucide-react";
-import { cn } from "~/lib/utils";
-import { Button } from "~/components/ui/button";
-import {
-  DIALOG_BACKDROP_CLASS,
-  DIALOG_MEDIA_BACKDROP_CLASS,
-  DIALOG_MEDIA_POPUP_CLASS,
-  DIALOG_MOBILE_SHEET_CLASS,
-  DIALOG_POPUP_CLASS,
-} from "~/components/ui/dialog-styles";
-import { ScrollArea } from "~/components/ui/scroll-area";
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
+import { XIcon } from "lucide-react"
+import { cn } from "~/lib/utils"
+import { Button } from "~/components/ui/button"
+import { DIALOG_BACKDROP_CLASS, DIALOG_MEDIA_BACKDROP_CLASS, DIALOG_MEDIA_POPUP_CLASS, DIALOG_MOBILE_SHEET_CLASS, DIALOG_POPUP_CLASS } from "~/components/ui/dialog-styles"
+import { ScrollArea } from "~/components/ui/scroll-area"
 
 const Dialog = DialogPrimitive.Root;
 

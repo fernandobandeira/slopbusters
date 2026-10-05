@@ -2,17 +2,22 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createFileContentLoader, createSourceProjectLoader } from '../server/fileContent'
-import { runCommand } from '../server/process'
+import {
+  createFileContentLoader,
+  createSourceProjectLoader,
+} from '../server/features/navigation/fileContent'
+import { runCommand } from '../server/adapters/process'
 import { startReviewerServer } from '../server/app'
-import { ReviewerStore } from '../server/store'
-import { DiffSide, LineKind } from '../shared/types'
+import { ReviewerStore } from '../server/adapters/store'
+import { DiffSide, LineKind } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
 
-vi.mock('../server/process', () => ({ runCommand: vi.fn() }))
-vi.mock('../server/sourceRepository', () => ({
+vi.mock('../server/adapters/process', () => ({ runCommand: vi.fn() }))
+vi.mock('../server/adapters/sourceRepository', () => ({
   LocalSourceRepository: class {
-    async tree() { throw new Error('Local Git unavailable') }
+    async tree() {
+      throw new Error('Local Git unavailable')
+    }
     async close() {}
   },
 }))
@@ -146,7 +151,7 @@ describe('exact-revision file context', () => {
         errors: [{ message: 'not accessible' }],
       }),
     )
-    await expect(load(pull, file.id)).rejects.toThrow('exact-revision')
+    await expect(load(pull, file.id)).rejects.toThrow('not accessible')
     command.mockResolvedValueOnce(response(oldText, newText))
     expect((await load(pull, file.id)).new?.sha).toBe(pull.headSha)
   })
@@ -182,7 +187,9 @@ describe('file context API', () => {
           }),
       )
       const loading = fetch(`${server.url}/api/pulls/${pull.id}/files/${file.id}/content`)
-      await vi.waitFor(() => expect(command).toHaveBeenCalledTimes(2))
+      await vi.waitFor(() => {
+        expect(command).toHaveBeenCalledTimes(2)
+      })
       const writer = new ReviewerStore({ dataDirectory: directory })
       writer.savePull({
         ...pull,

@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import * as processTools from '../server/process'
-import { LocalSourceRepository } from '../server/sourceRepository'
-import { createSourceProjectLoader } from '../server/fileContent'
-import { createSourceNavigator } from '../server/navigation'
-import { DiffSide } from '../shared/types'
+import * as processTools from '../server/adapters/process'
+import { LocalSourceRepository } from '../server/adapters/sourceRepository'
+import { createSourceProjectLoader } from '../server/features/navigation/fileContent'
+import { createSourceNavigator } from '../server/features/navigation/navigation'
+import { DiffSide } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
 
 const cleanup: (() => Promise<unknown>)[] = []
@@ -21,10 +21,14 @@ async function fixture() {
   cleanup.push(() => rm(directory, { recursive: true, force: true }))
   const origin = join(directory, 'origin')
   await mkdir(origin)
-  const git = async (...args: string[]) => (await processTools.runCommand({
-    command: 'git', cwd: origin,
-    args: ['-c', 'user.name=Source Test', '-c', 'user.email=source@example.test', ...args],
-  })).trim()
+  const git = async (...args: string[]) =>
+    (
+      await processTools.runCommand({
+        command: 'git',
+        cwd: origin,
+        args: ['-c', 'user.name=Source Test', '-c', 'user.email=source@example.test', ...args],
+      })
+    ).trim()
   await git('init', '--template=', '--initial-branch=main')
   await mkdir(join(origin, 'src'))
   await writeFile(join(origin, 'src/use.ts'), "import { run } from './service'\nrun()\n")
@@ -65,13 +69,20 @@ describe('persistent local source repositories', () => {
     expect(left).toMatchObject({ sha: base, content: 'export function run() { return 1 }\n' })
     const fetches = commands.mock.calls.filter(([command]) => command.args.includes('fetch'))
     expect(fetches).toHaveLength(2)
-    expect(fetches.map(([command]) => command.args.at(-1))).toEqual(expect.arrayContaining([
-      `${head}:refs/review/${head}`, `${base}:refs/review/${base}`,
-    ]))
+    expect(fetches.map(([command]) => command.args.at(-1))).toEqual(
+      expect.arrayContaining([`${head}:refs/review/${head}`, `${base}:refs/review/${base}`]),
+    )
     expect(commands.mock.calls.every(([command]) => command.command === 'git')).toBe(true)
     const navigation = createSourceNavigator(loader)
-    expect(await navigation(pull, { path: 'src/use.ts', side: DiffSide.right, line: 2, column: 1, kind: 'definition' }))
-      .toMatchObject({ mode: 'semantic', targets: [{ path: 'src/service.ts', name: 'run' }] })
+    expect(
+      await navigation(pull, {
+        path: 'src/use.ts',
+        side: DiffSide.right,
+        line: 2,
+        column: 1,
+        kind: 'definition',
+      }),
+    ).toMatchObject({ mode: 'semantic', targets: [{ path: 'src/service.ts', name: 'run' }] })
   })
 
   it('reopens downloaded revisions after restart with the remote unavailable and fetches a new revision once', async () => {
@@ -87,8 +98,12 @@ describe('persistent local source repositories', () => {
     const commands = vi.spyOn(processTools, 'runCommand')
     const restarted = open()
     const loader = createSourceProjectLoader(restarted)
-    expect((await loader.file(pull, DiffSide.right, 'src/service.ts')).content).toContain('return 2')
-    expect((await loader.file({ ...pull, headSha: next }, DiffSide.right, 'src/service.ts')).content).toContain('return 3')
+    expect((await loader.file(pull, DiffSide.right, 'src/service.ts')).content).toContain(
+      'return 2',
+    )
+    expect(
+      (await loader.file({ ...pull, headSha: next }, DiffSide.right, 'src/service.ts')).content,
+    ).toContain('return 3')
     expect(commands.mock.calls.some(([command]) => command.args.includes('fetch'))).toBe(false)
   })
 
@@ -98,11 +113,15 @@ describe('persistent local source repositories', () => {
     const loader = createSourceProjectLoader(repository)
     const tree = await loader.tree(pull, DiffSide.right)
     expect(tree.paths).not.toContain('link.ts')
-    expect((await loader.file(pull, DiffSide.right, 'src/odd\t"name.ts')).content).toContain('const odd')
+    expect((await loader.file(pull, DiffSide.right, 'src/odd\t"name.ts')).content).toContain(
+      'const odd',
+    )
     await expect(loader.file(pull, DiffSide.right, 'link.ts')).rejects.toThrow('regular file')
     await expect(loader.file(pull, DiffSide.right, 'large.ts')).rejects.toThrow('512 KiB')
     await expect(loader.file(pull, DiffSide.right, 'binary.ts')).rejects.toThrow('binary')
-    await expect(loader.file(pull, DiffSide.right, '../outside.ts')).rejects.toThrow('invalid file path')
+    await expect(loader.file(pull, DiffSide.right, '../outside.ts')).rejects.toThrow(
+      'invalid file path',
+    )
     expect(() => repository.tree('../outside', pull.repo, pull.headSha)).toThrow()
     expect(() => repository.tree(pull.owner, pull.repo, '--all')).toThrow()
   })
@@ -117,19 +136,24 @@ describe('persistent local source repositories', () => {
     ])
     const fetches = commands.mock.calls.filter(([command]) => command.args.includes('fetch'))
     expect(fetches).toHaveLength(2)
-    expect(new Set(fetches.map(([command]) => command.args[command.args.indexOf('--git-dir') + 1])).size).toBe(2)
+    expect(
+      new Set(fetches.map(([command]) => command.args[command.args.indexOf('--git-dir') + 1])).size,
+    ).toBe(2)
   })
 
   it('retries failed downloads and rejects new work after shutdown', async () => {
     const { open, pull } = await fixture()
     const original = processTools.runCommand
     const commands = vi.spyOn(processTools, 'runCommand')
-    commands.mockImplementation((params) => params.args.includes('fetch')
-      ? Promise.reject(new Error('Offline')) : original(params))
+    commands.mockImplementation((params) =>
+      params.args.includes('fetch') ? Promise.reject(new Error('Offline')) : original(params),
+    )
     const repository = open()
     await expect(repository.tree(pull.owner, pull.repo, pull.headSha)).rejects.toThrow('Offline')
     commands.mockRestore()
-    expect((await repository.tree(pull.owner, pull.repo, pull.headSha)).tree.length).toBeGreaterThan(0)
+    expect(
+      (await repository.tree(pull.owner, pull.repo, pull.headSha)).tree.length,
+    ).toBeGreaterThan(0)
     await repository.close()
     expect(() => repository.tree(pull.owner, pull.repo, pull.headSha)).toThrow('shutting down')
   })

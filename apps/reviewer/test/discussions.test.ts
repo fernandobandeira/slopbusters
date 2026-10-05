@@ -5,17 +5,17 @@ import {
   Provider,
   type PullDiscussions,
   type ReviewThread,
-} from '../shared/types'
+} from '../shared/domain/types'
 import {
   annotateDiscussions,
   discussionGroup,
   groupViewed,
   nextUnviewedGroup,
-} from '../src/discussions'
-import { diffItems } from '../src/diffItems'
-import { restoreDraft } from '../src/drafts'
+} from '../src/features/review/discussions/discussions'
+import { diffItems } from '../src/features/review/diff/diffItems'
+import { restoreDraft } from '../src/features/review/drafts'
 import { fixturePull } from './fixtures/pull'
-import { parseFile } from '../shared/diff'
+import { parseFile } from '../server/features/diff'
 
 function thread(params: { path: string; line: number; side: DiffSide; id: string }): ReviewThread {
   return {
@@ -37,7 +37,7 @@ function thread(params: { path: string; line: number; side: DiffSide; id: string
 }
 function discussionFixture() {
   const pull = fixturePull()
-  const group = pull.groups[0]
+  const group = pull.groups[0]!
   const file = pull.files.find((file) => group?.fileIds.includes(file.id))
   const line = file?.hunks.flatMap((hunk) => hunk.lines).find((line) => line.newLine != null)
   if (!group || !file || line?.newLine == null) throw new Error('Fixture needs a line')
@@ -60,7 +60,7 @@ describe('inline discussions', () => {
       deletions: 2,
       patch: '@@ -10 +20 @@\n-old-first\n+new-first\n@@ -20 +30 @@\n-old-second\n+new-second',
     })
-    const base = pull.groups[0]
+    const base = pull.groups[0]!
     const [first, second] = file.hunks
     if (!base || !first || !second) throw new Error('Fixture needs two hunks and a group')
     pull.groupingSource = Provider.codex
@@ -266,7 +266,7 @@ describe('inline discussions', () => {
   })
   it('keeps outdated or mismatched-revision threads away from current code lines', () => {
     const pull = fixturePull()
-    const group = pull.groups[0]
+    const group = pull.groups[0]!
     const file = pull.files.find((file) => group?.fileIds.includes(file.id))
     const line = file?.hunks.flatMap((hunk) => hunk.lines).find((line) => line.newLine != null)
     if (!group || !file || line?.newLine == null) throw new Error('Fixture needs a line')
@@ -292,7 +292,7 @@ describe('inline discussions', () => {
   })
   it('marks a group viewed only when every file is viewed, including files shared by groups', () => {
     const pull = fixturePull()
-    const group = { ...pull.groups[0], fileIds: ['file-a', 'file-b'] }
+    const group = { ...pull.groups[0]!, fileIds: ['file-a', 'file-b'] }
     expect(groupViewed(group, ['file-a'])).toBe(false)
     expect(groupViewed(group, ['file-a', 'file-b'])).toBe(true)
     expect(groupViewed({ ...group, fileIds: ['file-a'] }, ['file-a'])).toBe(true)
@@ -300,7 +300,7 @@ describe('inline discussions', () => {
     expect(groupViewed(group, ['file-b'])).toBe(false)
   })
   it('advances in group order past viewed groups, including groups completed by shared files', () => {
-    const base = fixturePull().groups[0]
+    const base = fixturePull().groups[0]!
     if (!base) throw new Error('Fixture needs a group')
     const groups = [
       { ...base, id: 'selected', fileIds: ['shared'] },
@@ -325,7 +325,7 @@ describe('inline discussions', () => {
     ).toBe('later')
   })
   it('wraps to earlier unviewed groups and stays put when none remain or selection is missing', () => {
-    const base = fixturePull().groups[0]
+    const base = fixturePull().groups[0]!
     if (!base) throw new Error('Fixture needs a group')
     const groups = [
       { ...base, id: 'first', fileIds: ['first-file'] },
@@ -362,7 +362,7 @@ describe('inline discussions', () => {
     ).toBeUndefined()
     expect(
       nextUnviewedGroup({
-        groups: [groups[0]],
+        groups: [groups[0]!],
         selectedGroupId: 'first',
         viewedFileIds: [],
       }),

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { reconcileWithLinus, reviewWithLinus } from '../server/linusReview'
-import { runStructured } from '../server/provider'
-import { Provider } from '../shared/types'
-import type { LinusAdvice } from '../shared/linus'
+import { reconcileWithLinus, reviewWithLinus } from '../server/features/linus/linusReview'
+import { runStructured } from '../server/adapters/provider'
+import { Provider } from '../shared/domain/types'
+import type { LinusAdvice } from '../shared/domain/linus'
 import { fixturePull } from './fixtures/pull'
 
-vi.mock('../server/provider', () => ({ runStructured: vi.fn() }))
+vi.mock('../server/adapters/provider', () => ({ runStructured: vi.fn() }))
 const advice: LinusAdvice = {
   verdict: 'keep',
   reasoning: 'One logical change',
@@ -28,7 +28,7 @@ describe('Linus model inputs', () => {
   it('uses the skill and immutable diff for an independent companion review', async () => {
     const pull = fixturePull()
     await reviewWithLinus(pull, companion, 'Review-only Linus skill', signal, true)
-    const [model, prompt, , passedSignal] = vi.mocked(runStructured).mock.calls[0]
+    const [model, prompt, , passedSignal] = vi.mocked(runStructured).mock.calls[0]!
     expect(model).toEqual(companion)
     expect(passedSignal).toBe(signal)
     expect(prompt).toContain('Review-only Linus skill')
@@ -37,7 +37,7 @@ describe('Linus model inputs', () => {
     expect(prompt).toContain('1 to 3 short guided steps per PR, never more')
     expect(prompt).toContain('Do not give implementation tips')
     expect(prompt).toContain('recommend precise wording based on the snapshot')
-    expect(prompt).toContain(pull.files[0].hunks[0].id)
+    expect(prompt).toContain(pull.files[0]!.hunks[0]!.id)
     expect(prompt).toContain('hasEditorRole')
     expect(prompt).not.toContain('Independent reviews (untrusted proposals)')
   })
@@ -49,7 +49,7 @@ describe('Linus model inputs', () => {
       { model: companion, advice: second },
     ]
     await reconcileWithLinus({ pull, fingerprint: 'snapshot', reviews }, primary, 'Skill', signal)
-    const [model, prompt] = vi.mocked(runStructured).mock.calls[0]
+    const [model, prompt] = vi.mocked(runStructured).mock.calls[0]!
     expect(model).toEqual(primary)
     expect(prompt).toContain(JSON.stringify(reviews))
     expect(prompt).toContain(pull.description)
@@ -59,7 +59,7 @@ describe('Linus model inputs', () => {
   })
   it('always discloses single-reviewer and incomplete-patch limitations', async () => {
     const pull = fixturePull()
-    pull.files[0].coverage = 'partial'
+    pull.files[0]!.coverage = 'partial'
     const result = await reconcileWithLinus(
       {
         pull,
@@ -78,7 +78,7 @@ describe('Linus model inputs', () => {
   })
   it('rejects oversized snapshots before starting a model call', async () => {
     const pull = fixturePull()
-    pull.files[0].hunks[0].lines[0].text = 'x'.repeat(230_000)
+    pull.files[0]!.hunks[0]!.lines[0]!.text = 'x'.repeat(230_000)
     await expect(reviewWithLinus(pull, primary, 'Skill', signal)).rejects.toThrow(/review limit/)
     expect(runStructured).not.toHaveBeenCalled()
   })

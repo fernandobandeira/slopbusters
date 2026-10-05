@@ -1,22 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  normalizePullStatus,
-  fetchPullStatuses,
-  fetchInboxStatuses,
-  clearPullStatusCache,
-} from '../server/pullStatus'
-import { runCommand } from '../server/process'
+import { normalizePullStatus, createPullStatusService } from '../server/features/pulls/pullStatus'
+import { runCommand } from '../server/adapters/process'
 import { startReviewerServer } from '../server/app'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { graphPull, graphRef } from './fixtures/pullStatus'
 
-vi.mock('../server/process', () => ({ runCommand: vi.fn() }))
+let statusService = createPullStatusService()
+const fetchPullStatuses: ReturnType<typeof createPullStatusService>['fetchPullStatuses'] = (
+  ...args
+) => statusService.fetchPullStatuses(...args)
+const fetchInboxStatuses: ReturnType<typeof createPullStatusService>['fetchInboxStatuses'] = (
+  ...args
+) => statusService.fetchInboxStatuses(...args)
+vi.mock('../server/adapters/process', () => ({ runCommand: vi.fn() }))
 const command = vi.mocked(runCommand)
 beforeEach(() => {
   command.mockReset()
-  clearPullStatusCache()
+  statusService = createPullStatusService()
 })
 
 describe('GitHub merge readiness', () => {
@@ -27,7 +29,11 @@ describe('GitHub merge readiness', () => {
     expect(status.readiness).toBe('not-ready')
     expect(status.reasons.join(' ')).toContain('Required reviews')
     expect(status.requiredApprovals).toBe(2)
-    expect(status.checks[0]).toMatchObject({ name: 'build', required: true, conclusion: 'SUCCESS' })
+    expect(status.checks[0]!).toMatchObject({
+      name: 'build',
+      required: true,
+      conclusion: 'SUCCESS',
+    })
   })
   it.each([
     [{ isDraft: true }, 'not-ready', 'draft'],
@@ -176,7 +182,7 @@ describe('GitHub merge readiness', () => {
       },
     })
     expect(status.unresolvedReviewThreads).toBe(1)
-    expect(status.unresolvedThreads?.[0]).toMatchObject({
+    expect(status.unresolvedThreads?.[0]!).toMatchObject({
       id: 'thread1',
       outdated: true,
       originalLine: 10,
@@ -313,6 +319,7 @@ describe('batched GitHub status reads', () => {
     )
     const first = fetchInboxStatuses('example/project', true)
     const second = fetchInboxStatuses('example/project', true)
+    await Promise.resolve()
     expect(command).toHaveBeenCalledTimes(1)
     resolveRead(
       JSON.stringify([

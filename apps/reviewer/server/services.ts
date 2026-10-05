@@ -1,0 +1,136 @@
+import { ReviewerStore } from './adapters/store'
+import { createGitHub, type GitHub } from './adapters/github'
+import { createPullService } from './features/pulls/github'
+import { createPullStatusService } from './features/pulls/pullStatus'
+import { createStackService } from './features/pulls/stacks'
+import { createRevisionChecker } from './features/pulls/updates'
+import {
+  createFileContentLoader,
+  createSourceProjectLoader,
+} from './features/navigation/fileContent'
+import { LocalSourceRepository } from './adapters/sourceRepository'
+import { ReviewWorkspaces } from './adapters/reviewWorkspaces'
+import { LanguageServers } from './adapters/languageServers'
+import { LanguageServerNavigation } from './adapters/lspNavigation'
+import {
+  WorkspaceTypeScriptNavigation,
+  type TypeScriptWorkerOptions,
+} from './adapters/workspaceNavigation'
+import { createSourceNavigator } from './features/navigation/navigation'
+import { configureSourceAssetsDirectory } from './adapters/treeSymbols'
+import { BobJobs } from './features/bob/bobJobs'
+import { LinusJobs } from './features/linus/linusJobs'
+import { startRepositoryTools } from './adapters/repositoryTools'
+import { OrganizationJobs } from './features/organizationJobs'
+import { logError } from './errors'
+import { createMergeBaseLookup } from './features/pulls/mergeBase'
+import type { PullRequest } from '../shared/domain/types'
+
+export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
+  dataDirectory: string
+  staticDirectory: string
+  sourceAssetsDirectory?: string
+  bobSkillDirectory?: string
+  linusSkillDirectory?: string
+  port?: number
+  allowedOrigins?: string[]
+  sourceRemoteUrl?: (owner: string, repo: string) => string
+  github?: GitHub
+}
+
+export function createServices(options: ReviewerServerOptions) {
+  configureSourceAssetsDirectory(options.sourceAssetsDirectory)
+  const store = new ReviewerStore(options)
+  const github = options.github ?? createGitHub()
+  const statuses = createPullStatusService(github)
+  const stacks = createStackService(github, statuses)
+  const pulls = createPullService(github, stacks)
+  const checkRevision = createRevisionChecker(pulls.fetchPullRevision)
+  const repository = new LocalSourceRepository(options.dataDirectory, options.sourceRemoteUrl)
+  const mergeBase = createMergeBaseLookup(github)
+  const loadFileContent = createFileContentLoader(repository, github, mergeBase)
+  const sourceProject = createSourceProjectLoader(repository, github, mergeBase)
+  const workspaces = new ReviewWorkspaces(options.dataDirectory, repository)
+  const languageServers = new LanguageServers(options.dataDirectory)
+  let languageNavigation = new LanguageServerNavigation(sourceProject, languageServers, workspaces)
+  let typeScriptNavigation = new WorkspaceTypeScriptNavigation(sourceProject, workspaces, options)
+  let navigator = createSourceNavigator(sourceProject, languageNavigation, typeScriptNavigation)
+  const openRepository = async (pull: PullRequest, signal: AbortSignal) => {
+    signal.throwIfAborted()
+    const lease = await workspaces.acquire(pull, pull.headSha)
+    try {
+      signal.throwIfAborted()
+      return await startRepositoryTools(pull, lease, sourceProject, (pull, request) =>
+        navigator(pull, request),
+      )
+    } catch (error) {
+      lease.release()
+      throw error
+    }
+  }
+  const linusJobs = new LinusJobs(
+    store,
+    options.staticDirectory,
+    options.linusSkillDirectory,
+    openRepository,
+    pulls.fetchPull,
+  )
+  const bobJobs = new BobJobs({
+    store,
+    staticDirectory: options.staticDirectory,
+    skillDirectory: options.bobSkillDirectory,
+    openRepository,
+    loadPull: pulls.fetchPull,
+  })
+  const organizationJobs = new OrganizationJobs(store)
+  return {
+    store,
+    github,
+    pulls,
+    statuses,
+    stacks,
+    checkRevision,
+    loadFileContent,
+    sourceProject,
+    workspaces,
+    languageServers,
+    linusJobs,
+    bobJobs,
+    organizationJobs,
+    navigateSource: (pull: PullRequest, request: Parameters<typeof navigator>[1]) =>
+      navigator(pull, request),
+    warmSource(pull: PullRequest) {
+      for (const sha of new Set(
+        [pull.headSha, pull.mergeBaseSha].filter((sha): sha is string => Boolean(sha)),
+      ))
+        void repository.tree(pull.owner, pull.repo, sha).catch((error: unknown) => {
+          logError('Warming source cache', error)
+        })
+    },
+    async removeWorkspace(identity: { owner: string; repo: string; sha: string }) {
+      await typeScriptNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
+      await languageNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
+      await workspaces.remove(identity, identity.sha)
+      navigator.clearCache()
+    },
+    async saveLanguageServers(configuration: Parameters<LanguageServers['save']>[0]) {
+      await languageServers.save(configuration)
+      await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])
+      navigator.close()
+      languageNavigation = new LanguageServerNavigation(sourceProject, languageServers, workspaces)
+      typeScriptNavigation = new WorkspaceTypeScriptNavigation(sourceProject, workspaces, options)
+      navigator = createSourceNavigator(sourceProject, languageNavigation, typeScriptNavigation)
+      return languageServers.statuses()
+    },
+    async close() {
+      await organizationJobs.close()
+      await Promise.all([linusJobs.close(), bobJobs.close()])
+      await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])
+      navigator.close()
+      await workspaces.close()
+      await repository.close()
+      store.close()
+    },
+  }
+}
+export type Services = ReturnType<typeof createServices>

@@ -1,6 +1,6 @@
 import { createTwoFilesPatch } from 'diff'
-import { parseFile, detectTransfers } from '../../shared/diff'
-import { Priority, type ChangedFile, type PullRequest } from '../../shared/types'
+import { parseFile, detectTransfers } from '../../server/features/diff'
+import { Priority, type ChangedFile, type PullRequest } from '../../shared/domain/types'
 
 const slug = `export function slugify(value: string): string {
   return value

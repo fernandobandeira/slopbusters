@@ -3,19 +3,19 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { runCommand } from '../server/process'
-import { LocalSourceRepository } from '../server/sourceRepository'
-import { ReviewWorkspaces } from '../server/reviewWorkspaces'
-import { createSourceNavigator } from '../server/navigation'
-import { createSourceProjectLoader } from '../server/fileContent'
-import { WorkspaceTypeScriptNavigation } from '../server/workspaceNavigation'
-import { startRepositoryTools } from '../server/repositoryTools'
-import { DiffSide } from '../shared/types'
+import { runCommand } from '../server/adapters/process'
+import { LocalSourceRepository } from '../server/adapters/sourceRepository'
+import { ReviewWorkspaces } from '../server/adapters/reviewWorkspaces'
+import { createSourceNavigator } from '../server/features/navigation/navigation'
+import { createSourceProjectLoader } from '../server/features/navigation/fileContent'
+import { WorkspaceTypeScriptNavigation } from '../server/adapters/workspaceNavigation'
+import { startRepositoryTools } from '../server/adapters/repositoryTools'
+import { DiffSide } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
 import { startReviewerServer } from '../server/app'
-import { ReviewerStore } from '../server/store'
-import { createSourceWorkspace } from '../server/sourceWorkspace'
-import { startLanguageServer } from '../server/lspClient'
+import { ReviewerStore } from '../server/adapters/store'
+import { createSourceWorkspace } from '../server/adapters/sourceWorkspace'
+import { startLanguageServer } from '../server/adapters/lspClient'
 import { fileURLToPath } from 'node:url'
 
 const cleanup: (() => Promise<unknown>)[] = []
@@ -130,7 +130,7 @@ describe('independent local review checkouts', () => {
     const [first, second, old] = await Promise.all([
       workspaces.acquire(pull, pull.headSha),
       workspaces.acquire(pull, pull.headSha),
-      workspaces.acquire(pull, pull.mergeBaseSha!),
+      workspaces.acquire(pull, pull.mergeBaseSha),
     ])
     expect(first.workspace.directory).toBe(second.workspace.directory)
     expect(old.workspace.directory).not.toBe(first.workspace.directory)
@@ -339,7 +339,9 @@ describe('independent local review checkouts', () => {
     const semantic = new WorkspaceTypeScriptNavigation(project, workspaces)
     cleanup.push(() => semantic.close())
     const navigate = createSourceNavigator(project, undefined, semantic)
-    cleanup.push(async () => navigate.close())
+    cleanup.push(async () => {
+      navigate.close()
+    })
     const lease = await workspaces.acquire(pull, pull.headSha)
     const context = await startRepositoryTools(pull, lease, project, navigate)
     cleanup.push(() => context.close())

@@ -1,0 +1,706 @@
+import { useReviewDiff } from './useReviewDiff'
+import { ReviewDiffViewer } from './ReviewDiffViewer'
+import { GroupSidebar } from './GroupSidebar'
+import { SubmitReviewDialog } from './SubmitReviewDialog'
+import { useDiscussions } from './discussions/useDiscussions'
+import { useOrganizeJob } from './useOrganizeJob'
+import { useReviewSubmission } from './useReviewSubmission'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import type { CodeViewHandle } from '@pierre/diffs/react'
+import { Link } from 'react-router'
+
+import { Check, Copy, MessageSquare, ArrowLeft, ArrowRight } from 'lucide-react'
+import { Button } from '~/components/ui/button'
+import { Badge } from '~/components/ui/badge'
+import { Dialog, DialogPopup, DialogHeader, DialogTitle, DialogDescription } from '~/components/ui/dialog'
+
+import { message } from '../../lib/api'
+
+import { SourceContextDialog } from '../source-navigation/SourceContextDialog'
+import { SymbolContextMenu, type SymbolMenuSelection } from '../source-navigation/SymbolContextMenu'
+
+import type { NavigationRequest } from '../../../shared/domain/navigation'
+import { annotateDiscussions, discussionGroup, type LineDiscussion } from './discussions/discussions'
+
+import { DiscussionsTray } from './discussions/DiscussionsTray'
+import { CompactReviewHeader, ReviewPullDetails } from './CompactReviewHeader'
+import { OrganizationEmptyState } from './OrganizationEmptyState'
+import type { OrganizationPreferences } from '../../../shared/domain/preferences'
+import { useReviewDraft } from './useReviewDraft'
+import { usePullUpdates } from '../pull-status/usePullUpdates'
+import { usePullStack } from '../stacks/usePullStack'
+import { usePullStatus } from '../pull-status/usePullStatus'
+import { PullStatusDialog } from '../pull-status/PullStatusDialog'
+import type { PullStatusSection } from '../pull-status/PullStatusIcons'
+import { PullDescription } from './PullDescription'
+import { StackDialog } from '../stacks/StackPanel'
+import { readRoute } from '../../lib/routes'
+
+import { exportFeedback } from '../../../shared/domain/review'
+import { pullHasUpdates } from '../../../shared/domain/updates'
+import { DiffSide, type DraftComment, type PullRequest, type ReviewDraft } from '../../../shared/domain/types'
+
+export interface ReviewCompanionContext {
+  draft: ReviewDraft
+  setDraft: (action: (previous: ReviewDraft) => ReviewDraft) => void
+  ready: boolean
+  openReview: () => void
+}
+interface Props {
+  pull: PullRequest
+  onUpdate: (pull: PullRequest) => void
+  organization?: OrganizationPreferences
+  onReload: () => void
+  reloading: boolean
+  inboxUrl: string
+  renderCompanion?: (context: ReviewCompanionContext) => import('react').ReactNode
+  titlebarTarget?: HTMLElement | null
+}
+export function ReviewWorkspace({
+  pull,
+  onUpdate,
+  organization,
+  onReload,
+  reloading,
+  inboxUrl,
+  titlebarTarget,
+  renderCompanion,
+}: Props) {
+  const { draft, setDraft, ready: draftReady, error: storageError, flush } = useReviewDraft(pull)
+  const {
+    groups,
+    grouped,
+    split,
+    unviewedOnly,
+    searchParams,
+    setSearchParams,
+    changeView,
+    selected,
+    selectedHunks,
+    viewedCount,
+    fileContext,
+    contextLines,
+    setContextLines,
+    items,
+    setFileCollapsed,
+    toggleFile,
+    fileSectionsViewed,
+  } = useReviewDiff(pull, draft, setDraft)
+  const updates = usePullUpdates(pull)
+  const { stack, summary: stackSummary } = usePullStack(pull)
+  const [stackOpen, setStackOpen] = useState(false)
+  const pullStatus = usePullStatus(pull.url, pull.id)
+  const [statusOpen, setStatusOpen] = useState(false)
+  const [statusSection, setStatusSection] = useState<PullStatusSection>()
+  const inboxRoute = readRoute({
+    pathname: window.location.pathname,
+    search: window.location.search,
+  })
+  const inboxFilter = inboxRoute.kind === 'not-found' ? 'mine' : inboxRoute.filter
+  const [symbolMenu, setSymbolMenu] = useState<
+    SymbolMenuSelection & { fileId: string; side: DiffSide; path: string }
+  >()
+  const [sourceSelection, setSourceSelection] = useState<{
+    fileId: string
+    request: NavigationRequest
+    text: string
+  }>()
+  const sourceFileId = sourceSelection?.fileId
+  function navigateSymbol(kind: NavigationRequest['kind'], selection = symbolMenu) {
+    if (!selection) return
+    const { fileId, side, path, line, column, text } = selection
+    setSymbolMenu(undefined)
+    setSourceSelection({ fileId, request: { kind, side, path, line, column }, text })
+    void fileContext.load(fileId).catch(() => {})
+  }
+  const [discussionTray, setDiscussionTray] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [editor, setEditor] = useState<Omit<DraftComment, 'body'> | null>(null)
+  const [body, setBody] = useState('')
+  const viewerRef = useRef<CodeViewHandle<LineDiscussion, undefined>>(null)
+  const { discussions, discussionError, refreshDiscussions, postReply, setDiscussionError } =
+    useDiscussions(pull.id, setNotice)
+  const { job, organizing, organizationFailed, organize, cancel } = useOrganizeJob(pull, {
+    configured: Boolean(organization),
+    onUpdate,
+    setError,
+    setNotice,
+  })
+  const {
+    submitOpen,
+    setSubmitOpen,
+    event,
+    setEvent,
+    submitting,
+    submitted,
+    setSubmitted,
+    submit,
+  } = useReviewSubmission(pull, {
+    draft,
+    setDraft,
+    flush,
+    setError,
+    setNotice,
+    refreshDiscussions,
+    setDiscussionError,
+  })
+  const [exportOpen, setExportOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [descriptionOpen, setDescriptionOpen] = useState(false)
+  const hasFeedback = draft.comments.length > 0 || draft.summary.trim().length > 0
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => {
+      setCopied(false)
+    }, 2500)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [copied])
+
+  const annotated = useMemo(
+    () =>
+      annotateDiscussions({
+        items,
+        pull,
+        discussions,
+        comments: draft.comments,
+        editor,
+      }),
+    [items, pull, discussions, draft.comments, editor],
+  )
+  useEffect(() => {
+    if (!editor) return
+    const file = pull.files.find((file) => file.path === editor.path)
+    if (file)
+      viewerRef.current?.scrollTo({
+        type: 'line',
+        id: file.id,
+        lineNumber: editor.line,
+        side: editor.side === DiffSide.left ? 'deletions' : 'additions',
+        align: 'nearest',
+      })
+  }, [editor, selected?.id, pull.files])
+  async function reloadReview() {
+    try {
+      await flush()
+      onReload()
+    } catch (error) {
+      setError(message(error))
+    }
+  }
+  function editComment(comment: DraftComment) {
+    const file = pull.files.find((file) => file.path === comment.path)
+    if (!file) return
+    const group = discussionGroup({
+      pull,
+      path: comment.path,
+      line: comment.line,
+      side: comment.side,
+    })
+    if (!group) {
+      setNotice('Organize changes before editing line comments.')
+      return
+    }
+    setFileCollapsed(file.id, false, group.id)
+    changeView({ groupId: group.id })
+    setEditor(comment)
+    setBody(comment.body)
+  }
+  function deleteComment(comment: DraftComment) {
+    setDraft((previous) => ({
+      ...previous,
+      comments: previous.comments.filter((item) => item.id !== comment.id),
+    }))
+  }
+  const transfers = pull.transfers.filter((transfer) =>
+    selected?.fileIds.some(
+      (id) =>
+        pull.files.find((file) => file.id === id)?.path === transfer.toPath ||
+        pull.files.find((file) => file.id === id)?.path === transfer.fromPath,
+    ),
+  )
+
+  function addComment(location: { path: string; line: number; side: DiffSide; code?: string }) {
+    if (!selected) return
+    setBody('')
+    setEditor({
+      id: crypto.randomUUID(),
+      headSha: pull.headSha,
+      ...location,
+    })
+  }
+  function commentOnLine(params: { fileId: string; line: number; side: DiffSide }) {
+    const file = pull.files.find((file) => file.id === params.fileId)
+    const source = file?.hunks
+      .flatMap((hunk) => hunk.lines)
+      .find((line) =>
+        params.side === DiffSide.left ? line.oldLine === params.line : line.newLine === params.line,
+      )
+    if (file && source)
+      addComment({ path: file.path, line: params.line, side: params.side, code: source.text })
+  }
+  function saveComment() {
+    if (!editor || !body.trim()) return
+    const comment = { ...editor, body: body.trim() }
+    setDraft((previous) => ({
+      ...previous,
+      comments: [...previous.comments.filter((item) => item.id !== comment.id), comment],
+    }))
+    setEditor(null)
+    setSubmitted(undefined)
+  }
+  async function copyFeedback() {
+    try {
+      await navigator.clipboard.writeText(exportFeedback(pull, draft))
+      setCopied(true)
+    } catch {
+      setExportOpen(true)
+    }
+  }
+  if (!draftReady)
+    return (
+      <div className="empty-state" role={storageError ? 'alert' : 'status'}>
+        <strong>{storageError ?? 'Loading saved review…'}</strong>
+        {storageError && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.location.reload()
+            }}
+          >
+            Try again
+          </Button>
+        )}
+      </div>
+    )
+  const reviewHeader = (
+    <div className="review-chrome">
+      {!grouped && (
+        <Link className="back-to-inbox organization-back" to={inboxUrl}>
+          <ArrowLeft size={14} />
+          Back to inbox
+        </Link>
+      )}
+      <CompactReviewHeader pull={pull} />
+      {grouped && (
+        <div className="review-toolbar">
+          <Button
+            size="sm"
+            variant={discussionTray ? 'secondary' : 'ghost'}
+            onClick={() => {
+              setDiscussionTray(!discussionTray)
+            }}
+          >
+            <MessageSquare size={14} />
+            Discussions {discussions ? discussions.threads.length + draft.comments.length : '…'}
+          </Button>
+          {hasFeedback && (
+            <Button
+              className="copy-feedback"
+              size="sm"
+              variant="outline"
+              disabled={copied}
+              aria-live="polite"
+              onClick={() => void copyFeedback()}
+            >
+              {copied ? <Check size={13} /> : <Copy size={13} />}
+              {copied ? 'Copied' : 'Copy feedback'}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            disabled={Boolean(submitted)}
+            onClick={() => {
+              setError('')
+              setSubmitOpen(true)
+            }}
+          >
+            {submitted ? 'Submitted' : 'Submit review'}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+  return (
+    <div className="review-workspace">
+      {grouped && organizing && (
+        <div className="organization-overlay">
+          <OrganizationEmptyState
+            organization={organization}
+            organizing
+            onCancel={
+              job
+                ? () => {
+                    void cancel().catch((cause) => {
+                      setError(message(cause))
+                    })
+                  }
+                : undefined
+            }
+          />
+        </div>
+      )}
+      {grouped && (
+        <GroupSidebar
+          pull={pull}
+          draft={draft}
+          selectedId={selected?.id}
+          inboxUrl={inboxUrl}
+          submitting={submitting}
+          organizing={organizing}
+          onSelect={(groupId) => {
+            changeView({ groupId })
+          }}
+          onRegenerate={() => void organize(true)}
+          onNotice={setNotice}
+        />
+      )}
+      <div className="review-content">
+        {titlebarTarget ? createPortal(reviewHeader, titlebarTarget) : reviewHeader}
+        <div className="review-context">
+          <ReviewPullDetails
+            pull={pull}
+            onDescription={() => {
+              setDescriptionOpen(true)
+            }}
+            onReload={() => void reloadReview()}
+            hasUpdates={
+              updates.hasUpdates ||
+              Boolean(pullStatus.status && pullHasUpdates(pull, pullStatus.status))
+            }
+            updateCheckError={updates.error}
+            stack={stackSummary}
+            onStack={() => {
+              setStackOpen(true)
+            }}
+            status={pullStatus.status}
+            statusError={pullStatus.error}
+            onStatus={(section) => {
+              setStatusSection(section)
+              setStatusOpen(true)
+            }}
+            reloading={reloading}
+            organizing={organizing || submitting}
+          />
+          {grouped && groups.length > 0 && (
+            <div className="review-view-controls">
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => {
+                  changeView({ split: !split })
+                }}
+              >
+                {split ? 'Unified' : 'Split'}
+              </Button>
+              <Button
+                size="xs"
+                variant={unviewedOnly ? 'secondary' : 'ghost'}
+                aria-pressed={unviewedOnly}
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams)
+                  if (unviewedOnly) next.delete('unviewed')
+                  else next.set('unviewed', '1')
+                  setSearchParams(next)
+                }}
+              >
+                {unviewedOnly ? 'Show all diffs' : 'Unviewed only'}
+              </Button>
+            </div>
+          )}
+        </div>
+        {storageError && (
+          <div className="error-banner" role="alert">
+            {storageError}
+          </div>
+        )}
+        {(error || notice) && (
+          <div
+            role={error ? 'alert' : 'status'}
+            className={error ? 'error-banner' : 'notice-banner'}
+          >
+            {error || notice}
+            {submitted && (
+              <a href={submitted} target="_blank" rel="noreferrer">
+                View review
+              </a>
+            )}
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => {
+                setError('')
+                setNotice('')
+              }}
+            >
+              Dismiss
+            </Button>
+          </div>
+        )}
+        {discussionError && (
+          <div className="warning-banner" role="alert">
+            Could not load GitHub discussions: {discussionError}
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() =>
+                void refreshDiscussions().catch((error) => {
+                  setDiscussionError(message(error))
+                })
+              }
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+        {discussions &&
+          (discussions.headSha !== pull.headSha || discussions.baseSha !== pull.baseSha) && (
+            <div className="warning-banner">
+              GitHub discussions belong to a newer revision. Reload the PR to see their current line
+              locations.
+            </div>
+          )}
+        {selectedHunks.length > 0 && (
+          <div className="review-progress-note" role="status">
+            {viewedCount} of {selectedHunks.length} diff sections viewed in this group.
+          </div>
+        )}
+        {pull.warnings.map((warning) => (
+          <div className="warning-banner" key={warning}>
+            {warning}
+          </div>
+        ))}
+        <div className="review-body">
+          {!grouped ? (
+            <OrganizationEmptyState
+              organization={organization}
+              organizing={organizing || Boolean(organization && !organizationFailed)}
+              failed={organizationFailed}
+              onOrganize={() => void organize()}
+              onCancel={
+                job
+                  ? () => {
+                      void cancel().catch((error) => {
+                        setError(message(error))
+                      })
+                    }
+                  : undefined
+              }
+            />
+          ) : (
+            <section
+              className="code-panel"
+              data-diff-style={split ? 'split' : 'unified'}
+              aria-label="Code changes"
+            >
+              {selected ? (
+                <>
+                  {transfers.length > 0 && (
+                    <div className="transfers">
+                      {transfers.map((transfer) => (
+                        <details key={transfer.id}>
+                          <summary>
+                            <Badge variant={transfer.kind === 'moved' ? 'info' : 'secondary'}>
+                              {transfer.kind}
+                            </Badge>
+                            <code>
+                              {transfer.fromPath}:{transfer.fromLine}
+                            </code>
+                            <ArrowRight size={12} />
+                            <code>
+                              {transfer.toPath}:{transfer.toLine}
+                            </code>
+                            <span className="muted">{transfer.lineCount} unchanged lines</span>
+                          </summary>
+                          <pre>{transfer.text}</pre>
+                        </details>
+                      ))}
+                    </div>
+                  )}
+                  {items.length ? (
+                    <ReviewDiffViewer
+                      key={selected.id}
+                      pull={pull}
+                      split={split}
+                      viewerRef={viewerRef}
+                      annotated={annotated}
+                      fileContext={fileContext}
+                      contextLines={contextLines}
+                      setContextLines={setContextLines}
+                      setSymbolMenu={setSymbolMenu}
+                      setFileCollapsed={setFileCollapsed}
+                      fileSectionsViewed={fileSectionsViewed}
+                      toggleFile={toggleFile}
+                      body={body}
+                      setBody={setBody}
+                      saveComment={saveComment}
+                      setEditor={setEditor}
+                      editComment={editComment}
+                      deleteComment={deleteComment}
+                      postReply={postReply}
+                      submitted={submitted}
+                      commentOnLine={commentOnLine}
+                      navigateSymbol={navigateSymbol}
+                    />
+                  ) : (
+                    <div className="empty-state">
+                      <strong>
+                        {unviewedOnly &&
+                        viewedCount === selectedHunks.length &&
+                        selectedHunks.length > 0
+                          ? 'All diff sections in this group are viewed'
+                          : 'No text patch in this group'}
+                      </strong>
+                      <span className="muted">
+                        Binary files and pure renames may have no line changes.
+                      </span>
+                      <a href={`${pull.url}/files`} target="_blank" rel="noreferrer">
+                        Inspect files on GitHub
+                      </a>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="empty-state">
+                  <strong>Choose a group to read its changes.</strong>
+                </div>
+              )}
+            </section>
+          )}
+          {grouped && discussionTray && (
+            <DiscussionsTray
+              pull={pull}
+              draft={draft}
+              submitted={Boolean(submitted)}
+              onSummaryChange={(summary) => {
+                setDraft((previous) => ({ ...previous, summary }))
+                setSubmitted(undefined)
+              }}
+              onEdit={editComment}
+              onDelete={deleteComment}
+              threads={discussions?.threads ?? []}
+              onClose={() => {
+                setDiscussionTray(false)
+              }}
+              onReply={postReply}
+              onOpenLocation={(location) => {
+                const group = discussionGroup({ pull, ...location })
+                if (!group) {
+                  setNotice(
+                    grouped
+                      ? 'This file is outside the current diff.'
+                      : 'Organize changes to review this PR.',
+                  )
+                  return
+                }
+                const file = pull.files.find((file) => file.path === location.path)
+                if (file) setFileCollapsed(file.id, false, group.id)
+                changeView({ groupId: group.id })
+              }}
+            />
+          )}
+        </div>
+      </div>
+      {renderCompanion?.({
+        draft,
+        setDraft,
+        ready: draftReady,
+        openReview: () => {
+          setSubmitOpen(true)
+        },
+      })}
+      <SubmitReviewDialog
+        open={submitOpen}
+        pull={pull}
+        draft={draft}
+        event={event}
+        submitting={submitting}
+        submitted={submitted}
+        error={error}
+        onOpenChange={setSubmitOpen}
+        onEventChange={setEvent}
+        onSummaryChange={(summary) => {
+          setDraft((previous) => ({ ...previous, summary }))
+        }}
+        onSubmit={() => void submit()}
+      />
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogPopup>
+          <DialogHeader>
+            <DialogTitle>Copy your feedback</DialogTitle>
+            <DialogDescription>Select and copy this text into your coding agent.</DialogDescription>
+          </DialogHeader>
+          <div className="dialog-body">
+            <textarea
+              aria-label="Exported feedback"
+              rows={14}
+              readOnly
+              value={exportFeedback(pull, draft)}
+              onFocus={(event) => {
+                event.target.select()
+              }}
+            />
+          </div>
+        </DialogPopup>
+      </Dialog>
+      <StackDialog
+        url={stackOpen ? pull.url : undefined}
+        stack={stack ?? undefined}
+        currentNumber={pull.number}
+        filter={inboxFilter}
+        onClose={() => {
+          setStackOpen(false)
+        }}
+      />
+      <SymbolContextMenu
+        selection={symbolMenu}
+        source={
+          symbolMenu ? { pullId: pull.id, side: symbolMenu.side, path: symbolMenu.path } : undefined
+        }
+        onNavigate={navigateSymbol}
+        onClose={() => {
+          setSymbolMenu(undefined)
+        }}
+      />
+      <SourceContextDialog
+        key={`${pull.id}/${JSON.stringify(sourceSelection)}`}
+        pull={pull}
+        fileId={sourceFileId}
+        initialRequest={sourceSelection?.request}
+        content={sourceFileId ? fileContext.contents.get(sourceFileId) : undefined}
+        error={sourceFileId ? fileContext.error(sourceFileId) : undefined}
+        onRetry={() => {
+          if (sourceFileId) void fileContext.load(sourceFileId).catch(() => {})
+        }}
+        onClose={() => {
+          setSourceSelection(undefined)
+        }}
+      />
+      <PullStatusDialog
+        url={statusOpen ? pull.url : undefined}
+        status={pullStatus.status}
+        error={pullStatus.error}
+        section={statusSection}
+        snapshotHeadSha={pull.headSha}
+        onClose={() => {
+          setStatusOpen(false)
+        }}
+      />
+      <Dialog open={descriptionOpen} onOpenChange={setDescriptionOpen}>
+        <DialogPopup className="description-dialog">
+          <DialogHeader>
+            <DialogTitle>PR description</DialogTitle>
+            <DialogDescription>{pull.title}</DialogDescription>
+          </DialogHeader>
+          <div className="dialog-body description-body">
+            <PullDescription pull={pull} />
+          </div>
+        </DialogPopup>
+      </Dialog>
+    </div>
+  )
+}

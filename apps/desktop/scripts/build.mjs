@@ -43,7 +43,7 @@ await build({
   entryPoints: {
     main: resolve(directory, 'src/main.cjs'),
     preload: resolve(directory, 'src/preload.cjs'),
-    workspaceTypeScriptWorker: resolve(directory, '../reviewer/server/workspaceTypeScriptWorker.ts'),
+    workspaceTypeScriptWorker: resolve(directory, '../reviewer/server/adapters/workspaceTypeScriptWorker.ts'),
   },
   outdir: destination,
   outExtension: { '.js': '.cjs' },

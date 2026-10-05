@@ -4,26 +4,33 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { startReviewerServer } from '../server/app'
-import { ReviewerStore } from '../server/store'
-import { fetchPull } from '../server/github'
-import { loadLinusSkill, reconcileWithLinus, reviewWithLinus } from '../server/linusReview'
-import { Provider } from '../shared/types'
-import type { LinusAdvice, LinusSession } from '../shared/linus'
+import { ReviewerStore } from '../server/adapters/store'
+import { fetchPull } from '../server/features/pulls/github'
+import {
+  loadLinusSkill,
+  reconcileWithLinus,
+  reviewWithLinus,
+} from '../server/features/linus/linusReview'
+import { Provider } from '../shared/domain/types'
+import type { LinusAdvice, LinusSession } from '../shared/domain/linus'
 import { fixturePull } from './fixtures/pull'
 
-vi.mock('../server/github', async (original) => ({
-  ...(await original<typeof import('../server/github')>()),
+vi.mock('../server/features/pulls/github', async (original) => ({
+  ...(await original<typeof import('../server/features/pulls/github')>()),
   fetchPull: vi.fn(),
+  createPullService: vi.fn(() => ({ fetchPull, fetchPullRevision: vi.fn() })),
 }))
-vi.mock('../server/linusReview', async (original) => ({
-  ...(await original<typeof import('../server/linusReview')>()),
+vi.mock('../server/features/linus/linusReview', async (original) => ({
+  ...(await original<typeof import('../server/features/linus/linusReview')>()),
   loadLinusSkill: vi.fn(),
   reviewWithLinus: vi.fn(),
   reconcileWithLinus: vi.fn(),
 }))
-vi.mock('../server/reviewWorkspaces', () => ({
+vi.mock('../server/adapters/reviewWorkspaces', () => ({
   ReviewWorkspaces: class {
-    async acquire() { throw new Error('Repository inspection unavailable in this API fixture.') }
+    async acquire() {
+      throw new Error('Repository inspection unavailable in this API fixture.')
+    }
     async close() {}
   },
 }))
@@ -91,9 +98,9 @@ describe('Linus review API and persistence', () => {
       status: 'cancelled',
       results: [
         {
-          ...old.results[0],
+          ...old.results[0]!,
           pull: { ...first, headSha: 'new-head' },
-          advice: { ...advice, verdict: 'stack', steps: [advice.steps[0], advice.steps[0]] },
+          advice: { ...advice, verdict: 'stack', steps: [advice.steps[0]!, advice.steps[0]!] },
         },
       ],
     })
@@ -208,12 +215,12 @@ describe('Linus review API and persistence', () => {
       })
       expect(response.status).toBe(202)
       id = (await response.json()).id
-      await vi.waitFor(async () =>
+      await vi.waitFor(async () => {
         expect(await (await fetch(`${app.url}/api/linus/${id}`)).json()).toMatchObject({
           status: 'complete',
           results: [{ pull: { description: fixturePull().description }, advice }],
-        }),
-      )
+        })
+      })
     } finally {
       await app.close()
     }

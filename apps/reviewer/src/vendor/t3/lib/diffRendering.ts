@@ -1,6 +1,5 @@
-import type { ThemeId } from '../../../themes'
-export type DiffThemeName = ThemeId;
-export function resolveDiffThemeName(theme: ThemeId): DiffThemeName { return theme; }
+export type DiffThemeName = string;
+export function resolveDiffThemeName(theme: string): DiffThemeName { return theme; }
 export const DIFF_SURFACE_THEME_UNSAFE_CSS = `
 [data-diffs-header],
 [data-diff],

@@ -1,0 +1,503 @@
+import { usePullReview } from '../features/review/usePullReview'
+import { InboxPage } from '../features/inbox/InboxPage'
+import { usePreferences } from '../lib/usePreferences'
+import { useInbox } from '../features/inbox/useInbox'
+import * as routes from '../../shared/api'
+import { useCallback, useEffect, useState } from 'react'
+import { UpdateButton } from '../components/UpdateButton'
+import { AppTitleBar } from './AppTitleBar'
+import { RepositorySwitcher } from '../features/inbox/RepositorySwitcher'
+import { loadRepositoryHistory, saveRepositoryHistory, visitRepository } from '../features/inbox/repositoryHistory'
+import { Link, Routes, Route, useLocation, useNavigate } from 'react-router'
+import { inboxPath, readRoute, reviewPath } from '../lib/routes'
+import { GitPullRequest, LoaderCircle, Plus, Settings } from 'lucide-react'
+import { Button } from '~/components/ui/button'
+
+import { Input } from '~/components/ui/input'
+import { Dialog, DialogPopup, DialogHeader, DialogTitle, DialogDescription } from '~/components/ui/dialog'
+import { call, message } from '../lib/api'
+import { inboxPulls, inboxFilters as filters } from '../features/inbox/inbox'
+import { ReviewWorkspace } from '../features/review/ReviewWorkspace'
+import { SettingsPage } from '../features/settings/SettingsPage'
+import { OrganizationSettings } from '../features/settings/OrganizationSettings'
+
+import { StackBadge } from '../features/stacks/StackBadge'
+import { StackDialog } from '../features/stacks/StackPanel'
+import { PullStatusDialog } from '../features/pull-status/PullStatusDialog'
+import { PullStatusIcons, type PullStatusSection } from '../features/pull-status/PullStatusIcons'
+
+import { ConnectionStatus } from '../components/ConnectionStatus'
+import { BobCompanion } from '../features/bob/BobCompanion'
+import { LinusCompanion } from '../features/linus/LinusCompanion'
+import { LinusRecommendationBadge } from '../features/linus/LinusRecommendationBadge'
+import { useLinusRecommendations } from '../features/linus/useLinusRecommendations'
+import type { LinusReplayRequest } from '../../shared/domain/linus'
+import type { AppStatus, Repository } from '../../shared/domain/types'
+
+export function App() {
+  const [titlebarTarget, setTitlebarTarget] = useState<HTMLDivElement | null>(null)
+  const [status, setStatus] = useState<AppStatus>()
+  const [repositories, setRepositories] = useState<Repository[]>([])
+  const location = useLocation()
+  const navigate = useNavigate()
+  const route = readRoute(location)
+  const [repositoryHistory, setRepositoryHistory] = useState(loadRepositoryHistory)
+  const visitedRepository =
+    route.kind === 'inbox' || route.kind === 'pull' ? route.repository : undefined
+  const recentRepositories = visitedRepository
+    ? visitRepository(repositoryHistory, visitedRepository)
+    : repositoryHistory
+  if (recentRepositories !== repositoryHistory) setRepositoryHistory(recentRepositories)
+  const lastRepository = recentRepositories[0] ?? ''
+  const repository =
+    route.kind === 'not-found' ? lastRepository : (route.repository ?? lastRepository)
+  const filter = route.kind === 'not-found' ? 'mine' : route.filter
+  const [urlDialog, setUrlDialog] = useState(false)
+  const [url, setUrl] = useState('')
+  const [stackTarget, setStackTarget] = useState<{ url: string; number: number }>()
+  const [statusTarget, setStatusTarget] = useState<{ url: string; section?: PullStatusSection }>()
+  const [error, setError] = useState('')
+  const [refresh, setRefresh] = useState(0)
+  const [linusSelection, setLinusSelection] = useState<{ repository: string; urls: string[] }>()
+  const [linusRefresh, setLinusRefresh] = useState(0)
+  const [linusReplay, setLinusReplay] = useState<LinusReplayRequest & { repository: string }>()
+  const savedLinus = useLinusRecommendations(repository, refresh + linusRefresh)
+  const recommendations = new Map(
+    savedLinus.recommendations.map((recommendation) => [recommendation.url, recommendation]),
+  )
+  const refreshLinus = useCallback(() => {
+    setLinusRefresh((value) => value + 1)
+  }, [])
+  const selectingForLinus =
+    route.kind === 'inbox' && filter === 'mine' && linusSelection?.repository === repository
+  const {
+    preferences,
+    preferencesError,
+    saveOrganization,
+    saveCompanion,
+    reload: reloadPreferences,
+  } = usePreferences()
+  useEffect(() => {
+    if (refresh) reloadPreferences()
+  }, [refresh, reloadPreferences])
+  const { pull, loading, pullError, updatePull, reloadPull, reloading } = usePullReview(
+    route,
+    location.pathname,
+    navigate,
+    setError,
+  )
+  const { inbox, inboxLoading, inboxError, inboxStatusLoading } = useInbox(repository, {
+    filter,
+    refresh,
+    enabled: route.kind === 'inbox',
+  })
+  const displayError = error || inboxError || pullError
+  useEffect(() => {
+    const initialRepository = repository || repositories[0]?.fullName
+    if (location.pathname === '/' && initialRepository) {
+      void navigate(inboxPath(initialRepository, filter), { replace: true })
+    }
+  }, [location.pathname, repository, repositories, filter, navigate])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void call(routes.getStatus, {}, { signal: controller.signal })
+      .then((result) => {
+        if (!controller.signal.aborted) setStatus(result)
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setError(message(error))
+      })
+    void call(routes.getRepositories, {}, { signal: controller.signal })
+      .then((result) => {
+        if (controller.signal.aborted) return
+        setRepositories(result.repositories)
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setError(message(error))
+      })
+    return () => {
+      controller.abort()
+    }
+  }, [refresh])
+
+  useEffect(() => {
+    saveRepositoryHistory(recentRepositories)
+  }, [recentRepositories])
+
+  function openPull(pullUrl: string) {
+    try {
+      void navigate(reviewPath({ url: pullUrl, filter }))
+      setError('')
+      setUrlDialog(false)
+    } catch (error) {
+      setError(message(error))
+    }
+  }
+  const myPulls = inbox ? inboxPulls(inbox, 'mine') : []
+  const selectedLinusUrls =
+    linusSelection?.repository === repository
+      ? linusSelection.urls.filter((url) => myPulls.some((pr) => pr.url === url))
+      : []
+  const inboxPage = (
+    <InboxPage
+      repository={repository}
+      filter={filter}
+      inbox={inbox}
+      inboxLoading={inboxLoading}
+      statusLoading={inboxStatusLoading}
+      recommendationsError={savedLinus.error}
+      selectingForLinus={selectingForLinus}
+      selectedLinusUrls={selectedLinusUrls}
+      onSelectionChange={(urls) => {
+        setLinusSelection({ repository, urls })
+      }}
+      onFilter={(next) => void navigate(inboxPath(repository, next))}
+      renderPullActions={(pr) => (
+        <>
+          {recommendations.has(pr.url) && (
+            <LinusRecommendationBadge
+              recommendation={recommendations.get(pr.url)!}
+              headSha={pr.headSha}
+              onOpen={() => {
+                const recommendation = recommendations.get(pr.url)!
+                setLinusSelection(undefined)
+                setLinusReplay({
+                  repository,
+                  sessionId: recommendation.sessionId,
+                  url: pr.url,
+                })
+              }}
+            />
+          )}
+          {pr.stack && (
+            <StackBadge
+              summary={pr.stack}
+              onClick={() => {
+                setStackTarget({ url: pr.url, number: pr.number })
+              }}
+            />
+          )}
+          {pr.status ? (
+            <PullStatusIcons
+              status={pr.status}
+              onSelect={(section) => {
+                setStatusTarget({ url: pr.url, section })
+              }}
+            />
+          ) : (
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => {
+                setStatusTarget({ url: pr.url })
+              }}
+            >
+              Checks and reviews
+            </Button>
+          )}
+        </>
+      )}
+    />
+  )
+  return (
+    <div className="app-frame">
+      <AppTitleBar
+        contentRef={setTitlebarTarget}
+        navigation={
+          route.kind !== 'pull' ? 'app' : pull?.groupingSource !== 'files' ? 'review' : 'none'
+        }
+      >
+        {!pull && (
+          <div className="app-page-title">
+            {route.kind === 'inbox' ? (
+              <RepositorySwitcher
+                repository={repository}
+                repositories={repositories}
+                recentRepositories={recentRepositories}
+                unavailableMessage={status?.github.detail}
+                onSelect={(name) => {
+                  void navigate(inboxPath(name, filter))
+                  setError('')
+                }}
+              />
+            ) : (
+              <h1>
+                {route.kind === 'settings'
+                  ? 'Settings'
+                  : route.kind === 'not-found'
+                    ? 'Page not found'
+                    : `PR #${route.number}`}
+              </h1>
+            )}
+            {route.kind === 'inbox' && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setError('')
+                  setRefresh((value) => value + 1)
+                }}
+              >
+                Refresh
+              </Button>
+            )}
+          </div>
+        )}
+      </AppTitleBar>
+      <div className="app-shell">
+        {route.kind !== 'pull' && (
+          <aside className="app-sidebar">
+            <div className="sidebar-label">PULL REQUESTS</div>
+            <nav aria-label="Pull request inbox">
+              {filters.map((item) => (
+                <button
+                  key={item.id}
+                  className={`nav-row ${filter === item.id && route.kind === 'inbox' ? 'active' : ''}`}
+                  onClick={() => void navigate(inboxPath(repository, item.id))}
+                >
+                  <GitPullRequest size={15} />
+                  <span>{item.label}</span>
+                  <span className="count">{inbox ? inboxPulls(inbox, item.id).length : '—'}</span>
+                </button>
+              ))}
+            </nav>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="open-url"
+              onClick={() => {
+                setUrlDialog(true)
+              }}
+            >
+              <Plus size={14} />
+              Open PR by URL
+            </Button>
+            <div className="sidebar-bottom">
+              <Link
+                className={`nav-row ${route.kind === 'settings' ? 'active' : ''}`}
+                to="/settings"
+              >
+                <Settings size={15} /> Settings
+              </Link>
+              <ConnectionStatus status={status} />
+            </div>
+          </aside>
+        )}
+        <main className="app-main">
+          {preferencesError && (
+            <div className="error-banner" role="alert">
+              Could not load your preferences: {preferencesError}
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => {
+                  setRefresh((value) => value + 1)
+                }}
+              >
+                Retry
+              </Button>
+            </div>
+          )}
+          {displayError && (
+            <div role="alert" className="error-banner">
+              {displayError}
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => {
+                  setError('')
+                }}
+              >
+                Dismiss
+              </Button>
+            </div>
+          )}
+          {loading && (
+            <div className="loading-banner" role="status">
+              <LoaderCircle size={15} className="animate-spin" />
+              Loading the PR and its original source…
+            </div>
+          )}
+          <Routes>
+            <Route
+              path="/settings"
+              element={
+                <SettingsPage
+                  key={preferences ? 'loaded' : 'loading'}
+                  inboxUrl={inboxPath(repository, filter)}
+                  organization={preferences?.organization}
+                  companion={preferences?.companion}
+                  status={status}
+                  onSave={saveOrganization}
+                  onSaveCompanion={saveCompanion}
+                />
+              }
+            />
+            <Route path="/" element={inboxPage} />
+            <Route
+              path="/repos/:owner/:repo/pulls"
+              element={
+                route.kind === 'not-found' ? (
+                  <div className="empty-state">
+                    <strong>Page not found</strong>
+                    <Link to={inboxPath(repository, filter)}>Back to inbox</Link>
+                  </div>
+                ) : (
+                  inboxPage
+                )
+              }
+            />
+            <Route
+              path="/repos/:owner/:repo/pulls/:number"
+              element={
+                route.kind === 'not-found' ? (
+                  <div className="empty-state">
+                    <strong>Page not found</strong>
+                    <Link to={inboxPath(repository, filter)}>Back to inbox</Link>
+                  </div>
+                ) : pull ? (
+                  <ReviewWorkspace
+                    key={pull.id}
+                    pull={pull}
+                    onUpdate={updatePull}
+                    organization={preferences?.organization}
+                    onReload={() => void reloadPull()}
+                    reloading={reloading}
+                    inboxUrl={inboxPath(repository, filter)}
+                    renderCompanion={({ draft, setDraft, ready, openReview }) => (
+                      <BobCompanion
+                        key={pull.id}
+                        pull={pull}
+                        draft={draft}
+                        setDraft={setDraft}
+                        ready={ready}
+                        openReview={openReview}
+                      />
+                    )}
+                    titlebarTarget={titlebarTarget}
+                  />
+                ) : (
+                  <div className="empty-state">
+                    {loading ? 'Loading review…' : 'Unable to open this PR.'}
+                    <Link to={inboxPath(repository, filter)}>Back to inbox</Link>
+                    {!loading && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          window.location.reload()
+                        }}
+                      >
+                        Try again
+                      </Button>
+                    )}
+                  </div>
+                )
+              }
+            />
+            <Route
+              path="*"
+              element={
+                <div className="empty-state">
+                  <strong>Page not found</strong>
+                  <Link to={inboxPath(repository, filter)}>Back to inbox</Link>
+                </div>
+              }
+            />
+          </Routes>
+        </main>
+        {repository && (
+          <LinusCompanion
+            key={repository}
+            repository={repository}
+            pulls={myPulls}
+            available={route.kind === 'inbox' && filter === 'mine'}
+            preferences={preferences}
+            currentPull={pull}
+            replayRequest={linusReplay?.repository === repository ? linusReplay : undefined}
+            onSessionUpdate={refreshLinus}
+            selection={{
+              active: selectingForLinus,
+              urls: selectedLinusUrls,
+              onChoose: () => {
+                setLinusReplay(undefined)
+                setLinusSelection({ repository, urls: [] })
+                void navigate(inboxPath(repository, 'mine'))
+              },
+              onChange: (urls) => {
+                setLinusSelection({ repository, urls })
+              },
+              onCancel: () => {
+                setLinusSelection(undefined)
+              },
+            }}
+          />
+        )}
+        <StackDialog
+          url={stackTarget?.url}
+          currentNumber={stackTarget?.number ?? 0}
+          filter={filter}
+          onClose={() => {
+            setStackTarget(undefined)
+          }}
+        />
+        <PullStatusDialog
+          url={statusTarget?.url}
+          section={statusTarget?.section}
+          onClose={() => {
+            setStatusTarget(undefined)
+          }}
+        />
+        <Dialog open={urlDialog} onOpenChange={setUrlDialog}>
+          <DialogPopup>
+            <DialogHeader>
+              <DialogTitle>Open a pull request</DialogTitle>
+              <DialogDescription>
+                Paste a GitHub URL, including PRs from other repositories.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="dialog-body"
+              onSubmit={(event) => {
+                event.preventDefault()
+                openPull(url)
+              }}
+            >
+              <Input
+                autoFocus
+                aria-label="Pull request URL"
+                placeholder="https://github.com/owner/repo/pull/123"
+                value={url}
+                onChange={(event) => {
+                  setUrl(event.target.value)
+                }}
+              />
+              {error && (
+                <p role="alert" className="error-text">
+                  {error}
+                </p>
+              )}
+              <div className="dialog-actions">
+                <Button type="submit" disabled={loading || !url.trim()}>
+                  {loading ? 'Loading…' : 'Open PR'}
+                </Button>
+              </div>
+            </form>
+          </DialogPopup>
+        </Dialog>
+      </div>
+      <Dialog open={Boolean(preferences && !preferences.organization)}>
+        <DialogPopup showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Choose your coding provider</DialogTitle>
+            <DialogDescription>Set up automatic grouping for your pull requests.</DialogDescription>
+          </DialogHeader>
+          <div className="dialog-body">
+            <OrganizationSettings firstRun status={status} onSave={saveOrganization} />
+          </div>
+        </DialogPopup>
+      </Dialog>
+      <UpdateButton />
+    </div>
+  )
+}

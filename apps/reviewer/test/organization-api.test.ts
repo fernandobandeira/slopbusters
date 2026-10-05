@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { startReviewerServer } from '../server/app'
-import { ReviewerStore } from '../server/store'
-import { organizePull } from '../server/organize'
-import { Provider, type ChangeGroup } from '../shared/types'
+import { ReviewerStore } from '../server/adapters/store'
+import { organizePull } from '../server/features/organization/organize'
+import { Provider, type ChangeGroup } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
 
-vi.mock('../server/organize', () => ({ organizePull: vi.fn() }))
+vi.mock('../server/features/organization/organize', () => ({ organizePull: vi.fn() }))
 const paths: string[] = []
 afterEach(() => {
   vi.resetAllMocks()
@@ -110,7 +110,7 @@ describe('automatic organization API', () => {
       await vi.waitFor(async () => {
         expect(await (await fetch(`${app.url}/api/jobs/${job.id}`)).json()).toMatchObject({
           status: 'failed',
-          error: 'Model is unavailable',
+          error: 'Organization failed. Please retry.',
         })
       })
       const next = { provider: Provider.codex, model: 'custom-model' }

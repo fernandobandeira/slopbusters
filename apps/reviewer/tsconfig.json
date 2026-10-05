@@ -11,10 +11,15 @@
     "esModuleInterop": true,
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
-    "paths": { "~/*": ["./src/vendor/t3/*"] },
+    "paths": {
+      "~/*": ["./src/vendor/t3/*"]
+    },
     "types": ["node", "vite/client"],
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true
   },
   "include": ["src", "server", "shared", "test", "vite.config.ts", "vitest.config.ts"]
 }

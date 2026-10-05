@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { clearSubmittedFeedback } from '../shared/review'
-import { DiffSide, type ReviewDraft } from '../shared/types'
+import { clearSubmittedFeedback } from '../shared/domain/review'
+import { DiffSide, type ReviewDraft } from '../shared/domain/types'
 
 describe('feedback edited during review submission', () => {
   it('clears published feedback while preserving new comments, edited comments, and summary edits', () => {
@@ -28,7 +28,7 @@ describe('feedback edited during review submission', () => {
     }
     expect(clearSubmittedFeedback(current, submitted)).toEqual({
       ...current,
-      comments: [current.comments[0], current.comments[2]],
+      comments: [current.comments[0]!, current.comments[2]!],
     })
     expect(clearSubmittedFeedback(submitted, submitted)).toEqual({
       ...submitted,

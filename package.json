@@ -2,10 +2,10 @@
   "name": "slopbusters",
   "private": true,
   "description": "Agent skills and a local review workspace.",
-  "packageManager": "pnpm@9.15.5",
+  "packageManager": "pnpm@10.34.6",
   "engines": {
     "node": "^24.0.0 || >=26.0.0",
-    "pnpm": "9.15.5"
+    "pnpm": "10.34.6"
   },
   "scripts": {
     "dev": "pnpm --dir apps/reviewer dev",
@@ -17,6 +17,10 @@
     "desktop:start": "pnpm --dir apps/desktop start",
     "desktop:pack": "pnpm --dir apps/desktop pack",
     "desktop:smoke": "pnpm --dir apps/desktop smoke",
-    "licenses:reviewer": "node scripts/reviewer-license-inventory.mjs"
+    "licenses:reviewer": "node scripts/reviewer-license-inventory.mjs",
+    "prepare": "git config core.hooksPath .githooks",
+    "audit": "node scripts/audit-dependencies.mjs",
+    "dedupe:check": "pnpm dedupe --check",
+    "licenses:check": "node scripts/reviewer-license-inventory.mjs --check"
   }
 }

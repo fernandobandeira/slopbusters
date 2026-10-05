@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { InboxPull } from '../shared/types'
-import type { PullStatus } from '../shared/pullStatus'
-import { inboxSections } from '../src/inboxSections'
+import type { InboxPull } from '../shared/domain/types'
+import type { PullStatus } from '../shared/domain/pullStatus'
+import { inboxSections } from '../src/features/inbox/inboxSections'
 
 function pull(number: number, changes: Partial<PullStatus> = {}): InboxPull {
   return {

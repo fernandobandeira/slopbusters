@@ -1,6 +1,6 @@
 import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
-import { navigateTypeScript } from '../server/semanticNavigation'
+import { navigateTypeScript } from '../server/features/navigation/semanticNavigation'
 
 function position(source: string, word: string, line: number) {
   return { line, column: source.split('\n')[line - 1]!.indexOf(word) + 1 }

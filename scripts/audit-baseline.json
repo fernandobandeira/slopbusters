@@ -1,0 +1,10 @@
+[
+  {
+    "id": "GHSA-ch52-4w7c-c8xp",
+    "version": "4.2.0",
+    "paths": ["apps__desktop>electron-builder>app-builder-lib>@electron/get>got>cacheable-request>http-cache-semantics"],
+    "expires": "2026-11-04T00:00:00Z",
+    "reason": "Existing Electron build-only download cache dependency; the app does not expose this shared HTTP cache to users. No patched release exists as of 2026-10-04. Review upstream fix before expiry.",
+    "url": "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+  }
+]

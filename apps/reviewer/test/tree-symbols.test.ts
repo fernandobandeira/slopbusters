@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getRevisionSymbols, sourceLanguage } from '../server/treeSymbols'
+import { getRevisionSymbols, sourceLanguage } from '../server/adapters/treeSymbols'
 
 describe('bundled language outlines', () => {
   it.each([

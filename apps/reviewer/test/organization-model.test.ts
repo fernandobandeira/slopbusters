@@ -1,11 +1,11 @@
 import { writeFile } from 'node:fs/promises'
 import { describe, expect, it, vi } from 'vitest'
-import { organizePull } from '../server/organize'
-import { runCommand } from '../server/process'
-import { Provider } from '../shared/types'
+import { organizePull } from '../server/features/organization/organize'
+import { runCommand } from '../server/adapters/process'
+import { Provider } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
 
-vi.mock('../server/process', () => ({ runCommand: vi.fn() }))
+vi.mock('../server/adapters/process', () => ({ runCommand: vi.fn() }))
 describe('organization model selection', () => {
   it.each([Provider.codex, Provider.claude])(
     'passes the selected model to %s',
@@ -21,8 +21,8 @@ describe('organization model selection', () => {
       }
       vi.mocked(runCommand).mockImplementation(async (options) => {
         if (options.command === 'codex') {
-          const index = options.args!.indexOf('--output-last-message')
-          await writeFile(options.args![index + 1]!, JSON.stringify(output))
+          const index = options.args.indexOf('--output-last-message')
+          await writeFile(options.args[index + 1]!, JSON.stringify(output))
           return ''
         }
         return JSON.stringify({ structured_output: output })

@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+# Type and dependency checks need the complete graph, including unstaged imports.
+if git diff --cached --name-only --diff-filter=ACMR | rg -q '^(apps/reviewer/|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|scripts/reviewer-license-inventory.mjs)'; then
+  pnpm --dir apps/reviewer lint
+fi

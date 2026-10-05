@@ -1,9 +1,9 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import type { PullStatus } from '../shared/pullStatus'
-import { PullReadinessBadge, PullStatusPanel } from '../src/PullStatusPanel'
-import { PullStatusIcons } from '../src/PullStatusIcons'
+import type { PullStatus } from '../shared/domain/pullStatus'
+import { PullReadinessBadge, PullStatusPanel } from '../src/features/pull-status/PullStatusPanel'
+import { PullStatusIcons } from '../src/features/pull-status/PullStatusIcons'
 
 function status(overrides: Partial<PullStatus> = {}): PullStatus {
   return {

@@ -1,8 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
-import { App } from './App'
-import { ThemeProvider } from './ThemeProvider'
+import { App } from './app/App'
+import { PreferencesProvider } from './lib/usePreferences'
+import { ThemeProvider } from './app/ThemeProvider'
 import './style.css'
 
 const root = document.getElementById('root')
@@ -13,9 +14,11 @@ if (window.reviewerDesktop) {
 createRoot(root).render(
   <StrictMode>
     <BrowserRouter>
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
+      <PreferencesProvider>
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>
+      </PreferencesProvider>
     </BrowserRouter>
   </StrictMode>,
 )

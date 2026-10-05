@@ -1,17 +1,17 @@
 import { z } from 'zod'
-import type { AppStatus, ToolStatus } from '../shared/types'
-import { runCommand } from './process'
+import type { AppStatus, ToolStatus } from '../shared/domain/types'
+import { runCommand } from './adapters/process'
+import { createGitHub, type GitHub } from './adapters/github'
 
 const profileSchema = z.object({ login: z.string().min(1), avatarUrl: z.url(), url: z.url() })
 
-async function githubStatus(): Promise<AppStatus['github']> {
+async function githubStatus(github: GitHub): Promise<AppStatus['github']> {
   try {
-    const output = await runCommand({
-      command: 'gh',
-      args: ['api', 'user', '--jq', '{login:.login,avatarUrl:.avatar_url,url:.html_url}'],
+    const output = await github.rest('user', {
+      jq: '{login:.login,avatarUrl:.avatar_url,url:.html_url}',
       timeoutMs: 10_000,
     })
-    const profile = profileSchema.parse(JSON.parse(output))
+    const profile = profileSchema.parse(output)
     return { available: true, authenticated: true, detail: profile.login, profile }
   } catch {
     return {
@@ -74,9 +74,9 @@ async function providerStatus(provider: 'codex' | 'claude'): Promise<ToolStatus>
   }
 }
 
-export async function getAppStatus(): Promise<AppStatus> {
+export async function getAppStatus(adapter: GitHub = createGitHub()): Promise<AppStatus> {
   const [github, codex, claude] = await Promise.all([
-    githubStatus(),
+    githubStatus(adapter),
     providerStatus('codex'),
     providerStatus('claude'),
   ])

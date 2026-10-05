@@ -1414,14 +1414,56 @@ pre {
   font-weight: 550;
 }
 
-.language-server-list { display: grid; gap: 8px; margin-top: 16px; }
-.language-server-item { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
-.language-server-item summary { cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
-.language-server-item fieldset { border: 0; padding: 0; display: grid; gap: 10px; }
-.language-server-item label { display: grid; gap: 4px; }
-.language-server-item input, .language-server-item textarea { width: 100%; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; font: inherit; }
-.language-server-actions { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
-.language-server-actions button { border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; background: var(--background); color: var(--foreground); cursor: pointer; }
+.language-server-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.language-server-item {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.language-server-item summary {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.language-server-item fieldset {
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.language-server-item label {
+  display: grid;
+  gap: 4px;
+}
+.language-server-item input,
+.language-server-item textarea {
+  width: 100%;
+  background: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: inherit;
+}
+.language-server-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+.language-server-actions button {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  background: var(--background);
+  color: var(--foreground);
+  cursor: pointer;
+}
 .settings-section p {
   margin: 0 0 22px;
   color: var(--muted-foreground);

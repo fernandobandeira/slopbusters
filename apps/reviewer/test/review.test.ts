@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { createTwoFilesPatch } from 'diff'
-import { parseFile, detectTransfers } from '../shared/diff'
-import { buildGitHubReview, exportFeedback, groupChangeTotals } from '../shared/review'
-import { validateGrouping } from '../server/organize'
+import { parseFile, detectTransfers } from '../server/features/diff'
+import { buildGitHubReview, exportFeedback, groupChangeTotals } from '../shared/domain/review'
+import { validateGrouping } from '../server/features/organization/organize'
 import { fixturePull } from './fixtures/pull'
 import {
   DiffSide,
@@ -11,9 +11,9 @@ import {
   ReviewEvent,
   TransferKind,
   type ReviewDraft,
-} from '../shared/types'
-import { diffItems } from '../src/diffItems'
-import { inboxPulls } from '../src/inbox'
+} from '../shared/domain/types'
+import { diffItems } from '../src/features/review/diff/diffItems'
+import { inboxPulls } from '../src/features/inbox/inbox'
 
 const block =
   'export function slug(value: string) {\n  return value.trim()\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, "-")\n    .replace(/^-|-$/g, "");\n}\n'
@@ -207,14 +207,14 @@ describe('review publishing', () => {
     })
     review.summary = 'Add the missing role test.'
     const result = buildGitHubReview(pr, review, ReviewEvent.requestChanges)
-    expect(result.comments[0]).toMatchObject({
+    expect(result.comments[0]!).toMatchObject({
       path: file.path,
       line: line.oldLine,
       side: DiffSide.left,
     })
     expect(result.body).toContain('Add the missing role test.')
     expect(exportFeedback(pr, review)).toContain('(original code)')
-    review.comments[0] = { ...review.comments[0], headSha: 'old' }
+    review.comments[0] = { ...review.comments[0]!, headSha: 'old' }
     expect(() => buildGitHubReview(pr, review, ReviewEvent.comment)).toThrow('another revision')
   })
   it('refuses closed, invalid locations, and empty non-approval reviews', () => {

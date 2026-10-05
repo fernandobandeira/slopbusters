@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { runCommand } from '../server/process'
+import { runCommand } from '../server/adapters/process'
 import { getAppStatus } from '../server/toolStatus'
 
-vi.mock('../server/process', () => ({ runCommand: vi.fn() }))
+vi.mock('../server/adapters/process', () => ({ runCommand: vi.fn() }))
 const command = vi.mocked(runCommand)
 const githubProfile = {
   login: 'reviewer',
@@ -18,7 +18,7 @@ describe('app connection status', () => {
   it('returns the GitHub profile and verified provider sign-in without auth output or email', async () => {
     command.mockImplementation(async ({ command: tool, args }) => {
       if (tool === 'gh') return JSON.stringify(githubProfile)
-      if (args[0] === '--version') return `${tool} 1.0.0`
+      if (args[0]! === '--version') return `${tool} 1.0.0`
       if (tool === 'codex') return 'Logged in using an API key: REDACTED_AUTH_VALUE'
       return JSON.stringify({
         loggedIn: true,
@@ -42,7 +42,7 @@ describe('app connection status', () => {
   it('distinguishes signed out from installed with unknown authentication', async () => {
     command.mockImplementation(async ({ command: tool, args }) => {
       if (tool === 'gh') return JSON.stringify(githubProfile)
-      if (args[0] === '--version') return `${tool} 1.0.0`
+      if (args[0]! === '--version') return `${tool} 1.0.0`
       if (tool === 'codex') throw new Error('Not logged in')
       throw new Error('Unknown auth status option')
     })
@@ -58,7 +58,7 @@ describe('app connection status', () => {
     command.mockImplementation(async ({ command: tool, args }) => {
       if (tool === 'gh') throw new Error('Not authenticated')
       if (tool === 'codex') throw new Error('Not installed')
-      if (args[0] === '--version') return 'claude 1.0.0'
+      if (args[0]! === '--version') return 'claude 1.0.0'
       return JSON.stringify({ loggedIn: 'true', email: 'private@example.test' })
     })
 

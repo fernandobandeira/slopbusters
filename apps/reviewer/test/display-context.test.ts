@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createTwoFilesPatch } from 'diff'
-import { parseFile } from '../shared/diff'
-import type { PullFileContent } from '../shared/fileContent'
-import { LineKind } from '../shared/types'
-import { expandDisplayHunk, MAX_CONTEXT } from '../src/displayContext'
+import { parseFile } from '../server/features/diff'
+import type { PullFileContent } from '../shared/domain/fileContent'
+import { LineKind } from '../shared/domain/types'
+import { expandDisplayHunk, MAX_CONTEXT } from '../src/features/review/diff/displayContext'
 
 function fixture() {
   const old = Array.from({ length: 1000 }, (_, i) => `original ${i + 1}`)
@@ -56,7 +56,7 @@ describe('bounded unchanged context', () => {
   it('stops at mismatching exact content and does not expand incomplete patches', () => {
     const { file, content } = fixture()
     expect(expandDisplayHunk({ ...file, coverage: 'partial' }, file.hunks[0]!, content, 20)).toBe(
-      file.hunks[0],
+      file.hunks[0]!,
     )
     const current = file.hunks[0]!
     const before = current.lines.find((line) => line.newLine !== null)!.newLine! - 1
@@ -68,6 +68,6 @@ describe('bounded unchanged context', () => {
       { ...content, new: { ...content.new!, content: altered.join('\n') } },
       20,
     )
-    expect(expanded.lines[0]).toEqual(current.lines[0])
+    expect(expanded.lines[0]!).toEqual(current.lines[0]!)
   })
 })

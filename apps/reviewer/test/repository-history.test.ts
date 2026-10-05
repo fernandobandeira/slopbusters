@@ -3,7 +3,7 @@ import {
   loadRepositoryHistory,
   saveRepositoryHistory,
   visitRepository,
-} from '../src/repositoryHistory'
+} from '../src/features/inbox/repositoryHistory'
 
 function storage(values: Record<string, string> = {}) {
   const saved = new Map(Object.entries(values))
@@ -74,6 +74,8 @@ describe('repository visit history', () => {
       },
     }
     expect(loadRepositoryHistory(unavailable)).toEqual([])
-    expect(() => saveRepositoryHistory(['owner/repo'], unavailable)).not.toThrow()
+    expect(() => {
+      saveRepositoryHistory(['owner/repo'], unavailable)
+    }).not.toThrow()
   })
 })

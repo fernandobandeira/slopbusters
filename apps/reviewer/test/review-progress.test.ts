@@ -4,10 +4,10 @@ import {
   nextUnreviewedGroup,
   reviewedHunkIds,
   toggleViewedSections,
-} from '../src/reviewProgress'
-import type { ReviewDraft } from '../shared/types'
+} from '../src/features/review/reviewProgress'
+import type { ReviewDraft } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
-import { parseFile } from '../shared/diff'
+import { parseFile } from '../server/features/diff'
 
 describe('reviewing sections separately', () => {
   it('keeps other sections of a shared file unviewed', () => {

@@ -2,17 +2,21 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LinusJobs } from '../server/linusJobs'
-import { ReviewerStore } from '../server/store'
-import { fetchPull } from '../server/github'
-import { loadLinusSkill, reconcileWithLinus, reviewWithLinus } from '../server/linusReview'
-import { Provider } from '../shared/types'
-import type { LinusAdvice } from '../shared/linus'
+import { LinusJobs } from '../server/features/linus/linusJobs'
+import { ReviewerStore } from '../server/adapters/store'
+import { fetchPull } from '../server/features/pulls/github'
+import {
+  loadLinusSkill,
+  reconcileWithLinus,
+  reviewWithLinus,
+} from '../server/features/linus/linusReview'
+import { Provider } from '../shared/domain/types'
+import type { LinusAdvice } from '../shared/domain/linus'
 import { fixturePull } from './fixtures/pull'
 
-vi.mock('../server/github', () => ({ fetchPull: vi.fn() }))
-vi.mock('../server/linusReview', async (original) => ({
-  ...(await original<typeof import('../server/linusReview')>()),
+vi.mock('../server/features/pulls/github', () => ({ fetchPull: vi.fn() }))
+vi.mock('../server/features/linus/linusReview', async (original) => ({
+  ...(await original<typeof import('../server/features/linus/linusReview')>()),
   loadLinusSkill: vi.fn(),
   reviewWithLinus: vi.fn(),
   reconcileWithLinus: vi.fn(),
@@ -58,7 +62,9 @@ describe('dual Linus review sessions', () => {
     )
     const session = jobs.start(repository, [fixturePull().url])
     expect(jobs.start(repository, [fixturePull().url]).id).toBe(session.id)
-    await vi.waitFor(() => expect(finish).toHaveLength(2))
+    await vi.waitFor(() => {
+      expect(finish).toHaveLength(2)
+    })
     expect(reviewWithLinus).toHaveBeenNthCalledWith(
       1,
       fixturePull(),
@@ -75,11 +81,13 @@ describe('dual Linus review sessions', () => {
       expect.any(AbortSignal),
       true,
     )
-    finish[0](advice)
+    finish[0]!(advice)
     await Promise.resolve()
     expect(reconcileWithLinus).not.toHaveBeenCalled()
-    finish[1](advice)
-    await vi.waitFor(() => expect(jobs.get(session.id).status).toBe('complete'))
+    finish[1]!(advice)
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
     expect(reconcileWithLinus).toHaveBeenCalledWith(
       expect.objectContaining({
         reviews: [
@@ -91,7 +99,7 @@ describe('dual Linus review sessions', () => {
       'Linus review-only skill',
       expect.any(AbortSignal),
     )
-    expect(jobs.get(session.id).results[0].reviewers).toEqual([primary, companion])
+    expect(jobs.get(session.id).results[0]!.reviewers).toEqual([primary, companion])
     expect(new LinusJobs(store, directory).latest(repository)?.results).toHaveLength(1)
   })
   it('shares local inspection with both reviewers and reconciliation, then releases it', async () => {
@@ -105,11 +113,15 @@ describe('dual Linus review sessions', () => {
     const prepare = vi.fn(async () => context)
     jobs = new LinusJobs(store, directory, undefined, prepare)
     const session = jobs.start(repository, [fixturePull().url])
-    await vi.waitFor(() => expect(jobs.get(session.id).status).toBe('complete'))
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
     expect(prepare).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(reviewWithLinus).mock.calls.every((call) => call[5] === context)).toBe(true)
-    expect(vi.mocked(reconcileWithLinus).mock.calls[0][4]).toBe(context)
-    await vi.waitFor(() => expect(context.close).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(reviewWithLinus).mock.calls.every((call) => call[5]! === context)).toBe(true)
+    expect(vi.mocked(reconcileWithLinus).mock.calls[0]![4]!).toBe(context)
+    await vi.waitFor(() => {
+      expect(context.close).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('waits for an explicit single-model choice when a reviewer fails', async () => {
@@ -118,11 +130,15 @@ describe('dual Linus review sessions', () => {
       return advice
     })
     const session = jobs.start(repository, [fixturePull().url])
-    await vi.waitFor(() => expect(jobs.get(session.id).status).toBe('partial'))
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('partial')
+    })
     expect(reconcileWithLinus).not.toHaveBeenCalled()
     jobs.continue(session.id)
-    await vi.waitFor(() => expect(jobs.get(session.id).status).toBe('complete'))
-    expect(jobs.get(session.id).results[0].reviewers).toEqual([primary])
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
+    expect(jobs.get(session.id).results[0]!.reviewers).toEqual([primary])
     expect(reviewWithLinus).toHaveBeenCalledTimes(2)
   })
   it('preserves completed PRs on failure and retries only remaining PRs with current settings', async () => {
@@ -136,25 +152,37 @@ describe('dual Linus review sessions', () => {
       .mockRejectedValueOnce(new Error('Snapshot unavailable'))
       .mockResolvedValue(second)
     const session = jobs.start(repository, [fixturePull().url, second.url])
-    await vi.waitFor(() => expect(jobs.get(session.id).status).toBe('failed'))
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('failed')
+    })
     expect(jobs.get(session.id).results).toHaveLength(1)
     store.savePreferences({ organization: { ...primary, model: 'updated-primary' } })
     jobs.retry(session.id)
-    await vi.waitFor(() => expect(jobs.get(session.id).status).toBe('complete'))
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
     expect(fetchPull).toHaveBeenCalledTimes(3)
     expect(jobs.get(session.id).results).toHaveLength(2)
-    expect(jobs.get(session.id).results[0].reviewers[0].model).toBe(primary.model)
-    expect(jobs.get(session.id).results[1].reviewers[0].model).toBe('updated-primary')
+    expect(jobs.get(session.id).results[0]!.reviewers[0]!.model).toBe(primary.model)
+    expect(jobs.get(session.id).results[1]!.reviewers[0]!.model).toBe('updated-primary')
   })
   it('cancels both reviewers and ignores late results', async () => {
     vi.mocked(reviewWithLinus).mockImplementation(
       (_pull, _model, _skill, signal) =>
-        new Promise((_resolve, reject) =>
-          signal.addEventListener('abort', () => reject(new Error('Cancelled')), { once: true }),
-        ),
+        new Promise((_resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              reject(new Error('Cancelled'))
+            },
+            { once: true },
+          )
+        }),
     )
     const session = jobs.start(repository, [fixturePull().url])
-    await vi.waitFor(() => expect(reviewWithLinus).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => {
+      expect(reviewWithLinus).toHaveBeenCalledTimes(2)
+    })
     jobs.cancel(session.id)
     await jobs.close()
     expect(jobs.get(session.id).status).toBe('cancelled')

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchDiscussions, replyToThread } from '../server/discussions'
-import { runCommand } from '../server/process'
+import { fetchDiscussions, replyToThread } from '../server/features/pulls/discussions'
+import { runCommand } from '../server/adapters/process'
 import { fixturePull } from './fixtures/pull'
 
-vi.mock('../server/process', () => ({ runCommand: vi.fn() }))
+vi.mock('../server/adapters/process', () => ({ runCommand: vi.fn() }))
 const command = vi.mocked(runCommand)
 const completePage: { hasNextPage: boolean; endCursor: string | null } = {
   hasNextPage: false,
@@ -54,7 +54,7 @@ function respond(value: unknown) {
   command.mockResolvedValueOnce(JSON.stringify(value))
 }
 function inputAt(index: number): { query: string; variables: Record<string, unknown> } {
-  const input = command.mock.calls[index]?.[0].input
+  const input = command.mock.calls[index]?.[0]!.input
   if (!input) throw new Error('Expected a GraphQL input')
   return JSON.parse(input)
 }
@@ -90,7 +90,7 @@ describe('GitHub discussion loading', () => {
 
     expect(result).toMatchObject({ headSha: 'current-head', baseSha: 'current-base' })
     expect(result.threads).toHaveLength(101)
-    expect(result.threads[0]).toMatchObject({
+    expect(result.threads[0]!).toMatchObject({
       path: 'previously-changed.ts',
       line: null,
       originalLine: 42,
@@ -105,7 +105,7 @@ describe('GitHub discussion loading', () => {
     expect(inputAt(0).query).toContain('fullDatabaseId')
     expect(inputAt(1).variables).toEqual({ id: 'thread-0', cursor: 'next' })
     expect(inputAt(2).variables).toMatchObject({ cursor: 'next' })
-    expect(command.mock.calls.every(([params]) => params.args[1] === 'graphql')).toBe(true)
+    expect(command.mock.calls.every(([params]) => params.args[1]! === 'graphql')).toBe(true)
   })
 
   it('rejects mixed revision locations when the PR changes between thread pages', async () => {
@@ -165,7 +165,7 @@ describe('GitHub discussion replies', () => {
       replyToThread({ pr: fixturePull(), threadId: 'foreign-thread', body: 'Feedback' }),
     ).rejects.toThrow('cannot receive a reply')
     expect(command).toHaveBeenCalledTimes(1)
-    expect(command.mock.calls[0]?.[0].args[1]).toBe('graphql')
+    expect(command.mock.calls[0]?.[0].args[1]!).toBe('graphql')
   })
 
   it('refuses replies without permission before publishing', async () => {

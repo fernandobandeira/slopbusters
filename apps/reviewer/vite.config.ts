@@ -14,6 +14,15 @@ export default defineConfig({
       generateBundle() {
         this.emitFile({
           type: 'asset',
+          fileName: 'bob-skill.md',
+          source: ['SKILL.md', 'references/checklist.md', 'references/examples.md']
+            .map((file) =>
+              readFileSync(new URL(`../../skills/unclebob/${file}`, import.meta.url), 'utf8'),
+            )
+            .join('\n\n'),
+        })
+        this.emitFile({
+          type: 'asset',
           fileName: 'linus-skill.md',
           source: ['SKILL.md', 'references/review-only.md']
             .map((file) =>
@@ -29,7 +38,7 @@ export default defineConfig({
         for (const [name, sourcePath] of [
           ['THEME_LICENSE.txt', './src/vendor/themes/LICENSE'],
           ['THEME_NOTICES.txt', './src/vendor/themes/NOTICE'],
-        ]) {
+        ] as const) {
           this.emitFile({
             type: 'asset',
             fileName: name,

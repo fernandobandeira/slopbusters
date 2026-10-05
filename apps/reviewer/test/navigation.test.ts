@@ -1,21 +1,26 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createSourceNavigator } from '../server/navigation'
-import * as semanticNavigation from '../server/semanticNavigation'
-import { getRevisionSymbols } from '../server/treeSymbols'
-import { DiffSide, type PullRequest } from '../shared/types'
+import { createSourceNavigator } from '../server/features/navigation/navigation'
+import * as semanticNavigation from '../server/features/navigation/semanticNavigation'
+import { getRevisionSymbols } from '../server/adapters/treeSymbols'
+import { DiffSide, type PullRequest } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
-import type { NavigationRequest } from '../shared/navigation'
+import type { NavigationRequest } from '../shared/domain/navigation'
+
+function missingFile(path: string): never {
+  throw new Error(`Missing fixture: ${path}`)
+}
 
 function project(contents: Record<string, string>, warnings: string[] = []) {
   const tree = vi.fn(async (pull: PullRequest, side: DiffSide) => ({
-    sha: side === DiffSide.left ? pull.mergeBaseSha ?? pull.baseSha : pull.headSha,
-    paths: Object.keys(contents), warnings,
+    sha: side === DiffSide.left ? (pull.mergeBaseSha ?? pull.baseSha) : pull.headSha,
+    paths: Object.keys(contents),
+    warnings,
   }))
   const file = vi.fn(async (_pull, _side, path: string) => ({
     path,
     sha: 'saved-head',
-    content: contents[path],
-    symbols: await getRevisionSymbols(path, contents[path]),
+    content: contents[path] ?? missingFile(path),
+    symbols: await getRevisionSymbols(path, contents[path] ?? missingFile(path)),
   }))
   return { tree, file }
 }
@@ -113,13 +118,17 @@ describe('revision source navigation', () => {
 
   it('follows a workspace package re-export to saved source when published build files are absent', async () => {
     const loader = project({
-      'server/tsconfig.json': '{"extends":"fastify-tsconfig","compilerOptions":{"baseUrl":"./src"}}',
+      'server/tsconfig.json':
+        '{"extends":"fastify-tsconfig","compilerOptions":{"baseUrl":"./src"}}',
       'server/src/use.ts': "import { assertTrue } from 'utils'\nassertTrue(true)",
-      'packages/utils/package.json': '{"name":"utils","main":"dist/index.js","types":"dist/index.d.ts"}',
-      'packages/utils/tsconfig.json': '{"extends":"../../tsconfig.base.json","compilerOptions":{"outDir":"dist"}}',
+      'packages/utils/package.json':
+        '{"name":"utils","main":"dist/index.js","types":"dist/index.d.ts"}',
+      'packages/utils/tsconfig.json':
+        '{"extends":"../../tsconfig.base.json","compilerOptions":{"outDir":"dist"}}',
       'tsconfig.base.json': '{"compilerOptions":{"strict":true}}',
       'packages/utils/src/index.ts': "export * from './assert-conditions'",
-      'packages/utils/src/assert-conditions.ts': 'export function assertTrue(condition: boolean): asserts condition {}',
+      'packages/utils/src/assert-conditions.ts':
+        'export function assertTrue(condition: boolean): asserts condition {}',
       'server/src/unrelated.ts': 'export function assertTrue() {}',
     })
     const navigate = createSourceNavigator(loader)
@@ -127,7 +136,12 @@ describe('revision source navigation', () => {
       const result = await navigate(fixturePull(), { ...request, path: 'server/src/use.ts' })
       expect(result.mode).toBe('semantic')
       expect(result.targets).toMatchObject([
-        { path: 'packages/utils/src/assert-conditions.ts', line: 1, column: 17, name: 'assertTrue' },
+        {
+          path: 'packages/utils/src/assert-conditions.ts',
+          line: 1,
+          column: 17,
+          name: 'assertTrue',
+        },
       ])
       expect(result.targets).toHaveLength(1)
       expect(loader.file.mock.calls.map((call) => call[2])).not.toContain('server/src/unrelated.ts')
@@ -140,7 +154,8 @@ describe('revision source navigation', () => {
     const loader = project({
       'src/use.ts': "import { run } from './bridge'\nrun()",
       'src/bridge.ts': "export { run } from '@local/tasks/runner'",
-      'packages/tasks/package.json': '{"name":"@local/tasks","exports":{"./runner":{"types":"./build/runner.d.ts","import":"./build/runner.js"}}}',
+      'packages/tasks/package.json':
+        '{"name":"@local/tasks","exports":{"./runner":{"types":"./build/runner.d.ts","import":"./build/runner.js"}}}',
       'packages/tasks/tsconfig.json': '{"compilerOptions":{"rootDir":"lib","outDir":"build"}}',
       'packages/tasks/lib/runner.ts': 'export function run() { return 1 }',
     })
@@ -188,7 +203,7 @@ describe('revision source navigation', () => {
     ).toEqual([1])
     expect(result.warnings.join(' ')).toContain('not semantic references')
     const definition = await navigate(fixturePull(), { ...request, path: 'src/use.py' })
-    expect(definition.targets[0]).toMatchObject({ path: 'src/service.py', line: 1, name: 'run' })
+    expect(definition.targets[0]!).toMatchObject({ path: 'src/service.py', line: 1, name: 'run' })
   })
 
   it('reports bounded and truncated results, coalesces requests, and keeps revisions separate', async () => {

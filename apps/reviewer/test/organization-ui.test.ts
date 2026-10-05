@@ -2,15 +2,15 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Provider, type PullRequest } from '../shared/types'
-import { loadDraft } from '../src/drafts'
-import { OrganizationEmptyState } from '../src/OrganizationEmptyState'
-import { OrganizationSettings } from '../src/OrganizationSettings'
-import { organizationDefaults } from '../shared/preferences'
-import { ReviewWorkspace } from '../src/ReviewWorkspace'
+import { Provider, type PullRequest } from '../shared/domain/types'
+import { loadDraft } from '../src/features/review/drafts'
+import { OrganizationEmptyState } from '../src/features/review/OrganizationEmptyState'
+import { OrganizationSettings } from '../src/features/settings/OrganizationSettings'
+import { organizationDefaults } from '../shared/domain/preferences'
+import { ReviewWorkspace } from '../src/features/review/ReviewWorkspace'
 import { fixturePull } from './fixtures/pull'
 
-vi.mock('../src/useReviewDraft', () => ({
+vi.mock('../src/features/review/useReviewDraft', () => ({
   useReviewDraft: (pull: PullRequest) => ({
     draft: loadDraft(pull),
     ready: true,
@@ -18,7 +18,7 @@ vi.mock('../src/useReviewDraft', () => ({
     flush: vi.fn(),
   }),
 }))
-vi.mock('../src/ThemeProvider', () => ({
+vi.mock('../src/app/ThemeProvider', () => ({
   useReviewerTheme: () => ({ themeId: 'github-dark', resolvedTheme: 'dark' }),
 }))
 vi.mock('../src/vendor/t3/components/diffs/StyledDiffCodeView', () => ({

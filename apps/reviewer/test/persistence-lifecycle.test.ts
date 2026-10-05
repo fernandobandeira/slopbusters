@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { registerReviewFlusher, flushDetachedReviews } from '../src/persistenceLifecycle'
+import { registerReviewFlusher, flushDetachedReviews } from '../src/lib/persistenceLifecycle'
 
 afterEach(() => vi.unstubAllGlobals())
 

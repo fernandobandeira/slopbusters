@@ -1,0 +1,103 @@
+import { Link } from 'react-router'
+import { ArrowLeft, Check, RotateCw } from 'lucide-react'
+import type { PullRequest, ReviewDraft } from '../../../shared/domain/types'
+import { groupChangeTotals } from '../../../shared/domain/review'
+import { groupIsViewed } from './reviewProgress'
+
+interface Props {
+  pull: PullRequest
+  draft: ReviewDraft
+  selectedId?: string
+  inboxUrl: string
+  submitting: boolean
+  organizing: boolean
+  onSelect: (id?: string) => void
+  onRegenerate: () => void
+  onNotice: (message: string) => void
+}
+export function GroupSidebar({
+  pull,
+  draft,
+  selectedId,
+  inboxUrl,
+  submitting,
+  organizing,
+  onSelect,
+  onRegenerate,
+  onNotice,
+}: Props) {
+  const groups = pull.groups
+  const grouped = pull.groupingSource !== 'files'
+  const selected = groups.find((group) => group.id === selectedId)
+  return (
+    <aside className="group-sidebar" aria-label="Review navigation">
+      <div className="review-navigation">
+        <Link
+          className="back-to-inbox"
+          to={inboxUrl}
+          onClick={(event) => {
+            if (submitting) {
+              event.preventDefault()
+              onNotice('Wait for your review to finish submitting before leaving.')
+            }
+          }}
+        >
+          <ArrowLeft size={14} />
+          Back to inbox
+        </Link>
+        {groups.length > 0 && (
+          <div className="group-navigation-title">
+            <span>Groups</span>
+            <button
+              className="regenerate-icon"
+              aria-label="Regenerate groups"
+              title="Regenerate groups"
+              disabled={organizing}
+              onClick={() => {
+                onSelect(undefined)
+                onRegenerate()
+              }}
+            >
+              <RotateCw size={13} className={organizing ? 'animate-spin' : undefined} />
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="group-list">
+        {groups.map((group) => {
+          const done = groupIsViewed(group, draft, pull)
+          const totals = groupChangeTotals(pull, group)
+          return (
+            <button
+              className={`group-row ${selected?.id === group.id ? 'selected' : ''}`}
+              data-reviewed={done ? true : undefined}
+              key={group.id}
+              onClick={() => {
+                onSelect(group.id)
+              }}
+            >
+              <div className="group-row-top">
+                {done ? (
+                  <Check size={13} className="green group-viewed" aria-label="Viewed" />
+                ) : (
+                  <span className={`priority ${group.priority.toLowerCase()}`}>
+                    {group.priority}
+                  </span>
+                )}
+                <strong>{group.title}</strong>
+              </div>
+              <span className="group-change-stats muted">
+                <span>
+                  {group.fileIds.length} {group.fileIds.length === 1 ? 'file' : 'files'}
+                </span>
+                <span className="green">+{totals.additions}</span>
+                <span className="red">−{totals.deletions}</span>
+              </span>
+            </button>
+          )
+        })}
+        {grouped && !groups.length && <p className="empty-small muted">No changes to review.</p>}
+      </div>
+    </aside>
+  )
+}

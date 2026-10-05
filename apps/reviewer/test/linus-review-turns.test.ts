@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { linusReviewTurns } from '../src/linusReviewTurns'
-import { recommendationsPrompt, type LinusResult } from '../shared/linus'
+import { linusReviewTurns } from '../src/features/linus/linusReviewTurns'
+import { recommendationsPrompt, type LinusResult } from '../shared/domain/linus'
 import { fixturePull } from './fixtures/pull'
 
 function result(number: number): LinusResult {
@@ -21,7 +21,7 @@ function result(number: number): LinusResult {
         { target: 'overview', reference: '', emotion: 'happy', text: 'Keep it together.' },
         {
           target: 'diff',
-          reference: pull.files[0].hunks[0].id,
+          reference: pull.files[0]!.hunks[0]!.id,
           emotion: 'neutral',
           text: 'These changes belong together.',
         },
@@ -50,7 +50,7 @@ describe('Linus focused tour', () => {
     const reviews = [result(1), result(2), result(3)]
     for (const review of reviews) {
       review.advice.steps = Array.from({ length: 12 }, (_, index) => ({
-        ...review.advice.steps[0],
+        ...review.advice.steps[0]!,
         text: `PR ${review.pull.number} point ${index + 1}`,
       }))
     }
@@ -59,13 +59,13 @@ describe('Linus focused tour', () => {
     expect(turns.map((turn) => turn.step.text)).not.toContain('PR 1 point 12')
     expect(recommendationsPrompt(reviews)).toContain('PR 1 point 12')
     expect(recommendationsPrompt(reviews)).toContain('PR 3 point 12')
-    expect(reviews[0].advice.steps).toHaveLength(12)
+    expect(reviews[0]!.advice.steps).toHaveLength(12)
   })
   it('keeps existing turns stable as another PR finishes', () => {
     const first = result(1)
     const before = linusReviewTurns([first])
     const after = linusReviewTurns([first, result(2)])
     expect(after.slice(0, before.length)).toEqual(before)
-    expect(after[before.length].result.pull.number).toBe(2)
+    expect(after[before.length]!.result.pull.number).toBe(2)
   })
 })

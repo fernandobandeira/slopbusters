@@ -1,23 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { derivePullStack, type BranchPull } from '../shared/stacks'
+import { derivePullStack, type BranchPull } from '../shared/domain/stacks'
 import {
   branchPull,
-  clearStackCache,
-  getStackForPull,
+  createStackService,
   inboxStackSummaries,
-  listNativeStacks,
   nativePullStack,
-} from '../server/stacks'
-import { runCommand } from '../server/process'
-import { getInbox } from '../server/github'
-import { clearPullStatusCache } from '../server/pullStatus'
+} from '../server/features/pulls/stacks'
+import { runCommand } from '../server/adapters/process'
+import { createPullService } from '../server/features/pulls/github'
+import { createPullStatusService } from '../server/features/pulls/pullStatus'
 import { graphPull, graphRef } from './fixtures/pullStatus'
 import { startReviewerServer } from '../server/app'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-vi.mock('../server/process', () => ({ runCommand: vi.fn() }))
+let stackService = createStackService()
+let pullService = createPullService(undefined, stackService)
+const getStackForPull: ReturnType<typeof createStackService>['getStackForPull'] = (...args) =>
+  stackService.getStackForPull(...args)
+const listNativeStacks: ReturnType<typeof createStackService>['listNativeStacks'] = (...args) =>
+  stackService.listNativeStacks(...args)
+const getInbox: ReturnType<typeof createPullService>['getInbox'] = (...args) =>
+  pullService.getInbox(...args)
+vi.mock('../server/adapters/process', () => ({ runCommand: vi.fn() }))
 const command = vi.mocked(runCommand)
 const repository = 'example/project'
 function pull(
@@ -51,12 +57,12 @@ function rest(pull: BranchPull) {
     head: {
       ref: pull.headBranch,
       sha: 'head',
-      repo: { id: Number(pull.headRepositoryId?.split(':')[1] ?? 1) },
+      repo: { id: Number(pull.headRepositoryId?.split(':')[1]! ?? 1) },
     },
     base: {
       ref: pull.baseBranch,
       sha: 'base',
-      repo: { id: Number(pull.baseRepositoryId?.split(':')[1] ?? 1) },
+      repo: { id: Number(pull.baseRepositoryId?.split(':')[1]! ?? 1) },
     },
     user: { login: 'alice' },
     body: '',
@@ -83,8 +89,9 @@ function native() {
 }
 beforeEach(() => {
   command.mockReset()
-  clearStackCache()
-  clearPullStatusCache()
+  const statuses = createPullStatusService()
+  stackService = createStackService(undefined, statuses)
+  pullService = createPullService(undefined, stackService)
 })
 
 describe('repository-qualified branch dependency chains', () => {
@@ -205,7 +212,7 @@ describe('native GitHub stacks', () => {
     )
     const result = await getStackForPull(`https://github.com/${repository}/pull/3`)
     expect(result.stack?.items.map((pull) => pull.number)).toEqual([1, 2, 3])
-    expect(command.mock.calls.map(([options]) => options.args[1])).toEqual([
+    expect(command.mock.calls.map(([options]) => options.args[1]!)).toEqual([
       `repos/${repository}/pulls/3`,
       `repos/${repository}/stacks/42`,
       'graphql',
@@ -239,7 +246,7 @@ describe('native GitHub stacks', () => {
     ])
     expect(first).toEqual(second)
     expect(command).toHaveBeenCalledTimes(1)
-    clearStackCache()
+    stackService = createStackService()
     command.mockReset().mockRejectedValue(new Error('Unsupported endpoint'))
     expect((await listNativeStacks(repository)).stacks).toEqual([])
     expect((await listNativeStacks(repository, true)).warnings).not.toEqual([])
@@ -248,7 +255,7 @@ describe('native GitHub stacks', () => {
   it('keeps inbox rows readable when native stacks are unsupported and derives qualified chains', async () => {
     const values = [rest(pull(1, 'one', 'main')), rest(pull(2, 'two', 'one'))]
     command.mockImplementation(async (options) => {
-      if (options.args[1] === 'user') return JSON.stringify({ login: 'alice' })
+      if (options.args[1]! === 'user') return JSON.stringify({ login: 'alice' })
       if (options.args[1]?.includes('/stacks')) throw new Error('Unsupported endpoint')
       return JSON.stringify([values])
     })

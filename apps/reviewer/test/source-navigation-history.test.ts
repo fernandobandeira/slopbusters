@@ -4,7 +4,7 @@ import {
   isCurrentDefinition,
   navigationOutcome,
   visitSource,
-} from '../src/sourceNavigationHistory'
+} from '../src/features/source-navigation/sourceNavigationHistory'
 
 const visit = (path: string) => ({
   file: { path, sha: 'saved', content: '', symbols: [] },
@@ -17,7 +17,7 @@ describe('source navigation outcomes and history', () => {
     const second = visitSource(first, visit('second.ts'))
     expect(second.index).toBe(1)
     const back = { ...second, index: 0 }
-    expect(back.visits[back.index].file.path).toBe('first.ts')
+    expect(back.visits[back.index]!.file.path).toBe('first.ts')
     const replaced = visitSource(back, visit('third.ts'))
     expect(replaced.visits.map((entry) => entry.file.path)).toEqual(['first.ts', 'third.ts'])
     expect({ ...first, index: -1 }.visits[-1]).toBeUndefined()

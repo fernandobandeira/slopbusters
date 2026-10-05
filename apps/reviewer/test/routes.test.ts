@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePullUrl } from '../shared/pullUrl'
+import { parsePullUrl } from '../shared/domain/pullUrl'
 import {
   inboxPath,
   readRoute,
@@ -7,7 +7,7 @@ import {
   reviewPath,
   routeMatchesPull,
   updateReviewView,
-} from '../src/routes'
+} from '../src/lib/routes'
 import { fixturePull } from './fixtures/pull'
 
 function route(path: string) {

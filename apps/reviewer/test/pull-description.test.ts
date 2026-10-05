@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { PullDescription } from '../src/PullDescription'
+import { PullDescription } from '../src/features/review/PullDescription'
 import { fixturePull } from './fixtures/pull'
 
 function render(description: string) {

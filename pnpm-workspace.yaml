@@ -1,2 +1,8 @@
 packages:
   - apps/*
+
+# New resolutions wait a day; existing lockfile versions remain reproducible.
+minimumReleaseAge: 1440
+onlyBuiltDependencies:
+  - electron
+  - esbuild

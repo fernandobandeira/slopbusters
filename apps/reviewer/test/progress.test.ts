@@ -4,8 +4,8 @@ import {
   reviewedFingerprints,
   restoreProgress,
   emptyDraft,
-} from '../shared/progress'
-import { parseFile } from '../shared/diff'
+} from '../server/features/progress'
+import { parseFile } from '../server/features/diff'
 import { fixturePull } from './fixtures/pull'
 
 describe('reviewed content fingerprints', () => {

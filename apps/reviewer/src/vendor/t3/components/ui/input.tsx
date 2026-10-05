@@ -1,9 +1,9 @@
 "use client";
 
-import { Input as InputPrimitive } from "@base-ui/react/input";
-import type * as React from "react";
+import { Input as InputPrimitive } from "@base-ui/react/input"
+import type * as React from "react"
 
-import { cn } from "~/lib/utils";
+import { cn } from "~/lib/utils"
 
 type InputProps = Omit<InputPrimitive.Props & React.RefAttributes<HTMLInputElement>, "size"> & {
   size?: "sm" | "compact" | "default" | "lg" | number;
@@ -46,7 +46,7 @@ function Input({
         data-slot="input"
         size={typeof size === "number" ? size : undefined}
         style={nativeStyle}
-        {...(nativeInputProps as React.ComponentProps<"input">)}
+        {...(nativeInputProps)}
       />
     );
   } else {

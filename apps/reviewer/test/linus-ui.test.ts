@@ -2,15 +2,15 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LinusCompanion } from '../src/LinusCompanion'
-import { SettingsPage } from '../src/SettingsPage'
-import { Provider } from '../shared/types'
+import { LinusCompanion } from '../src/features/linus/LinusCompanion'
+import { SettingsPage } from '../src/features/settings/SettingsPage'
+import { Provider } from '../shared/domain/types'
 
-vi.mock('../src/ThemeProvider', () => ({
+vi.mock('../src/app/ThemeProvider', () => ({
   useReviewerTheme: () => ({ themeId: 'nord', setTheme: vi.fn(), error: '' }),
 }))
 
-vi.mock('../src/useLinusSession', () => ({
+vi.mock('../src/features/linus/useLinusSession', () => ({
   useLinusSession: () => ({
     session: undefined,
     loading: false,

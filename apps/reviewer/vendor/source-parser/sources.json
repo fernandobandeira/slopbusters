@@ -9,9 +9,7 @@
       "repository": "https://github.com/microsoft/vscode-tree-sitter-wasm",
       "revision": "78c97c860ddd965b9617f0e30962ad1da08c4c91",
       "source": "https://raw.githubusercontent.com/microsoft/vscode-tree-sitter-wasm/78c97c860ddd965b9617f0e30962ad1da08c4c91/LICENSE",
-      "licenseFiles": [
-        "LICENSE"
-      ],
+      "licenseFiles": ["LICENSE"],
       "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
     },
     {
@@ -19,9 +17,7 @@
       "version": "0.25.0",
       "source": "https://registry.npmjs.org/tree-sitter-bash/-/tree-sitter-bash-0.25.0.tgz",
       "integrity": "sha512-gZtlj9+qFS81qKxpLfD6H0UssQ3QBc/F0nKkPsiFDyfQF2YBqYvglFJUzchrPpVhZe9kLZTrJ9n2J6lmka69Vg==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": "https://github.com/tree-sitter/tree-sitter-bash"
     },
     {
@@ -29,9 +25,7 @@
       "repository": "https://github.com/tree-sitter/tree-sitter-c-sharp",
       "revision": "485f0bae0274ac9114797fc10db6f7034e4086e3",
       "source": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-c-sharp/485f0bae0274ac9114797fc10db6f7034e4086e3/LICENSE",
-      "licenseFiles": [
-        "LICENSE"
-      ],
+      "licenseFiles": ["LICENSE"],
       "sha256": "778fb7d63b8c1844da315648c02f325c4713a6f4a5d19644fd413421422776d3"
     },
     {
@@ -39,9 +33,7 @@
       "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
       "revision": "12bd6f7e96080d2e70ec51d4068f2f66120dde35",
       "source": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-cpp/12bd6f7e96080d2e70ec51d4068f2f66120dde35/LICENSE",
-      "licenseFiles": [
-        "LICENSE"
-      ],
+      "licenseFiles": ["LICENSE"],
       "sha256": "2e0110e07abef7c2548b26ec9d6969775617ca539a0dc8dbeeb14d6452c711d1"
     },
     {
@@ -49,9 +41,7 @@
       "version": "0.25.0",
       "source": "https://registry.npmjs.org/tree-sitter-css/-/tree-sitter-css-0.25.0.tgz",
       "integrity": "sha512-FRc9R8ePrwJiUhZsuZ/wcFQ3K8Z+9yCgDrrUjuYswGWlN89UvcB9vslTUGZElQWGwhS8sUw3/r2n4lpb2sxT4Q==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": {
         "type": "git",
         "url": "git+https://github.com/tree-sitter/tree-sitter-css.git"
@@ -62,9 +52,7 @@
       "version": "0.25.0",
       "source": "https://registry.npmjs.org/tree-sitter-go/-/tree-sitter-go-0.25.0.tgz",
       "integrity": "sha512-APBc/Dq3xz/e35Xpkhb1blu5UgW+2E3RyGWawZSCNcbGwa7jhSQPS8KsUupuzBla8PCo8+lz9W/JDJjmfRa2tw==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": "https://github.com/tree-sitter/tree-sitter-go"
     },
     {
@@ -72,9 +60,7 @@
       "repository": "https://github.com/justinmk/tree-sitter-ini",
       "revision": "f0285fe577ad298ad79f8633e643ad60646e3027",
       "source": "https://raw.githubusercontent.com/justinmk/tree-sitter-ini/f0285fe577ad298ad79f8633e643ad60646e3027/LICENSE",
-      "licenseFiles": [
-        "LICENSE"
-      ],
+      "licenseFiles": ["LICENSE"],
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
@@ -82,9 +68,7 @@
       "version": "0.23.5",
       "source": "https://registry.npmjs.org/tree-sitter-java/-/tree-sitter-java-0.23.5.tgz",
       "integrity": "sha512-Yju7oQ0Xx7GcUT01mUglPP+bYfvqjNCGdxqigTnew9nLGoII42PNVP3bHrYeMxswiCRM0yubWmN5qk+zsg0zMA==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": "https://github.com/tree-sitter/tree-sitter-java"
     },
     {
@@ -92,9 +76,7 @@
       "version": "0.23.1",
       "source": "https://registry.npmjs.org/tree-sitter-javascript/-/tree-sitter-javascript-0.23.1.tgz",
       "integrity": "sha512-/bnhbrTD9frUYHQTiYnPcxyHORIw157ERBa6dqzaKxvR/x3PC4Yzd+D1pZIMS6zNg2v3a8BZ0oK7jHqsQo9fWA==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": "https://github.com/tree-sitter/tree-sitter-javascript"
     },
     {
@@ -102,9 +84,7 @@
       "version": "0.25.0",
       "source": "https://registry.npmjs.org/tree-sitter-javascript/-/tree-sitter-javascript-0.25.0.tgz",
       "integrity": "sha512-1fCbmzAskZkxcZzN41sFZ2br2iqTYP3tKls1b/HKGNPQUVOpsUxpmGxdN/wMqAk3jYZnYBR1dd/y/0avMeU7dw==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": "https://github.com/tree-sitter/tree-sitter-javascript"
     },
     {
@@ -112,9 +92,7 @@
       "version": "0.24.2",
       "source": "https://registry.npmjs.org/tree-sitter-php/-/tree-sitter-php-0.24.2.tgz",
       "integrity": "sha512-zwgAePc/HozNaWOOfwRAA+3p8yhuehRw8Fb7vn5qd2XjiIc93uJPryDTMYTSjBRjVIUg/KY6pM3rRzs8dSwKfw==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": "https://github.com/tree-sitter/tree-sitter-php"
     },
     {
@@ -122,9 +100,7 @@
       "repository": "https://github.com/airbus-cert/tree-sitter-powershell",
       "revision": "9379c77984af1f3d3d7e3cc5e897de3496725280",
       "source": "https://raw.githubusercontent.com/airbus-cert/tree-sitter-powershell/9379c77984af1f3d3d7e3cc5e897de3496725280/LICENSE",
-      "licenseFiles": [
-        "LICENSE"
-      ],
+      "licenseFiles": ["LICENSE"],
       "sha256": "1fca8454c0d77a73f9922a52d39e1f7c339f5da5d03f2766eff66b859fa19477"
     },
     {
@@ -132,9 +108,7 @@
       "version": "0.25.0",
       "source": "https://registry.npmjs.org/tree-sitter-python/-/tree-sitter-python-0.25.0.tgz",
       "integrity": "sha512-eCmJx6zQa35GxaCtQD+wXHOhYqBxEL+bp71W/s3fcDMu06MrtzkVXR437dRrCrbrDbyLuUDJpAgycs7ncngLXw==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": "https://github.com/tree-sitter/tree-sitter-python"
     },
     {
@@ -142,9 +116,7 @@
       "version": "0.25.0",
       "source": "https://registry.npmjs.org/tree-sitter-regex/-/tree-sitter-regex-0.25.0.tgz",
       "integrity": "sha512-Xf3KU+LOfCS6djfIzEHdVlq4ITinLNfVy7LkWqFr0R4ZG1SGV2u/HS4ct+TNwuLTPfU9EA/tQZnbJ/KLtgljgQ==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": "https://github.com/tree-sitter/tree-sitter-regex"
     },
     {
@@ -152,9 +124,7 @@
       "version": "0.23.1",
       "source": "https://registry.npmjs.org/tree-sitter-ruby/-/tree-sitter-ruby-0.23.1.tgz",
       "integrity": "sha512-d9/RXgWjR6HanN7wTYhS5bpBQLz1VkH048Vm3CodPGyJVnamXMGb8oEhDypVCBq4QnHui9sTXuJBBP3WtCw5RA==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": "https://github.com/tree-sitter/tree-sitter-ruby"
     },
     {
@@ -162,9 +132,7 @@
       "repository": "https://github.com/tree-sitter/tree-sitter",
       "revision": "v0.25.10",
       "source": "https://raw.githubusercontent.com/tree-sitter/tree-sitter/v0.25.10/LICENSE",
-      "licenseFiles": [
-        "LICENSE"
-      ],
+      "licenseFiles": ["LICENSE"],
       "sha256": "5f9cf9fb6acb1972b35ae29119ce563bb60ec097656bc4b69b9bac2d04c7a147"
     },
     {
@@ -172,9 +140,7 @@
       "repository": "https://github.com/tree-sitter/tree-sitter-rust",
       "revision": "261b20226c04ef601adbdf185a800512a5f66291",
       "source": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-rust/261b20226c04ef601adbdf185a800512a5f66291/LICENSE",
-      "licenseFiles": [
-        "LICENSE"
-      ],
+      "licenseFiles": ["LICENSE"],
       "sha256": "31d5b6f4243d5c7c6e1c4ebbbb9f6407bd1457a08bcc4f706521710341acba36"
     },
     {
@@ -182,9 +148,7 @@
       "version": "0.23.2",
       "source": "https://registry.npmjs.org/tree-sitter-typescript/-/tree-sitter-typescript-0.23.2.tgz",
       "integrity": "sha512-e04JUUKxTT53/x3Uq1zIL45DoYKVfHH4CZqwgZhPg5qYROl5nQjV+85ruFzFGZxu+QeFVbRTPDRnqL9UbU4VeA==",
-      "licenseFiles": [
-        "package/LICENSE"
-      ],
+      "licenseFiles": ["package/LICENSE"],
       "repository": "https://github.com/tree-sitter/tree-sitter-typescript"
     }
   ],

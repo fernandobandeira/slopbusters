@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { resolveTheme } from '@pierre/diffs'
-import { createThemePreferenceWriter, DEFAULT_THEME, getTheme, isThemeId, themePalette, themes, type ThemeId } from '../src/themes'
+import {
+  createThemePreferenceWriter,
+  DEFAULT_THEME,
+  getTheme,
+  isThemeId,
+  themePalette,
+  themes,
+  type ThemeId,
+} from '../src/lib/themes'
 
 describe('reviewer themes', () => {
   it('loads each selectable palette locally with the same ID and scheme as the diff renderer', async () => {
@@ -13,7 +21,9 @@ describe('reviewer themes', () => {
       expect(palette['--code-background']).toBe(theme.bg)
       expect(palette['--foreground']).toBe(theme.fg)
       expect(palette['--code-foreground']).toBe(theme.fg)
-      expect(Object.values(palette).every((color) => typeof color === 'string' && color.length > 0)).toBe(true)
+      expect(
+        Object.values(palette).every((color) => typeof color === 'string' && color.length > 0),
+      ).toBe(true)
     }
   })
 
@@ -33,7 +43,9 @@ describe('theme preference writes', () => {
   it('serializes rapid changes so the latest choice is persisted last', async () => {
     const saved: ThemeId[] = []
     let release: (() => void) | undefined
-    const pending = new Promise<void>((resolve) => { release = resolve })
+    const pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
     const write = createThemePreferenceWriter(async (theme) => {
       if (theme === 'nord') await pending
       saved.push(theme)

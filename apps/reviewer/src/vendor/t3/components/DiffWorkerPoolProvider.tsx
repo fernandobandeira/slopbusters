@@ -1,18 +1,9 @@
-import { WorkerPoolContext, useWorkerPool } from "@pierre/diffs/react";
-import { WorkerPoolManager } from "@pierre/diffs/worker";
-import DiffsWorker from "../../../diff.worker?worker";
-import { createResilientDiffWorker } from "../../../resilientDiffWorker";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
-import { useTheme } from "../hooks/useTheme";
-import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering";
-import { PREFERRED_HIGHLIGHTER } from "../lib/syntaxHighlighting";
+import { WorkerPoolContext, useWorkerPool } from "@pierre/diffs/react"
+import { WorkerPoolManager } from "@pierre/diffs/worker"
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react"
+import { useTheme } from "../hooks/useTheme"
+import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering"
+import { PREFERRED_HIGHLIGHTER } from "../lib/syntaxHighlighting"
 
 export class DiffWorkerError extends Error {
   readonly operation: "create-worker" | "get-render-options" | "set-render-options";
@@ -32,12 +23,12 @@ let sharedWorkerPool:
   | undefined;
 
 /** Create workers after a viewer commits, then reuse them across short panel closures. */
-function acquireDiffWorkerPool(themeName: DiffThemeName, poolSize: number) {
+function acquireDiffWorkerPool(themeName: DiffThemeName, poolSize: number, createWorker: () => Worker) {
   const entry = (sharedWorkerPool ??= {
     pool: new WorkerPoolManager(
       {
         workerFactory: () => {
-          return createResilientDiffWorker(() => new DiffsWorker());
+          return createWorker();
         },
         poolSize,
         totalASTLRUCacheSize: 240,
@@ -123,7 +114,7 @@ function DiffWorkerReady({ children }: { children?: ReactNode }) {
 }
 
 export function DiffWorkerPoolProvider({ children }: { children?: ReactNode }) {
-  const { themeId } = useTheme();
+  const { themeId, createWorker } = useTheme();
   const diffThemeName = resolveDiffThemeName(themeId);
   const workerPoolSize = useMemo(() => {
     const cores =
@@ -134,7 +125,7 @@ export function DiffWorkerPoolProvider({ children }: { children?: ReactNode }) {
     useCallback(
       (onStoreChange) => {
         if (typeof window === "undefined") return () => {};
-        const entry = acquireDiffWorkerPool(diffThemeName, workerPoolSize);
+        const entry = acquireDiffWorkerPool(diffThemeName, workerPoolSize, createWorker);
         onStoreChange();
         return () => {
           entry.consumers -= 1;
@@ -146,7 +137,7 @@ export function DiffWorkerPoolProvider({ children }: { children?: ReactNode }) {
           }, DIFF_WORKER_IDLE_TTL_MS);
         };
       },
-      [diffThemeName, workerPoolSize],
+      [diffThemeName, workerPoolSize, createWorker],
     ),
     () => sharedWorkerPool?.pool,
     () => undefined,

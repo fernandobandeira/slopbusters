@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getSourceSymbols } from '../server/sourceSymbols'
+import { getSourceSymbols } from '../server/features/navigation/sourceSymbols'
 
 describe('source revision outlines', () => {
   it('identifies enclosing classes, private async methods, and nested functions at exact lines', () => {

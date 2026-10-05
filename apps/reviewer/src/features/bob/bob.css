@@ -1,0 +1,101 @@
+.bob-companion {
+  left: 22px;
+  right: auto;
+  align-items: flex-start;
+}
+.bob-companion .linus-bubble {
+  border-radius: 16px 16px 16px 4px;
+}
+.bob-evidence {
+  position: fixed;
+  z-index: 42;
+  top: 65px;
+  bottom: 22px;
+  left: 430px;
+  right: 105px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+  box-shadow: 0 12px 42px #0003;
+}
+.bob-evidence header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 18px 22px 0;
+  gap: 12px;
+}
+.bob-evidence h2 {
+  font-size: 16px;
+  margin: 8px 0;
+}
+.bob-location {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  padding: 0 22px;
+  overflow-wrap: anywhere;
+}
+.bob-suggestion {
+  padding: 16px 22px;
+  overflow: auto;
+  max-height: 30%;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.bob-suggestion pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.bob-comment {
+  margin: 16px 0;
+}
+.bob-comment label {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+.bob-comment textarea {
+  width: 100%;
+  margin-bottom: 10px;
+}
+.bob-saved {
+  color: var(--success);
+  font-size: 11px;
+}
+.bob-notes {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 10px 0;
+}
+.bob-submit {
+  margin-top: 14px;
+}
+@media (max-width: 900px) {
+  .bob-evidence {
+    right: 12px;
+  }
+}
+@media (max-width: 760px) {
+  .bob-companion {
+    left: 12px;
+    right: auto;
+  }
+  .bob-evidence {
+    left: 12px;
+    right: 12px;
+    top: 55px;
+    bottom: 350px;
+  }
+  .bob-evidence header {
+    align-items: center;
+    padding: 12px 12px 0;
+  }
+  .bob-location {
+    padding: 0 12px;
+  }
+}

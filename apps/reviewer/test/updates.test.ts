@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { pullHasUpdates } from '../shared/updates'
-import { createRevisionChecker } from '../server/updates'
-import { watchPullUpdates } from '../src/pullUpdates'
+import { pullHasUpdates } from '../shared/domain/updates'
+import { createRevisionChecker } from '../server/features/pulls/updates'
+import { watchPullUpdates } from '../src/features/pull-status/pullUpdates'
 import { fixturePull } from './fixtures/pull'
 
 afterEach(() => vi.useRealTimers())

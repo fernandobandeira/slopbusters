@@ -1,0 +1,363 @@
+import {
+  MAX_NAVIGATION_TARGETS,
+  VIRTUAL_ROOT,
+  MAX_NAVIGATION_FILES,
+  MAX_NAVIGATION_BYTES,
+  NAVIGATION_TIMEOUT_MS,
+} from '../../limits'
+import { UserError } from '../../errors'
+import ts from 'typescript'
+import { posix } from 'node:path'
+import type {
+  NavigationRequest,
+  NavigationResult,
+  NavigationTarget,
+} from '../../../shared/domain/navigation'
+import type { PullRequest } from '../../../shared/domain/types'
+import type { createSourceProjectLoader } from './fileContent'
+import { getSyntaxIdentifierLocations, sourceLanguage } from '../../adapters/treeSymbols'
+import { createTypeScriptNavigator } from './semanticNavigation'
+import { workspacePackagePaths } from './workspacePackages'
+
+type SourceProject = ReturnType<typeof createSourceProjectLoader>
+const virtualRoot = `${VIRTUAL_ROOT}/`
+const maximumFiles = MAX_NAVIGATION_FILES
+const maximumBytes = MAX_NAVIGATION_BYTES
+
+function selectedWord(content: string, line: number, column: number): string {
+  const text = content.split('\n')[line - 1]?.replace(/\r$/, '')
+  if (text == null || column < 1 || column > text.length + 1)
+    throw new UserError('The selected source position is outside this file.')
+  const character = /[\p{L}\p{N}_$]/u
+  let start = Math.min(column - 1, text.length)
+  let end = start
+  while (start > 0 && character.test(text.charAt(start - 1))) start--
+  while (end < text.length && character.test(text.charAt(end))) end++
+  return text.slice(start, end).slice(0, 200)
+}
+
+function nearby(path: string, candidate: string): number {
+  const directory = posix.dirname(path).split('/')
+  const parts = candidate.split('/')
+  let shared = 0
+  while (directory[shared] && directory[shared] === parts[shared]) shared++
+  return shared
+}
+
+function plainMatches(path: string, content: string, name: string): NavigationTarget[] {
+  const targets: NavigationTarget[] = []
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`(?<![\\p{L}\\p{N}_$])${escaped}(?![\\p{L}\\p{N}_$])`, 'gu')
+  content.split('\n').forEach((line, index) => {
+    for (const match of line.matchAll(pattern)) {
+      if (targets.length >= MAX_NAVIGATION_TARGETS) return
+      targets.push({
+        path,
+        name,
+        line: index + 1,
+        column: match.index + 1,
+        endLine: index + 1,
+        endColumn: match.index + name.length + 1,
+      })
+    }
+  })
+  return targets
+}
+
+export function createSnapshotNavigator(project: SourceProject) {
+  const typeScriptProjects = new Map<string, ReturnType<typeof createTypeScriptNavigator>>()
+  async function navigate(
+    pull: PullRequest,
+    request: NavigationRequest,
+  ): Promise<NavigationResult> {
+    const tree = await project.tree(pull, request.side)
+    const origin = await project.file(pull, request.side, request.path)
+    const language = sourceLanguage(request.path)
+    const semantic = language === 'typescript' || language === 'javascript'
+    const name = selectedWord(origin.content, request.line, request.column)
+    const warnings = new Set(tree.warnings)
+    if (!name) return { language, mode: semantic ? 'semantic' : 'text', targets: [], warnings: [] }
+    const available = new Set(tree.paths)
+    const files = new Map<string, string>([[request.path, origin.content]])
+    const revisions = new Map([[request.path, origin]])
+    let bytes = Buffer.byteLength(origin.content)
+    let attempted = 1
+    const visited = new Set([request.path])
+    const started = Date.now()
+    let limited = false
+
+    async function load(path: string) {
+      if (visited.has(path) || !available.has(path)) return
+      if (
+        attempted >= maximumFiles ||
+        bytes >= maximumBytes ||
+        Date.now() - started > NAVIGATION_TIMEOUT_MS
+      ) {
+        limited = true
+        return
+      }
+      visited.add(path)
+      attempted++
+      try {
+        const file = await project.file(pull, request.side, path)
+        const size = Buffer.byteLength(file.content)
+        if (bytes + size > maximumBytes) {
+          limited = true
+          return
+        }
+        bytes += size
+        files.set(path, file.content)
+        revisions.set(path, file)
+      } catch {
+        warnings.add(`Could not analyze ${path}; navigation results may be incomplete.`)
+      }
+    }
+    async function loadMany(paths: string[]) {
+      for (let index = 0; index < paths.length; index += 6) {
+        if (
+          attempted >= maximumFiles ||
+          bytes >= maximumBytes ||
+          Date.now() - started > NAVIGATION_TIMEOUT_MS
+        ) {
+          limited = true
+          break
+        }
+        await Promise.all(paths.slice(index, index + 6).map(load))
+      }
+    }
+
+    let projectDirectory = ''
+    let compilerOptions: ts.CompilerOptions = {}
+    async function optionsFrom(
+      path: string,
+      ancestors = new Set<string>(),
+    ): Promise<ts.CompilerOptions> {
+      if (ancestors.size > 8 || ancestors.has(path)) return {}
+      await load(path)
+      const text = files.get(path)
+      if (!text) return {}
+      const parsed = ts.parseConfigFileTextToJson(path, text)
+      if (parsed.error || !parsed.config || typeof parsed.config !== 'object') {
+        warnings.add(`Could not read ${path}; default source resolution is in use.`)
+        return {}
+      }
+      const configDirectory = `${virtualRoot}${posix.dirname(path)}`
+      const inherited =
+        typeof parsed.config.extends === 'string' && parsed.config.extends.startsWith('.')
+          ? posix.normalize(posix.join(posix.dirname(path), parsed.config.extends))
+          : undefined
+      if (typeof parsed.config.extends === 'string' && !parsed.config.extends.startsWith('.'))
+        warnings.add(
+          `Package-based inherited configuration for ${path} is unavailable in the saved repository source.`,
+        )
+      let parent: ts.CompilerOptions = {}
+      if (inherited) {
+        const parentPath = available.has(inherited) ? inherited : `${inherited}.json`
+        if (available.has(parentPath))
+          parent = await optionsFrom(parentPath, new Set([...ancestors, path]))
+        else
+          warnings.add(`The inherited configuration for ${path} is unavailable in this revision.`)
+      }
+      const own = ts.convertCompilerOptionsFromJson(
+        parsed.config.compilerOptions ?? {},
+        configDirectory,
+      ).options
+      if (own.paths && !own.baseUrl && !parent.baseUrl) own.baseUrl = configDirectory
+      return { ...parent, ...own }
+    }
+    if (semantic) {
+      let directory = posix.dirname(request.path)
+      let config: string | undefined
+      while (true) {
+        config = ['tsconfig.json', 'jsconfig.json']
+          .map((base) => posix.join(directory, base))
+          .find((path) => available.has(path))
+        if (config || directory === '.') break
+        directory = posix.dirname(directory)
+      }
+      if (config) {
+        projectDirectory = posix.dirname(config) === '.' ? '' : posix.dirname(config)
+        if (request.kind !== 'definition' && projectDirectory)
+          warnings.add(
+            `Navigation is scoped to the configured project in ${projectDirectory}; other projects may contain additional locations.`,
+          )
+        compilerOptions = await optionsFrom(config)
+      }
+    }
+    const candidates = tree.paths
+      .filter((path) => {
+        if (semantic)
+          return (
+            /\.[cm]?[jt]sx?$/i.test(path) &&
+            (!projectDirectory || path.startsWith(`${projectDirectory}/`))
+          )
+        if (language !== 'text') return sourceLanguage(path) === language
+        return posix.extname(path) === posix.extname(request.path)
+      })
+      .sort(
+        (left, right) =>
+          nearby(request.path, right) - nearby(request.path, left) || left.localeCompare(right),
+      )
+
+    if (request.kind !== 'definition' || !semantic) await loadMany(candidates)
+    if (semantic) {
+      const options: ts.CompilerOptions = {
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        allowJs: true,
+        ...compilerOptions,
+      }
+      const directories = new Set<string>([virtualRoot.slice(0, -1)])
+      for (const path of tree.paths) {
+        let directory = posix.dirname(`${virtualRoot}${path}`)
+        while (!directories.has(directory)) {
+          directories.add(directory)
+          directory = posix.dirname(directory)
+        }
+      }
+      const resolver: ts.ModuleResolutionHost = {
+        fileExists: (path) => available.has(path.slice(virtualRoot.length)),
+        readFile: (path) => files.get(path.slice(virtualRoot.length)),
+        directoryExists: (directory) => directories.has(directory),
+        getCurrentDirectory: () => virtualRoot.slice(0, -1),
+        realpath: (path) => path,
+      }
+      let resolutions = ts.createModuleResolutionCache(virtualRoot, (path) => path, options)
+      let packagesScanned = false
+      async function loadWorkspacePackages() {
+        packagesScanned = true
+        const manifests = tree.paths.filter(
+          (path) => /(^|\/)package\.json$/.test(path) && !path.split('/').includes('node_modules'),
+        )
+        await loadMany(manifests)
+        const paths: Record<string, string[]> = {}
+        for (const manifest of manifests) {
+          const text = files.get(manifest)
+          if (!text) continue
+          const config = posix.join(posix.dirname(manifest), 'tsconfig.json')
+          const packageOptions = available.has(config) ? await optionsFrom(config) : {}
+          Object.assign(paths, workspacePackagePaths(manifest, text, available, packageOptions))
+        }
+        options.paths = { ...paths, ...compilerOptions.paths }
+        resolutions = ts.createModuleResolutionCache(virtualRoot, (path) => path, options)
+      }
+      const processed = new Set<string>()
+      for (let pass = 0; pass < 12; pass++) {
+        const imports = new Set<string>()
+        for (const [path, content] of files) {
+          if (processed.has(path) || !/\.[cm]?[jt]sx?$/i.test(path)) continue
+          processed.add(path)
+          for (const imported of ts.preProcessFile(content, true, true).importedFiles) {
+            let resolved = ts.resolveModuleName(
+              imported.fileName,
+              `${virtualRoot}${path}`,
+              options,
+              resolver,
+              resolutions,
+            ).resolvedModule
+            if (!resolved && !imported.fileName.startsWith('.') && !packagesScanned) {
+              await loadWorkspacePackages()
+              resolved = ts.resolveModuleName(
+                imported.fileName,
+                `${virtualRoot}${path}`,
+                options,
+                resolver,
+                resolutions,
+              ).resolvedModule
+            }
+            if (resolved?.resolvedFileName.startsWith(virtualRoot))
+              imports.add(resolved.resolvedFileName.slice(virtualRoot.length))
+          }
+        }
+        const unseen = [...imports].filter((path) => !visited.has(path))
+        if (!unseen.length) break
+        await loadMany(unseen)
+        if (pass === 11) limited = true
+      }
+      if (limited)
+        warnings.add(
+          `Navigation analyzed up to ${maximumFiles} files and 8 MiB of source; more results may exist.`,
+        )
+      // Source is immutable at this commit. Reuse parsed/type-checked programs across
+      // symbols and navigation kinds when the same bounded file set is available.
+      const projectKey = JSON.stringify([
+        pull.owner,
+        pull.repo,
+        tree.sha,
+        options,
+        [...files.keys()].sort(),
+      ])
+      let navigator = typeScriptProjects.get(projectKey)
+      if (!navigator) navigator = createTypeScriptNavigator(files, options)
+      typeScriptProjects.delete(projectKey)
+      typeScriptProjects.set(projectKey, navigator)
+      while (typeScriptProjects.size > 3) {
+        const oldest = typeScriptProjects.keys().next().value!
+        typeScriptProjects.get(oldest)!.close()
+        typeScriptProjects.delete(oldest)
+      }
+      return {
+        language,
+        mode: 'semantic',
+        targets: navigator.navigate(request).slice(0, MAX_NAVIGATION_TARGETS),
+        warnings: [...warnings],
+        source: { sha: tree.sha, kind: 'snapshot' },
+      }
+    }
+
+    warnings.add(
+      request.kind === 'definition'
+        ? 'Possible definitions are matched by syntax and name. Type and scope resolution is unavailable for this language.'
+        : 'These are source matches, not semantic references; unrelated symbols can share the same name.',
+    )
+    const targets: NavigationTarget[] = []
+    for (const [path, file] of revisions) {
+      if (request.kind === 'definition') {
+        for (const symbol of file.symbols) {
+          if (
+            symbol.name
+              .split('.')
+              .at(-1)
+              ?.replace(/^(get|set) /, '') !== name
+          )
+            continue
+          const line = file.content.split('\n')[symbol.line - 1] ?? ''
+          const column = Math.max(1, line.indexOf(name) + 1)
+          targets.push({
+            path,
+            name: symbol.name,
+            line: symbol.line,
+            column,
+            endLine: symbol.line,
+            endColumn: column + name.length,
+          })
+        }
+      } else
+        targets.push(
+          ...((await getSyntaxIdentifierLocations(path, file.content, name)) ??
+            plainMatches(path, file.content, name)),
+        )
+      if (targets.length >= MAX_NAVIGATION_TARGETS) {
+        limited = true
+        break
+      }
+    }
+    if (limited)
+      warnings.add(
+        `Navigation analyzed up to ${maximumFiles} files, 8 MiB of source and ${MAX_NAVIGATION_TARGETS} matches; more results may exist.`,
+      )
+    return {
+      language,
+      mode: 'text',
+      targets: targets.slice(0, MAX_NAVIGATION_TARGETS),
+      warnings: [...warnings],
+    }
+  }
+
+  return Object.assign(navigate, {
+    close() {
+      for (const navigator of typeScriptProjects.values()) navigator.close()
+      typeScriptProjects.clear()
+    },
+  })
+}

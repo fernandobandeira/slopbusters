@@ -1,8 +1,8 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import type { AppStatus } from '../shared/types'
-import { ConnectionStatus } from '../src/ConnectionStatus'
+import type { AppStatus } from '../shared/domain/types'
+import { ConnectionStatus } from '../src/components/ConnectionStatus'
 
 describe('sidebar connection status', () => {
   it('shows a real account profile and keeps installed providers distinct from signed-in providers', () => {
