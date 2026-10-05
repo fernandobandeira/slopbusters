@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runCommand } from '../server/process'
 import { LocalSourceRepository } from '../server/sourceRepository'
 import { ReviewWorkspaces } from '../server/reviewWorkspaces'
@@ -10,7 +10,9 @@ import { createSourceNavigator } from '../server/navigation'
 import { createSourceProjectLoader } from '../server/fileContent'
 import { WorkspaceTypeScriptNavigation } from '../server/workspaceNavigation'
 import { startRepositoryTools } from '../server/repositoryTools'
-import { DiffSide } from '../shared/types'
+import { DiffSide, Provider } from '../shared/types'
+import { createSetupPlanner } from '../server/setupPlanner'
+import * as providers from '../server/provider'
 import { fixturePull } from './fixtures/pull'
 import { startReviewerServer } from '../server/app'
 import { ReviewerStore } from '../server/store'
@@ -20,6 +22,7 @@ import { fileURLToPath } from 'node:url'
 
 const cleanup: (() => Promise<unknown>)[] = []
 afterEach(async () => {
+  vi.restoreAllMocks()
   for (const close of cleanup.splice(0).reverse()) await close()
 })
 
@@ -73,6 +76,35 @@ async function fixture(extra: Record<string, string> = {}) {
 }
 
 describe('independent local review checkouts', () => {
+  it('pins setup planning and its read-only MCP files to the selected old revision', async () => {
+    const { pull, project, workspaces } = await fixture()
+    const advisory = { explanation: 'No setup needed.', commands: [] }
+    const provider = vi.spyOn(providers, 'runStructured').mockImplementation(async (_organization, prompt, schema, _signal, context) => {
+      expect(prompt).toContain(pull.mergeBaseSha)
+      expect(context?.sha).toBe(pull.mergeBaseSha)
+      const response = await fetch(context!.url, { method: 'POST',
+        headers: { Authorization: `Bearer ${context!.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
+          name: 'read_file', arguments: { path: 'src/types.ts' },
+        } }),
+      })
+      const result = await response.json()
+      const file = JSON.parse(result.result.content[0].text)
+      expect(file.sha).toBe(pull.mergeBaseSha)
+      const contents = file.lines.map((line: { text: string }) => line.text).join('\n')
+      expect(contents).toContain('export enum Purpose')
+      expect(contents).not.toContain('loan')
+      return schema.parse(advisory)
+    })
+    const navigation = createSourceNavigator(project)
+    cleanup.push(async () => navigation.close())
+    const planner = createSetupPlanner({ workspaces, project, navigate: navigation,
+      preferences: () => ({ provider: Provider.codex, model: 'configured-model' }) })
+    expect(await planner(pull, pull.mergeBaseSha!, { side: DiffSide.left, provider: Provider.codex,
+      path: 'src/types.ts', warnings: [] }, new AbortController().signal)).toEqual(advisory)
+    expect(provider.mock.calls[0][0].model).toBe('configured-model')
+    await workspaces.remove(pull, pull.mergeBaseSha!)
+  })
   it('prepares, navigates, lists, and removes an exact checkout through the application API', async () => {
     const { pull, data, origin } = await fixture()
     const store = new ReviewerStore({ dataDirectory: data })

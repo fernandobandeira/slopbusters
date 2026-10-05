@@ -55,10 +55,11 @@ function plainMatches(path: string, content: string, name: string): NavigationTa
 }
 
 /** Loads a bounded, immutable virtual project; reviewed packages and configuration are never run. */
-export function createSourceNavigator(project: SourceProject, languageServers?: LanguageServerNavigation, localTypeScript?: WorkspaceTypeScriptNavigation) {
+export function createSourceNavigator(project: SourceProject, languageServers?: LanguageServerNavigation, localTypeScript?: WorkspaceTypeScriptNavigation, onVisit?: (pull: PullRequest) => void) {
   const active = new Map<string, Promise<NavigationResult>>()
   const cache = new Map<string, NavigationResult>()
   const typeScriptProjects = new Map<string, ReturnType<typeof createTypeScriptNavigator>>()
+  let generation = 0
 
   async function navigate(
     pull: PullRequest,
@@ -346,6 +347,8 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
     pull: PullRequest,
     request: NavigationRequest,
   ): Promise<NavigationResult> {
+    onVisit?.(pull)
+    const version = generation
     const key = JSON.stringify([
       pull.owner,
       pull.repo,
@@ -361,16 +364,16 @@ export function createSourceNavigator(project: SourceProject, languageServers?: 
     const result = navigate(pull, request)
       .then((value) => {
         // A missing or failed installed server should be retried on the next click.
-        if ((!languageServers || value.mode === 'semantic') && !value.warnings.some((warning) => warning.startsWith('Full-project navigation is unavailable:'))) cache.set(key, value)
+        if (version === generation && (!languageServers || value.mode === 'semantic') && !value.warnings.some((warning) => warning.startsWith('Full-project navigation is unavailable:'))) cache.set(key, value)
         if (cache.size > 40) cache.delete(cache.keys().next().value!)
         return value
       })
-      .finally(() => active.delete(key))
+      .finally(() => { if (active.get(key) === result) active.delete(key) })
     active.set(key, result)
     return result
   }
   return Object.assign(sourceNavigation, {
-    clearCache() { cache.clear() },
+    clearCache() { generation++; cache.clear(); active.clear() },
     close() {
       for (const navigator of typeScriptProjects.values()) navigator.close()
       typeScriptProjects.clear()

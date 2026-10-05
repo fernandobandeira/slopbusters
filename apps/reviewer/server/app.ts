@@ -23,6 +23,11 @@ import { parsePullUrl } from '../shared/pullUrl'
 import { ReviewWorkspaces } from './reviewWorkspaces'
 import { WorkspaceTypeScriptNavigation, type TypeScriptWorkerOptions } from './workspaceNavigation'
 import { startRepositoryTools } from './repositoryTools'
+import { WorkspaceSetups } from './workspaceSetup'
+import type { SetupPlanner } from './workspaceSetup'
+import { PreparedEnvironmentStorage } from './adapters/preparedEnvironment'
+import { createSetupPlanner } from './setupPlanner'
+import { workspaceSetupRouter } from './http/workspaceSetupRouter'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   dataDirectory: string
@@ -32,6 +37,7 @@ export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   port?: number
   allowedOrigins?: string[]
   sourceRemoteUrl?: (owner: string, repo: string) => string
+  workspaceSetupPlanner?: SetupPlanner
 }
 
 export async function startReviewerServer(
@@ -56,12 +62,25 @@ export async function startReviewerServer(
         .catch(() => {})
   }
   const languageServers = new LanguageServers(options.dataDirectory)
-  let languageNavigation = new LanguageServerNavigation(sourceProject, languageServers, workspaces)
-  let typeScriptNavigation = new WorkspaceTypeScriptNavigation(sourceProject, workspaces, options)
+  const preparedStorage = new PreparedEnvironmentStorage(options.dataDirectory, sourceRepository)
+  await preparedStorage.initialize()
+  const setups = new WorkspaceSetups(workspaces,
+    preparedStorage,
+    options.workspaceSetupPlanner ?? createSetupPlanner({ workspaces, project: sourceProject,
+      navigate: (pull, request) => navigateSource(pull, request),
+      preferences: () => store.getPreferences().organization }),
+    async (owner, repo, sha) => {
+      await typeScriptNavigation.closeRevision(owner, repo, sha, true)
+      await languageNavigation.closeRevision(owner, repo, sha, true)
+      navigateSource.clearCache()
+    })
+  let languageNavigation = new LanguageServerNavigation(sourceProject, languageServers, setups)
+  let typeScriptNavigation = new WorkspaceTypeScriptNavigation(sourceProject, setups, options)
   let navigateSource = createSourceNavigator(
     sourceProject,
     languageNavigation,
     typeScriptNavigation,
+    (pull) => setups.touch(pull),
   )
   const linusJobs = new LinusJobs(
     store,
@@ -69,7 +88,7 @@ export async function startReviewerServer(
     options.linusSkillDirectory,
     async (pull, signal) => {
       signal.throwIfAborted()
-      const lease = await workspaces.acquire(pull, pull.headSha)
+      const lease = await setups.acquire(pull, pull.headSha)
       try {
         signal.throwIfAborted()
         return await startRepositoryTools(pull, lease, sourceProject, (pull, request) =>
@@ -107,6 +126,7 @@ export async function startReviewerServer(
     next()
   })
   app.use(express.json({ limit: '1mb' }))
+  app.use('/api', workspaceSetupRouter({ setups, getPull: (id) => store.getPull(id), project: sourceProject }))
 
   const commentSchema = z.object({
     id: z.string().max(100),
@@ -196,9 +216,9 @@ export async function startReviewerServer(
     await languageNavigation.close()
     await typeScriptNavigation.close()
     navigateSource.close()
-    languageNavigation = new LanguageServerNavigation(sourceProject, languageServers, workspaces)
-    typeScriptNavigation = new WorkspaceTypeScriptNavigation(sourceProject, workspaces, options)
-    navigateSource = createSourceNavigator(sourceProject, languageNavigation, typeScriptNavigation)
+    languageNavigation = new LanguageServerNavigation(sourceProject, languageServers, setups)
+    typeScriptNavigation = new WorkspaceTypeScriptNavigation(sourceProject, setups, options)
+    navigateSource = createSourceNavigator(sourceProject, languageNavigation, typeScriptNavigation, (pull) => setups.touch(pull))
     response.json(await languageServers.statuses())
   })
   app.put('/api/preferences', (request, response) => {
@@ -458,13 +478,13 @@ export async function startReviewerServer(
       closing ??= new Promise<void>((resolve, reject) => {
         for (const job of jobs.values()) job.controller.abort()
         server.close((error) => {
-          void Promise.all([
+          void setups.stop().then(() => Promise.all([
             languageNavigation.close(),
             typeScriptNavigation.close(),
             linusJobs.close(),
             workspaces.close(),
             sourceRepository.close(),
-          ]).then(() => {
+          ])).then(() => setups.close()).then(() => {
             navigateSource.close()
             store.close()
             if (error) reject(error)

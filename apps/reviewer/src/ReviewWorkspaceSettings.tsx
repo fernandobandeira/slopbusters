@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { LocalReviewCheckout } from '../shared/workspace'
 import { api, message } from './api'
+import { PreparedEnvironmentSettings } from './PreparedEnvironmentSettings'
 
 export function ReviewWorkspaceSettings() {
   const [checkouts, setCheckouts] = useState<LocalReviewCheckout[]>([])
@@ -31,7 +32,7 @@ export function ReviewWorkspaceSettings() {
     }
   }
   return (
-    <section className="settings-section" aria-labelledby="review-checkouts-title">
+    <><PreparedEnvironmentSettings /><section className="settings-section" aria-labelledby="review-checkouts-title">
       <h2 id="review-checkouts-title">Local review checkouts</h2>
       <p className="muted">
         Source navigation and agents use separate local copies of the saved PR commit. Remove a copy
@@ -53,6 +54,6 @@ export function ReviewWorkspaceSettings() {
           </button>
         </div>
       ))}
-    </section>
+    </section></>
   )
 }

@@ -31,7 +31,7 @@ export class WorkspaceTypeScriptNavigation {
   private closed = false
   constructor(
     private project: SourceProject,
-    private workspaces: ReviewWorkspaces,
+    private workspaces: Pick<ReviewWorkspaces, 'acquire'>,
     private options: TypeScriptWorkerOptions = {},
   ) {}
 
@@ -142,11 +142,11 @@ export class WorkspaceTypeScriptNavigation {
     await Promise.all([...this.entries].map(([key, entry]) => this.retire(key, entry)))
   }
 
-  async closeRevision(owner: string, repo: string, sha: string) {
+  async closeRevision(owner: string, repo: string, sha: string, invalidate = false) {
     const key = JSON.stringify([owner, repo, sha])
     const entry = this.entries.get(key)
     if (!entry) return
-    if (entry.users)
+    if (entry.users && !invalidate)
       throw new Error(
         'Source analysis is in progress. Try removing this checkout when it finishes.',
       )

@@ -34,6 +34,7 @@ describe('source navigation outcomes and history', () => {
       false,
     )
     expect(navigationOutcome('definition', 0)).toContain('No definition found')
+    expect(navigationOutcome('definition', 0)).toContain('configured IDE')
     expect(navigationOutcome('references', 0)).toContain('No references found')
     expect(navigationOutcome('definition', 1)).toBe('')
   })

@@ -4,6 +4,7 @@ import { realpathSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { workspacePackagePaths } from './workspacePackages.ts'
 import type { NavigationRequest, NavigationResult, NavigationTarget } from '../shared/navigation.ts'
+import { MAX_DECLARATION_BYTES } from './limits.ts'
 
 const { directory, paths, libDirectory } = workerData as {
   directory: string
@@ -29,7 +30,7 @@ function allowed(path: string) {
   }
 }
 const readFile = (path: string) =>
-  allowed(path) && statSync(path).size <= 2 * 1024 * 1024 ? ts.sys.readFile(path) : undefined
+  allowed(path) && statSync(path).size <= (/\.d\.[cm]?ts$/i.test(path) ? MAX_DECLARATION_BYTES : 2 * 1024 * 1024) ? ts.sys.readFile(path) : undefined
 const host = {
   getCurrentDirectory: () => directory,
   useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
@@ -171,7 +172,7 @@ function navigate(request: NavigationRequest): NavigationResult {
     const target = service.getProgram()?.getSourceFile(occurrence.fileName)
     if (!target || !available.has(path)) {
       warnings.add(
-        'Some definitions belong to dependencies outside the committed source and cannot be opened in this review.',
+        'This location belongs to a dependency or generated declaration outside the committed PR source. Open the symbol in your configured IDE to inspect that declaration.',
       )
       continue
     }

@@ -40,5 +40,5 @@ export function navigationOutcome(
     ? 'No references found in the available source.'
     : kind === 'implementation'
       ? 'No implementations found in the available source.'
-      : 'No definition found. Check the source warnings for missing dependencies or configuration.'
+      : 'No definition found. Dependencies, generated code, or project configuration may be missing from this PR checkout. Try workspace setup, or open the symbol in your configured IDE.'
 }

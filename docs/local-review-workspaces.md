@@ -45,6 +45,18 @@ The endpoint offers `list_files`, `read_file`, `search_text`, `go_to_definition`
 
 This does not turn the wording audit into a general code-review agent or execute tests. CI continues to own lint/test checks and merge gates. No dependencies, environment files, services, build steps, or setup scripts are provisioned automatically.
 
+## Optional workspace setup
+
+When navigation reports missing dependencies or configuration, the source modal offers a setup plan from Codex or Claude. Planning uses the existing read-only provider session against the exact saved source revision. The agent reads repository documentation and manifests; it does not run setup. There are no Prisma-specific installers, language-specific setup recipes, or universal environment provisioning promises.
+
+The plan contains executable/argument arrays, relative working directories, and reasons. The user sees the entire list and must select **Allow and run setup** before any command executes. An empty list can explain unavailable tooling, credentials, or configuration and recommend the user's configured IDE. Approval is tied to the saved PR revision and that server-side plan; the execution endpoint does not accept replacement commands.
+
+Approved commands run sequentially in a separate app-owned clone of the same commit. This is permission to execute the displayed commands, including package lifecycle scripts and code generation, using the user's local toolchain and normal shared package-manager caches. It is not an OS sandbox for arbitrary setup scripts. Planning excludes tests, lint, migrations, services, global installs, credentials, environment copying, Git changes, and source edits. The app stops after a command fails, times out, is cancelled, or changes committed source/HEAD. It never resets or edits the original source checkout or user repository.
+
+Navigation and subsequent review sessions use a completed prepared environment; its tracked source must still match the saved commit. Analysis caches and language-server sessions are retired on setup completion or removal. Dependencies and generated files can inform semantic analysis and native agent searches, but are not committed PR evidence. The viewer still opens committed source only: a definition in an external/generated declaration explicitly recommends the configured IDE instead of silently reopening the current file. Large TypeScript declaration files can be analyzed up to 32 MiB, so generated clients do not hit the ordinary 2 MiB source-analysis limit.
+
+Prepared environments are disposable for the app session. The source modal and Settings can cancel/clear them. There are at most two running/completed environments, and unused ones expire after 30 minutes once agent leases can be released. Shutdown stops setup commands, review agents and language servers before removing this session's environment directories. Startup reclaims orphaned environment directories whose recorded owner process no longer exists. Package-manager shared caches are retained. Source-only clones remain cached independently. No live paid model calls run in tests.
+
 ## Navigation behavior
 
 A single semantic definition opens and highlights its destination. The source modal retains Back/Forward history. Repeating a jump at the current declaration reports “Already at this definition” without reloading its file. An unresolved symbol reports the missing result while preserving the current source. Configuration and missing-import diagnostics remain visible rather than being hidden. Multiple locations retain the existing chooser.

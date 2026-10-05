@@ -69,7 +69,7 @@ export async function createSourceWorkspace(
   pull: PullRequest,
   request: NavigationRequest,
   server: LanguageServerConfig,
-  workspaces?: ReviewWorkspaces,
+  workspaces?: Pick<ReviewWorkspaces, 'acquire'>,
 ): Promise<SourceWorkspace> {
   const tree = await project.tree(pull, request.side)
   const paths = new Set(tree.paths)

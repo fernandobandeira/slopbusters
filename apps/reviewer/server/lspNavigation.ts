@@ -17,7 +17,7 @@ interface Entry {
 export class LanguageServerNavigation {
   private entries = new Map<string, Entry>()
   private closed = false
-  constructor(private readonly project: SourceProject, readonly servers: LanguageServers, private readonly workspaces?: ReviewWorkspaces) {}
+  constructor(private readonly project: SourceProject, readonly servers: LanguageServers, private readonly workspaces?: Pick<ReviewWorkspaces, 'acquire'>) {}
 
   private retire(key: string, entry: Entry): Promise<void> {
     clearTimeout(entry.timer)
@@ -75,12 +75,12 @@ export class LanguageServerNavigation {
     await Promise.all([...this.entries].map(([key, entry]) => this.retire(key, entry)))
   }
 
-  async closeRevision(owner: string, repo: string, sha: string) {
+  async closeRevision(owner: string, repo: string, sha: string, invalidate = false) {
     const matches = [...this.entries].filter(([key]) => {
       const identity = JSON.parse(key) as string[]
       return identity[0] === owner && identity[1] === repo && identity[2] === sha
     })
-    if (matches.some(([, entry]) => entry.users)) throw new Error('Source analysis is in progress. Try removing this checkout when it finishes.')
+    if (!invalidate && matches.some(([, entry]) => entry.users)) throw new Error('Source analysis is in progress. Try removing this checkout when it finishes.')
     await Promise.all(matches.map(([key, entry]) => this.retire(key, entry)))
   }
 }

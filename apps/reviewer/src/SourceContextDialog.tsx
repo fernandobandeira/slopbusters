@@ -16,6 +16,7 @@ import {
   visitSource,
 } from './sourceNavigationHistory'
 import type { ReviewWorkspaceInfo } from '../shared/workspace'
+import { WorkspaceSetupPanel } from './WorkspaceSetupPanel'
 import './sourceContext.css'
 
 interface Props {
@@ -308,6 +309,10 @@ export function SourceContextDialog({
                   <p key={warning}>{warning}</p>
                 ))}
               </div>
+            )}
+            {navigation && (!navigation.targets.length || warnings.length > 0) && (
+              <WorkspaceSetupPanel key={`${pull.id}:${revision.sha}`} pullId={pull.id} sha={revision.sha}
+                side={actualSide} path={revision.path} warnings={warnings} />
             )}
             <div className="source-context-body">
               <StyledDiffCodeView
