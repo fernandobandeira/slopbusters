@@ -6,6 +6,10 @@ export const gandalfTurnSchema = z.object({
   approved: z.boolean(),
   issues: z.array(z.string().max(2000)).max(30),
   edits: z.array(z.object({ path: z.string().min(1), content: z.string().nullable() })).max(100),
+  selections: z
+    .array(z.object({ path: z.string().min(1), side: z.enum(['head', 'base', 'delete']) }))
+    .max(100)
+    .default([]),
 })
 export type GandalfTurn = z.infer<typeof gandalfTurnSchema>
 

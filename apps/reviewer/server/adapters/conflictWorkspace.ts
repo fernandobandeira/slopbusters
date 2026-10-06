@@ -9,11 +9,17 @@ import type { GitHub } from './github'
 import { hardenedGit } from './git'
 import { workspacePath } from './workspacePath'
 import { readConflictRevision } from './conflictRevision'
+import { conflictIndex } from './conflictIndex'
+import { createConflictChoices } from './conflictChoices'
 
 export interface ConflictSnapshot {
   revision: string
   diff: string
-  conflicts: { path: string; content: string }[]
+  conflicts: {
+    path: string
+    content: string
+    choices?: { side: 'head' | 'base'; type: 'file' | 'symlink'; content: string }[]
+  }[]
 }
 export interface ConflictWorkspace {
   directory: string
@@ -22,7 +28,7 @@ export interface ConflictWorkspace {
   conflicts: string[]
   verify: (headSha?: string) => Promise<void>
   inspect: () => Promise<ConflictSnapshot>
-  apply: (edits: GandalfTurn['edits']) => Promise<void>
+  apply: (edits: GandalfTurn['edits'], selections?: GandalfTurn['selections']) => Promise<void>
   publish: () => Promise<string>
   close: () => Promise<void>
 }
@@ -61,12 +67,11 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
     )
     const conflicts = await mergeBase(git, pull.baseSha)
     await verify()
-    const allowed = await regularPaths(git)
+    const { regular: allowed, structural } = conflictIndex(await git(['ls-files', '--stage', '-z']))
+    const choices = createConflictChoices(directory, git, structural, pull)
     for (const path of conflicts)
-      if (!allowed.has(path))
-        throw new UserError(
-          `Gandalf cannot automatically resolve a binary, symlink or submodule conflict: ${path}.`,
-        )
+      if (!allowed.has(path) && !structural.has(path))
+        throw new UserError(`Gandalf cannot automatically resolve this file type: ${path}.`)
     return workspaceOperations({
       directory,
       pull,
@@ -74,6 +79,7 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
       needsUpdate,
       verify,
       allowed,
+      choices,
       git,
       publish: async () => {
         // The push also has an atomic head lease; this check covers a changed base or closed PR.
@@ -148,21 +154,6 @@ async function mergeBase(git: (args: string[]) => Promise<string>, sha: string) 
   }
   return (await git(['diff', '--name-only', '--diff-filter=U', '-z'])).split('\0').filter(Boolean)
 }
-async function regularPaths(git: (args: string[]) => Promise<string>) {
-  const entries = (await git(['ls-files', '--stage', '-z'])).split('\0').filter(Boolean)
-  const paths = new Set<string>()
-  const unsupported = new Set<string>()
-  for (const entry of entries) {
-    const separator = entry.indexOf('\t')
-    const metadata = entry.slice(0, separator)
-    const path = entry.slice(separator + 1)
-    if (!path) throw new Error('Invalid Git index entry.')
-    if (/^100(644|755) /.test(metadata)) paths.add(path)
-    else unsupported.add(path)
-  }
-  for (const path of unsupported) paths.delete(path)
-  return paths
-}
 function safePath(directory: string, path: string, allowed: Set<string>) {
   if (
     !allowed.has(path) ||
@@ -193,6 +184,7 @@ function workspaceOperations(options: {
   needsUpdate: boolean
   verify: (headSha?: string) => Promise<void>
   allowed: Set<string>
+  choices: ReturnType<typeof createConflictChoices>
   git: (args: string[]) => Promise<string>
   publish: () => Promise<string>
 }): ConflictWorkspace {
@@ -206,17 +198,21 @@ function workspaceOperations(options: {
     async inspect() {
       const diff = await git(['diff', '--no-ext-diff', '--no-textconv', pull.headSha, '--'])
       const files = await Promise.all(
-        conflicts.map(async (path) => ({
-          path,
-          content: await textFile(directory, path, allowed),
-        })),
+        conflicts.map(async (path) =>
+          allowed.has(path)
+            ? {
+                path,
+                content: await textFile(directory, path, allowed),
+              }
+            : options.choices.inspect(path),
+        ),
       )
       const data = JSON.stringify({ diff, conflicts: files })
       if (Buffer.byteLength(data) > MAX_GANDALF_PROMPT_BYTES)
         throw new UserError('These conflicts exceed the automatic resolution size limit.')
       return { revision: createHash('sha256').update(data).digest('hex'), diff, conflicts: files }
     },
-    async apply(edits) {
+    async apply(edits, selections = []) {
       if (new Set(edits.map((edit) => edit.path)).size !== edits.length)
         throw new UserError('The model returned duplicate file edits.')
       for (const edit of edits) {
@@ -235,6 +231,7 @@ function workspaceOperations(options: {
         else await writeFile(target, edit.content)
         await git(['add', '--all', '--', edit.path])
       }
+      await options.choices.apply(selections)
       if ((await git(['ls-files', '--unmerged'])).trim())
         throw new UserError('The model left unresolved conflicts. Retry the resolution.')
       await git(['diff', '--cached', '--check'])

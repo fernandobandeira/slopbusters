@@ -11,12 +11,19 @@ import { fixturePull } from './fixtures/pull'
 
 const primary = { provider: Provider.codex, model: 'gpt-6.1-sol' }
 const companion = { provider: Provider.claude, model: 'claude-opus-5-5' }
-const clean: GandalfTurn = { summary: 'No issues found.', approved: true, issues: [], edits: [] }
+const clean: GandalfTurn = {
+  summary: 'No issues found.',
+  approved: true,
+  issues: [],
+  edits: [],
+  selections: [],
+}
 const fix = (content: string): GandalfTurn => ({
   summary: 'Fixed the resolution.',
   approved: false,
   issues: [],
   edits: [{ path: 'code.ts', content }],
+  selections: [],
 })
 let directory: string
 let store: ReviewerStore

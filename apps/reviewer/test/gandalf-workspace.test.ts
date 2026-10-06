@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile, lstat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -205,5 +205,56 @@ describe('isolated conflict checkout and publication', () => {
     await work.apply([{ path: 'code.ts', content: null }])
     const resolved = await work.publish()
     expect(await git(['ls-tree', '--name-only', resolved])).toBe('')
+  })
+})
+
+async function fileTypeConflict() {
+  await git(['checkout', '-q', 'feature'])
+  await writeFile(join(remote, 'CONTEXT.md'), 'Head documentation\n')
+  await git(['add', 'CONTEXT.md'])
+  originalHead = await commit('export const value = "head"\n', 'Head documentation')
+  await git(['checkout', '-q', 'main'])
+  await writeFile(join(remote, 'CONTEXT.md'), 'code.ts')
+  const blob = (await git(['hash-object', '-w', 'CONTEXT.md'])).trim()
+  await git(['update-index', '--add', '--cacheinfo', `120000,${blob},CONTEXT.md`])
+  originalBase = await commit('export const value = "base"\n', 'Base symlink')
+  return open()
+}
+
+describe('file versus symlink conflicts', () => {
+  it.each(['head', 'base'] as const)(
+    'preserves the %s side and Git file type without creating a filesystem symlink',
+    async (side) => {
+      const work = await fileTypeConflict()
+      const conflict = (await work.inspect()).conflicts.find((file) => file.path === 'CONTEXT.md')
+      expect(conflict?.choices).toEqual([
+        { side: 'base', type: 'symlink', content: 'code.ts' },
+        { side: 'head', type: 'file', content: 'Head documentation\n' },
+      ])
+      const edits = work.conflicts
+        .filter((path) => path !== 'CONTEXT.md')
+        .map((path) => ({ path, content: path === 'code.ts' ? 'resolved\n' : null }))
+      await work.apply(edits, [{ path: 'CONTEXT.md', side }])
+      expect((await lstat(join(work.directory, 'CONTEXT.md'))).isSymbolicLink()).toBe(false)
+      const index = await hardenedGit(work.directory, ['ls-files', '--stage', 'CONTEXT.md'])
+      expect(index.startsWith(side === 'head' ? '100644' : '120000')).toBe(true)
+      expect(await readFile(join(work.directory, 'code.ts'), 'utf8')).toBe('resolved\n')
+      const resolved = await work.publish()
+      expect(await git(['show', `${resolved}:CONTEXT.md`])).toBe(
+        side === 'head' ? 'Head documentation\n' : 'code.ts',
+      )
+    },
+  )
+  it('rejects invented and traversing selections and permits reviewed deletion', async () => {
+    const work = await fileTypeConflict()
+    for (const path of ['../escape', '.git/config', 'code.ts'])
+      await expect(work.apply([], [{ path, side: 'base' }])).rejects.toThrow(
+        'Unsupported file-type selection',
+      )
+    const edits = work.conflicts
+      .filter((path) => path !== 'CONTEXT.md')
+      .map((path) => ({ path, content: path === 'code.ts' ? 'resolved\n' : null }))
+    await work.apply(edits, [{ path: 'CONTEXT.md', side: 'delete' }])
+    expect(await hardenedGit(work.directory, ['ls-files', 'CONTEXT.md'])).toBe('')
   })
 })

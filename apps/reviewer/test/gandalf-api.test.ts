@@ -99,6 +99,7 @@ describe('Gandalf persistence across restarts', () => {
       approved: true,
       issues: [],
       edits: [],
+      selections: [],
     })
     const server = await startReviewerServer({
       dataDirectory: path,

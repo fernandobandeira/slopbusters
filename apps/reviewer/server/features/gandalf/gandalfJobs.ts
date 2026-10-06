@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { GandalfSession } from '../../../shared/domain/gandalf'
+import type { GandalfSession, GandalfTurn } from '../../../shared/domain/gandalf'
 import { organizationDefaults } from '../../../shared/domain/preferences'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
 import type { ReviewerStore } from '../../adapters/store'
@@ -219,12 +219,11 @@ export class GandalfJobs {
         signal,
       })
       signal.throwIfAborted()
-      await workspace.apply(turn.edits)
+      await workspace.apply(turn.edits, turn.selections)
       const next = await workspace.inspect()
       const changed = snapshot.revision !== next.revision
-      const approved =
-        index > 0 && !changed && !turn.edits.length && !turn.issues.length && turn.approved
-      if (changed || turn.edits.length) approvals.clear()
+      const approved = approvesTurn(turn, index, changed)
+      if (changed || turn.edits.length || turn.selections.length) approvals.clear()
       if (approved) approvals.add(role)
       else approvals.delete(role)
       session.turns.push({
@@ -234,7 +233,10 @@ export class GandalfJobs {
         summary: turn.summary,
         issues: turn.issues,
         approved,
-        changedPaths: turn.edits.map((edit) => edit.path),
+        changedPaths: [
+          ...turn.edits.map((edit) => edit.path),
+          ...turn.selections.map((selection) => selection.path),
+        ],
         revision: next.revision,
       })
       this.options.store.saveGandalfSession(session)
@@ -248,4 +250,15 @@ export class GandalfJobs {
     session.progress = progress
     this.options.store.saveGandalfSession(session)
   }
+}
+
+function approvesTurn(turn: GandalfTurn, index: number, changed: boolean) {
+  return (
+    index > 0 &&
+    !changed &&
+    !turn.edits.length &&
+    !turn.selections.length &&
+    !turn.issues.length &&
+    turn.approved
+  )
 }
