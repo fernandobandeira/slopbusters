@@ -3,6 +3,8 @@ packages:
 
 # New resolutions wait a day; existing lockfile versions remain reproducible.
 minimumReleaseAge: 1440
+overrides:
+  concurrently>shell-quote: 1.11.0
 onlyBuiltDependencies:
   - electron
   - esbuild
