@@ -1,4 +1,3 @@
-import { MAX_DIFF_SEED_CHARS } from '../../limits'
 import { createHash } from 'node:crypto'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import { z } from 'zod'
@@ -14,6 +13,8 @@ import {
 import { createGitHub, type GitHub } from '../../adapters/github'
 import { createMergeBaseLookup } from './mergeBase'
 import { UserError } from '../../errors'
+import type { SourceRepository } from '../../adapters/sourceRepository'
+import { loadOriginals } from './originals'
 import type { PullRevision } from '../../../shared/domain/updates'
 import { inboxStackSummaries, createStackService } from './stacks'
 
@@ -51,6 +52,7 @@ const repoSchema = z.object({
 export function createPullService(
   github: GitHub = createGitHub(),
   stacks = createStackService(github),
+  repository?: SourceRepository,
 ) {
   const ghJson = github.rest
   const ghPages = github.paginate
@@ -156,41 +158,7 @@ export function createPullService(
       warnings.push(
         `${incomplete.length} file(s) have an incomplete or unavailable patch. Open those files on GitHub to finish reviewing them.`,
       )
-    // Bounded retrieval supplies original text for copy matches; unchanged files outside the PR are not scanned.
-    const candidates = files
-      .filter((file) => file.status !== 'added' && file.status !== 'removed')
-      .slice(0, 30)
-    let unavailableOriginals = 0
-    for (let offset = 0; offset < candidates.length; offset += 5) {
-      await Promise.all(
-        candidates.slice(offset, offset + 5).map(async (file) => {
-          try {
-            const path = (file.previousPath ?? file.path)
-              .split('/')
-              .map(encodeURIComponent)
-              .join('/')
-            const content = z.string().parse(
-              await github.rest(`repos/${owner}/${repo}/contents/${path}?ref=${mergeBaseSha}`, {
-                raw: true,
-                headers: ['Accept: application/vnd.github.raw+json'],
-              }),
-            )
-            if (content.length <= MAX_DIFF_SEED_CHARS) file.oldContent = content
-            else unavailableOriginals++
-          } catch {
-            unavailableOriginals++
-          }
-        }),
-      )
-    }
-    if (
-      unavailableOriginals ||
-      candidates.length <
-        files.filter((file) => file.status !== 'added' && file.status !== 'removed').length
-    )
-      warnings.push(
-        'Copy matching is limited to available original content from the first 30 changed source files.',
-      )
+    if (repository) await loadOriginals(repository, { owner, repo, sha: mergeBaseSha }, files)
     const current = pullSchema.parse(await ghJson(endpoint))
     if (current.head.sha !== pr.head.sha || current.base.sha !== pr.base.sha)
       throw new UserError(

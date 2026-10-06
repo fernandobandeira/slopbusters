@@ -85,6 +85,9 @@ export function fileGroups(files: ChangedFile[]): ChangeGroup[] {
 export function detectTransfers(files: ChangedFile[]): CodeTransfer[] {
   const removed = files.flatMap((file) => changedRuns(file, LineKind.removed))
   const added = files.flatMap((file) => changedRuns(file, LineKind.added))
+  const originals = files.flatMap((file) =>
+    file.oldContent ? [{ path: file.path, lines: file.oldContent.split('\n') }] : [],
+  )
   const transfers: CodeTransfer[] = []
   const claimed = new Set<string>()
   for (const destination of added) {
@@ -117,9 +120,8 @@ export function detectTransfers(files: ChangedFile[]): CodeTransfer[] {
       }
       // Copies can originate in unchanged code of a changed file, including context outside its hunks.
       if (!best)
-        for (const file of files) {
-          if (!file.oldContent) continue
-          const sourceLines = file.oldContent.split('\n')
+        for (const file of originals) {
+          const sourceLines = file.lines
           for (let start = 0; start < sourceLines.length; start++) {
             let count = 0
             while (

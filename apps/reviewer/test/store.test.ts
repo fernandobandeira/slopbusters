@@ -30,6 +30,20 @@ afterEach(() => {
 })
 
 describe('SQLite review storage', () => {
+  it('drops the retired copy-limit warning from saved snapshots and preserves other warnings', () => {
+    const store = open(directory())
+    const pull = fixturePull()
+    const warning = 'Some patches are unavailable.'
+    store.savePull({
+      ...pull,
+      warnings: [
+        'Copy matching is limited to available original content from the first 30 changed source files.',
+        warning,
+      ],
+    })
+
+    expect(store.getPull(pull.id)).toEqual({ ...pull, warnings: [warning] })
+  })
   it('persists snapshots, drafts, preferences, and reviewed proof after reopening', () => {
     const path = directory()
     let store = open(path)

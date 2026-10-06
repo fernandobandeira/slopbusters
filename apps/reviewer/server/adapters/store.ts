@@ -86,7 +86,14 @@ export class ReviewerStore {
   getPull(id: string): PullRequest {
     const row = this.database.prepare('SELECT snapshot FROM snapshots WHERE id = ?').get(id)
     if (!row) throw new ReviewNotFoundError()
-    return JSON.parse(String(row.snapshot)) as PullRequest
+    const pull = JSON.parse(String(row.snapshot)) as PullRequest
+    // Older snapshots saved this warning from the retired GitHub content loader.
+    pull.warnings = pull.warnings.filter(
+      (warning) =>
+        warning !==
+        'Copy matching is limited to available original content from the first 30 changed source files.',
+    )
+    return pull
   }
   getDraft(id: string): StoredDraft {
     const pull = this.getPull(id)

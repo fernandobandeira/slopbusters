@@ -121,7 +121,7 @@
       "count": 1
     },
     "max-depth": {
-      "count": 9
+      "count": 8
     },
     "max-lines-per-function": {
       "count": 1
@@ -215,7 +215,7 @@
   },
   "server/features/pulls/github.ts": {
     "max-lines-per-function": {
-      "count": 2
+      "count": 1
     }
   },
   "server/features/pulls/pullStatus.ts": {
