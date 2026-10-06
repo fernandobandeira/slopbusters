@@ -22,6 +22,8 @@ import { BobJobs } from './features/bob/bobJobs'
 import { LinusJobs } from './features/linus/linusJobs'
 import { startRepositoryTools } from './adapters/repositoryTools'
 import { OrganizationJobs } from './features/organizationJobs'
+import { GandalfJobs } from './features/gandalf/gandalfJobs'
+import { openConflictWorkspace } from './adapters/conflictWorkspace'
 import { logError } from './errors'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
 import type { PullRequest } from '../shared/domain/types'
@@ -74,6 +76,25 @@ export function createServices(options: ReviewerServerOptions) {
     openRepository,
     loadPull: pulls.fetchPull,
   })
+  const conflictRemote = options.sourceRemoteUrl
+  const gandalfJobs = new GandalfJobs({
+    store,
+    loadPull: pulls.fetchPull,
+    openWorkspace: (pull, signal) =>
+      openConflictWorkspace({
+        dataDirectory: options.dataDirectory,
+        pull,
+        github,
+        signal,
+        remoteUrl: conflictRemote
+          ? (name) => {
+              const [owner, repo] = name.split('/')
+              if (!owner || !repo) throw new Error('Invalid source repository.')
+              return conflictRemote(owner, repo)
+            }
+          : undefined,
+      }),
+  })
   const organizationJobs = new OrganizationJobs(store)
   return {
     store,
@@ -88,6 +109,7 @@ export function createServices(options: ReviewerServerOptions) {
     languageServers,
     linusJobs,
     bobJobs,
+    gandalfJobs,
     organizationJobs,
     navigateSource: (pull: PullRequest, request: Parameters<typeof navigator>[1]) =>
       navigator(pull, request),
@@ -111,7 +133,7 @@ export function createServices(options: ReviewerServerOptions) {
     },
     async close() {
       await organizationJobs.close()
-      await Promise.all([linusJobs.close(), bobJobs.close()])
+      await Promise.all([linusJobs.close(), bobJobs.close(), gandalfJobs.close()])
       await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])
       navigator.close()
       await workspaces.close()

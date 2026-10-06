@@ -11,6 +11,7 @@ import {
 } from '../features/progress'
 import type { PullRequest, ReviewDraft } from '../../shared/domain/types'
 import type { Preferences } from '../../shared/domain/preferences'
+import { gandalfSessionSchema, type GandalfSession } from '../../shared/domain/gandalf'
 import type { BobSession } from '../../shared/domain/bob'
 import { readSavedBobReviews } from './savedBobReviews'
 import type { LinusRecommendation, LinusSession } from '../../shared/domain/linus'
@@ -37,7 +38,7 @@ export class ReviewerStore {
       'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;',
     )
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
-    if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4) {
+    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5].includes(version)) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
     }
@@ -63,11 +64,16 @@ export class ReviewerStore {
         CREATE TABLE linus_sessions (id TEXT PRIMARY KEY, repository TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL);
         PRAGMA user_version = 3; COMMIT;`)
     }
-    if (version !== 4) {
+    if (version < 4) {
       this.database.exec(`BEGIN IMMEDIATE;
         CREATE TABLE IF NOT EXISTS bob_sessions (id TEXT PRIMARY KEY, repository TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL);
         PRAGMA user_version = 4; COMMIT;`)
     }
+    if (version < 5)
+      this.database.exec(`BEGIN IMMEDIATE;
+      CREATE TABLE IF NOT EXISTS gandalf_sessions (
+        id TEXT PRIMARY KEY, repository TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL
+      ); PRAGMA user_version = 5; COMMIT;`)
   }
   savePull(pull: PullRequest): void {
     this.database
@@ -242,6 +248,27 @@ export class ReviewerStore {
           )
           .get(repository)
     return row ? (JSON.parse(String(row.session)) as BobSession) : undefined
+  }
+  saveGandalfSession(session: GandalfSession): void {
+    this.database
+      .prepare(
+        `INSERT INTO gandalf_sessions (id, repository, created_at, session)
+      VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET session = excluded.session`,
+      )
+      .run(session.id, session.repository, session.createdAt, JSON.stringify(session))
+  }
+  getGandalfSession(id: string): GandalfSession | undefined {
+    const row = this.database.prepare('SELECT session FROM gandalf_sessions WHERE id = ?').get(id)
+    return row ? gandalfSessionSchema.parse(JSON.parse(String(row.session))) : undefined
+  }
+  latestGandalfSession(repository: string): GandalfSession | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT session FROM gandalf_sessions WHERE repository = ?
+      ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get(repository)
+    return row ? gandalfSessionSchema.parse(JSON.parse(String(row.session))) : undefined
   }
   savePreferences(preferences: Preferences): Preferences {
     const value = { ...this.getPreferences(), ...preferences }

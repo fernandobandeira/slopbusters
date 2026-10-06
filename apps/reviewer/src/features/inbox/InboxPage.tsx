@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Button } from '~/components/ui/button'
 import { Check, LoaderCircle } from 'lucide-react'
 import type { RepositoryInbox, InboxPull } from '../../../shared/domain/types'
 import { inboxPulls, inboxFilters as filters, type InboxFilter } from './inbox'
@@ -17,6 +18,7 @@ interface Props {
   selectedLinusUrls: string[]
   onSelectionChange: (urls: string[]) => void
   onFilter: (filter: InboxFilter) => void
+  onResolveConflicts?: (pulls: InboxPull[]) => void
   renderPullActions: (pull: InboxPull) => ReactNode
 }
 export function InboxPage({
@@ -32,10 +34,13 @@ export function InboxPage({
   onSelectionChange,
   onFilter,
   renderPullActions,
+  onResolveConflicts,
 }: Props) {
   const visible = inbox ? inboxPulls(inbox, filter) : []
   const sections =
-    filter === 'mine' ? [{ id: 'all', label: '', pulls: visible }] : inboxSections(visible)
+    filter === 'mine' && !onResolveConflicts
+      ? [{ id: 'all', label: '', pulls: visible }]
+      : inboxSections(visible)
   return (
     <>
       <div className="inbox-content">
@@ -72,11 +77,12 @@ export function InboxPage({
             {warning}
           </p>
         ))}
-        {!inboxLoading && repository && statusLoading && filter !== 'mine' && (
-          <p role="status" className="inbox-metadata-loading">
-            Loading checks and review status…
-          </p>
-        )}
+        <InboxMetadataStatus
+          loading={inboxLoading}
+          repository={repository}
+          statusLoading={statusLoading}
+          enabled={filter !== 'mine' || Boolean(onResolveConflicts)}
+        />
         {inboxLoading ? (
           <div className="empty-state" role="status">
             <LoaderCircle className="animate-spin" size={22} />
@@ -91,10 +97,25 @@ export function InboxPage({
                 aria-label={section.label || 'Pull requests'}
               >
                 {section.label && (
-                  <h2 className="inbox-section-title">
-                    {section.id === 'unknown' && statusLoading ? 'Checking status' : section.label}
-                    <span>{section.pulls.length}</span>
-                  </h2>
+                  <div className="inbox-conflict-heading">
+                    <h2 className="inbox-section-title">
+                      {section.id === 'unknown' && statusLoading
+                        ? 'Checking status'
+                        : section.label}
+                      <span>{section.pulls.length}</span>
+                    </h2>
+                    {section.id === 'conflicts' && filter === 'mine' && onResolveConflicts && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          onResolveConflicts(section.pulls)
+                        }}
+                      >
+                        Resolve conflicts
+                      </Button>
+                    )}
+                  </div>
                 )}
                 {section.pulls.map((pr) => (
                   <PullRow
@@ -137,5 +158,24 @@ export function InboxPage({
         )}
       </div>
     </>
+  )
+}
+
+function InboxMetadataStatus({
+  loading,
+  repository,
+  statusLoading,
+  enabled = true,
+}: {
+  loading: boolean
+  repository: string
+  statusLoading: boolean
+  enabled?: boolean
+}) {
+  if (loading || !repository || !statusLoading || !enabled) return null
+  return (
+    <p role="status" className="inbox-metadata-loading">
+      Loading checks and review status…
+    </p>
   )
 }

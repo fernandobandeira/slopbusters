@@ -1,4 +1,6 @@
 import type { Repository } from '../../shared/domain/types'
+import { GandalfCompanion } from '../features/gandalf/GandalfCompanion'
+import { inboxSections } from '../features/inbox/inboxSections'
 import { BobCompanion } from '../features/bob/BobCompanion'
 import { AppSidebar } from './AppSidebar'
 import { InboxPullActions } from './InboxPullActions'
@@ -76,6 +78,13 @@ export function App() {
   const repositoryQuery = useApiQuery(routes.getRepositories, {}, { refresh })
   const status = statusQuery.data
   const repositories = repositoryQuery.data?.repositories ?? emptyRepositories
+  const [gandalfRepository, setGandalfRepository] = useState<string>()
+  const refreshAfterGandalf = useCallback(() => {
+    setRefresh((value) => value + 1)
+  }, [])
+  const closeGandalf = useCallback(() => {
+    setGandalfRepository(undefined)
+  }, [])
   const [linusSelection, setLinusSelection] = useState<{ repository: string; urls: string[] }>()
   const [linusRefresh, setLinusRefresh] = useState(0)
   const [linusReplay, setLinusReplay] = useState<LinusReplayRequest & { repository: string }>()
@@ -186,6 +195,12 @@ export function App() {
         setLinusSelection({ repository, urls })
       }}
       onFilter={(next) => void navigate(inboxPath(repository, next))}
+      onResolveConflicts={() => {
+        setGandalfRepository(repository)
+        setLinusSelection(undefined)
+        setLinusReplay(undefined)
+        reviewLaunch.closeLinus()
+      }}
       renderPullActions={(pr) => (
         <InboxPullActions
           pull={pr}
@@ -460,6 +475,18 @@ export function App() {
                 setLinusSelection(undefined)
               },
             }}
+          />
+        )}
+        {repository && gandalfRepository === repository && route.kind === 'inbox' && (
+          <GandalfCompanion
+            key={repository}
+            repository={repository}
+            pulls={
+              inboxSections(myPulls).find((section) => section.id === 'conflicts')?.pulls ?? []
+            }
+            ready={Boolean(preferences?.organization)}
+            onClose={closeGandalf}
+            onComplete={refreshAfterGandalf}
           />
         )}
         <StackDialog

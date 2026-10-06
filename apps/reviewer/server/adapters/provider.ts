@@ -14,12 +14,13 @@ export async function runStructured<T>(
   prompt: string,
   outputSchema: z.ZodType<T>,
   signal: AbortSignal,
-  repository?: RepositoryContext,
+  repository?: RepositoryContext | { directory: string },
 ): Promise<T> {
   signal.throwIfAborted()
   const directory = await mkdtemp(join(tmpdir(), 'slopbusters-'))
   try {
     const schema = JSON.stringify(z.toJSONSchema(outputSchema, { target: 'draft-7' }))
+    const inspection = repository && 'url' in repository ? repository : undefined
     let output: unknown
     switch (provider) {
       case Provider.codex: {
@@ -38,12 +39,12 @@ export async function runStructured<T>(
             '--skip-git-repo-check',
             '--sandbox',
             'read-only',
-            ...(repository
+            ...(inspection
               ? [
                   '-c',
-                  `mcp_servers.slopbusters.url=${JSON.stringify(repository.url)}`,
+                  `mcp_servers.slopbusters.url=${JSON.stringify(inspection.url)}`,
                   '-c',
-                  `mcp_servers.slopbusters.http_headers={Authorization=${JSON.stringify(`Bearer ${repository.token}`)}}`,
+                  `mcp_servers.slopbusters.http_headers={Authorization=${JSON.stringify(`Bearer ${inspection.token}`)}}`,
                   '-c',
                   'mcp_servers.slopbusters.required=true',
                   '-c',
@@ -75,16 +76,20 @@ export async function runStructured<T>(
               ? [
                   '--setting-sources',
                   '',
-                  '--mcp-config',
-                  JSON.stringify({
-                    mcpServers: {
-                      slopbusters: {
-                        type: 'http',
-                        url: repository.url,
-                        headers: { Authorization: `Bearer ${repository.token}` },
-                      },
-                    },
-                  }),
+                  ...(inspection
+                    ? [
+                        '--mcp-config',
+                        JSON.stringify({
+                          mcpServers: {
+                            slopbusters: {
+                              type: 'http',
+                              url: inspection.url,
+                              headers: { Authorization: `Bearer ${inspection.token}` },
+                            },
+                          },
+                        }),
+                      ]
+                    : []),
                   '--allowedTools',
                   'Read',
                   'Glob',
