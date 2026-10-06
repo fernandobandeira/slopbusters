@@ -1,0 +1,30 @@
+.review-menu-positioner {
+  z-index: 100;
+}
+.review-menu {
+  min-width: 230px;
+  padding: 5px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 20%);
+  outline: none;
+}
+.review-menu [role='menuitem'] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  outline: none;
+  font-size: 12px;
+}
+.review-menu [role='menuitem'] span {
+  color: var(--muted-foreground);
+}
+.review-menu [data-highlighted] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}

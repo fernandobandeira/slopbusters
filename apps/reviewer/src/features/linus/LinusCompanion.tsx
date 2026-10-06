@@ -188,6 +188,8 @@ export function LinusCompanion({
   selection,
   replayRequest,
   onSessionUpdate,
+  sessionId,
+  onClose,
 }: {
   repository: string
   pulls: InboxPull[]
@@ -197,12 +199,12 @@ export function LinusCompanion({
   selection?: LinusPullSelectionState
   replayRequest?: LinusReplayRequest
   onSessionUpdate?: () => void
+  sessionId?: string
+  onClose?: () => void
 }) {
-  const { session, loading, busy, error, act, reload } = useLinusSession(repository)
-  const [open, setOpen] = useState(
-    () => localStorage.getItem('slopbusters:linus-dismissed') !== '1',
-  )
-  const [mode, setMode] = useState<'intro' | 'review'>('intro')
+  const { session, loading, busy, error, act, reload } = useLinusSession(repository, sessionId)
+  const [open, setOpen] = useState(Boolean(sessionId || replayRequest || selection?.active))
+  const [mode, setMode] = useState<'intro' | 'review'>(sessionId ? 'review' : 'intro')
   const selecting = selection?.active ?? false
   const [cursor, setCursor] = useState<{ sessionId: string; index: number }>()
   const [hiddenEvidenceTurn, setHiddenEvidenceTurn] = useState<string>()
@@ -304,21 +306,21 @@ export function LinusCompanion({
         setOpen(false)
         setHiddenEvidenceTurn(turnKey)
         selection?.onCancel()
-        localStorage.setItem('slopbusters:linus-dismissed', '1')
+        onClose?.()
       }
     }
     window.addEventListener('keydown', escape)
     return () => {
       window.removeEventListener('keydown', escape)
     }
-  }, [open, turnKey, selection])
+  }, [open, turnKey, selection, onClose])
 
-  if (!repository || (!available && !session && !replayRequest)) return null
+  if (!repository || !open) return null
   function close() {
     setOpen(false)
     setHiddenEvidenceTurn(turnKey)
     selection?.onCancel()
-    localStorage.setItem('slopbusters:linus-dismissed', '1')
+    onClose?.()
   }
   function resume() {
     setMode('review')
@@ -345,7 +347,7 @@ export function LinusCompanion({
   }
   return (
     <>
-      {open && evidence && reviewMode && turn && (
+      {evidence && reviewMode && turn && (
         <LinusEvidence
           result={turn.result}
           step={turn.step}
@@ -354,266 +356,247 @@ export function LinusCompanion({
           }}
         />
       )}
-      <aside
-        className={`linus-companion ${open ? 'linus-open' : 'linus-minimized'}`}
-        aria-label="Linus PR companion"
-      >
-        {open && (
-          <div className="linus-bubble">
-            <header>
-              <span className="linus-eyebrow">LINUS · PR REVIEW</span>
-              <button className="linus-icon-button" aria-label="Close Linus" onClick={close}>
-                <X size={16} />
-              </button>
-            </header>
-            {mode === 'intro' && !selecting && !replayLoading && (
-              <>
-                <p className="linus-speech">
-                  {active
-                    ? 'I’m still looking. You can carry on while I compile my opinions.'
-                    : session?.results.length
-                      ? 'I’ve got some thoughts on your PRs. Want to walk through them?'
-                      : 'Want me to look over your PRs? Let’s see whether the descriptions earn their keep.'}
-                </p>
-                <div className="linus-actions">
-                  {session && (
-                    <Button size="sm" onClick={resume}>
-                      {session.results.length ? 'Resume review' : 'Show review'}
+      <aside className="linus-companion linus-open" aria-label="Linus PR companion">
+        <div className="linus-bubble">
+          <header>
+            <span className="linus-eyebrow">LINUS · PR REVIEW</span>
+            <button className="linus-icon-button" aria-label="Close Linus" onClick={close}>
+              <X size={16} />
+            </button>
+          </header>
+          {mode === 'intro' && !selecting && !replayLoading && (
+            <>
+              <p className="linus-speech">
+                {active
+                  ? 'I’m still looking. You can carry on while I compile my opinions.'
+                  : session?.results.length
+                    ? 'I’ve got some thoughts on your PRs. Want to walk through them?'
+                    : 'Want me to look over your PRs? Let’s see whether the descriptions earn their keep.'}
+              </p>
+              <div className="linus-actions">
+                {session && (
+                  <Button size="sm" onClick={resume}>
+                    {session.results.length ? 'Resume review' : 'Show review'}
+                  </Button>
+                )}
+                {canSelect && (
+                  <Button
+                    size="sm"
+                    variant={session ? 'outline' : 'default'}
+                    disabled={loading}
+                    onClick={choosePulls}
+                  >
+                    Choose PRs
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={close}>
+                  Later
+                </Button>
+              </div>
+            </>
+          )}
+          {selecting && selection && (
+            <LinusPullSelection
+              pulls={pulls}
+              selected={selection.urls}
+              ready={Boolean(preferences?.organization)}
+              busy={busy}
+              onChange={selection.onChange}
+              onCancel={selection.onCancel}
+              onStart={() => {
+                setMode('review')
+                setHiddenEvidenceTurn(turnKey)
+                selection.onCancel()
+                void act(
+                  'start',
+                  selection.urls.filter((url) => pulls.some((pull) => pull.url === url)),
+                )
+              }}
+            />
+          )}
+          {reviewMode && (
+            <>
+              {active && !savedResult && (
+                <div
+                  className={`linus-working${turn ? ' linus-working-compact' : ''}`}
+                  role="status"
+                >
+                  <LoaderCircle size={15} className="animate-spin" />
+                  <div>
+                    {!turn && <strong>Compiling opinions…</strong>}
+                    <span>{session.progress}</span>
+                  </div>
+                </div>
+              )}
+              {session?.status === 'partial' && !savedResult && (
+                <div className="linus-notice">
+                  <p>One reviewer couldn’t finish. I have the other review.</p>
+                  <p className="muted linus-small">{session.error}</p>
+                  <div className="linus-actions">
+                    <Button size="sm" disabled={busy} onClick={() => void act('retry')}>
+                      Retry both
                     </Button>
-                  )}
-                  {canSelect && (
                     <Button
                       size="sm"
-                      variant={session ? 'outline' : 'default'}
-                      disabled={loading}
-                      onClick={choosePulls}
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void act('continue')}
                     >
-                      Choose PRs
+                      Use available review
                     </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={close}>
-                    Later
-                  </Button>
+                  </div>
                 </div>
-              </>
-            )}
-            {selecting && selection && (
-              <LinusPullSelection
-                pulls={pulls}
-                selected={selection.urls}
-                ready={Boolean(preferences?.organization)}
-                busy={busy}
-                onChange={selection.onChange}
-                onCancel={selection.onCancel}
-                onStart={() => {
-                  setMode('review')
-                  setHiddenEvidenceTurn(turnKey)
-                  selection.onCancel()
-                  void act(
-                    'start',
-                    selection.urls.filter((url) => pulls.some((pull) => pull.url === url)),
-                  )
-                }}
-              />
-            )}
-            {reviewMode && (
-              <>
-                {active && !savedResult && (
-                  <div
-                    className={`linus-working${turn ? ' linus-working-compact' : ''}`}
-                    role="status"
-                  >
-                    <LoaderCircle size={15} className="animate-spin" />
-                    <div>
-                      {!turn && <strong>Compiling opinions…</strong>}
-                      <span>{session.progress}</span>
-                    </div>
-                  </div>
-                )}
-                {session?.status === 'partial' && !savedResult && (
+              )}
+              {!savedResult &&
+                (session?.status === 'failed' || session?.status === 'cancelled') && (
                   <div className="linus-notice">
-                    <p>One reviewer couldn’t finish. I have the other review.</p>
-                    <p className="muted linus-small">{session.error}</p>
-                    <div className="linus-actions">
-                      <Button size="sm" disabled={busy} onClick={() => void act('retry')}>
-                        Retry both
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => void act('continue')}
-                      >
-                        Use available review
-                      </Button>
-                    </div>
+                    <p>{session.error ?? session.progress}</p>
+                    <Button size="sm" disabled={busy} onClick={() => void act('retry')}>
+                      Retry remaining PRs
+                    </Button>
                   </div>
                 )}
-                {!savedResult &&
-                  (session?.status === 'failed' || session?.status === 'cancelled') && (
-                    <div className="linus-notice">
-                      <p>{session.error ?? session.progress}</p>
-                      <Button size="sm" disabled={busy} onClick={() => void act('retry')}>
-                        Retry remaining PRs
-                      </Button>
-                    </div>
-                  )}
-                {turn && (
-                  <>
-                    <div className="linus-turn-meta">
-                      <span>PR #{turn.result.pull.number}</span>
-                      <span>
-                        {index + 1} / {turns.length}
-                        {active && !savedResult ? ' so far' : ''}
-                      </span>
-                    </div>
-                    <strong className="linus-verdict">
-                      {verdictLabels[turn.result.advice.verdict]}
-                    </strong>
-                    <p className="linus-speech" aria-live="polite">
-                      {turn.step.text}
+              {turn && (
+                <>
+                  <div className="linus-turn-meta">
+                    <span>PR #{turn.result.pull.number}</span>
+                    <span>
+                      {index + 1} / {turns.length}
+                      {active && !savedResult ? ' so far' : ''}
+                    </span>
+                  </div>
+                  <strong className="linus-verdict">
+                    {verdictLabels[turn.result.advice.verdict]}
+                  </strong>
+                  <p className="linus-speech" aria-live="polite">
+                    {turn.step.text}
+                  </p>
+                  {stale && (
+                    <p className="linus-notice">
+                      This PR changed after the review. These recommendations describe the saved
+                      snapshot.
                     </p>
-                    {stale && (
-                      <p className="linus-notice">
-                        This PR changed after the review. These recommendations describe the saved
-                        snapshot.
-                      </p>
-                    )}
-                    <div className="linus-tour-controls">
-                      <div className="linus-actions">
+                  )}
+                  <div className="linus-tour-controls">
+                    <div className="linus-actions">
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={`Copy PR #${turn.result.pull.number} recommendations`}
+                        title="Copy this PR’s recommendations"
+                        onClick={() => void copy(turn.result)}
+                      >
+                        <Copy size={14} />
+                      </Button>
+                      {!evidence && (
                         <Button
                           size="icon-sm"
                           variant="ghost"
-                          aria-label={`Copy PR #${turn.result.pull.number} recommendations`}
-                          title="Copy this PR’s recommendations"
-                          onClick={() => void copy(turn.result)}
-                        >
-                          <Copy size={14} />
-                        </Button>
-                        {!evidence && (
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label="Show evidence"
-                            title="Show evidence"
-                            onClick={() => {
-                              setHiddenEvidenceTurn(undefined)
-                            }}
-                          >
-                            <Maximize2 size={14} />
-                          </Button>
-                        )}
-                      </div>
-                      <div className="linus-actions">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={index === 0}
+                          aria-label="Show evidence"
+                          title="Show evidence"
                           onClick={() => {
-                            advance(index - 1)
+                            setHiddenEvidenceTurn(undefined)
                           }}
                         >
-                          <ChevronLeft size={14} /> Back
+                          <Maximize2 size={14} />
                         </Button>
-                        <Button
-                          size="sm"
-                          disabled={index >= turns.length - 1}
-                          onClick={() => {
-                            advance(index + 1)
-                          }}
-                        >
-                          {turns[index + 1] && turns[index + 1]?.result !== turn.result
-                            ? 'Next PR'
-                            : 'Next'}
-                          <ChevronRight size={14} />
-                        </Button>
-                      </div>
+                      )}
                     </div>
-                  </>
+                    <div className="linus-actions">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={index === 0}
+                        onClick={() => {
+                          advance(index - 1)
+                        }}
+                      >
+                        <ChevronLeft size={14} /> Back
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={index >= turns.length - 1}
+                        onClick={() => {
+                          advance(index + 1)
+                        }}
+                      >
+                        {turns[index + 1] && turns[index + 1]?.result !== turn.result
+                          ? 'Next PR'
+                          : 'Next'}
+                        <ChevronRight size={14} />
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+              {!turn && session?.status === 'complete' && (
+                <p className="linus-speech">The review is complete.</p>
+              )}
+              {!turn && !session && !busy && <p className="muted">Choose PRs to start a review.</p>}
+              <div className="linus-footer">
+                {turn && results.length > 1 && (
+                  <button onClick={() => void copy()}>
+                    <Copy size={13} /> Copy all recommendations
+                  </button>
                 )}
-                {!turn && session?.status === 'complete' && (
-                  <p className="linus-speech">The review is complete.</p>
+                {(active || session?.status === 'partial') && !savedResult && (
+                  <button disabled={busy} onClick={() => void act('cancel')}>
+                    Cancel review
+                  </button>
                 )}
-                {!turn && !session && !busy && (
-                  <p className="muted">Choose PRs to start a review.</p>
-                )}
-                <div className="linus-footer">
-                  {turn && results.length > 1 && (
-                    <button onClick={() => void copy()}>
-                      <Copy size={13} /> Copy all recommendations
-                    </button>
-                  )}
-                  {(active || session?.status === 'partial') && !savedResult && (
-                    <button disabled={busy} onClick={() => void act('cancel')}>
-                      Cancel review
-                    </button>
-                  )}
-                  {canSelect && <button onClick={choosePulls}>Review other PRs</button>}
-                </div>
-              </>
-            )}
-            {loading && (
-              <p className="muted" role="status">
-                Loading saved review…
-              </p>
-            )}
-            {replayLoading && (
-              <p className="muted" role="status">
-                Loading saved recommendations…
-              </p>
-            )}
-            {error && (
-              <p className="linus-error" role="alert">
-                {error} <button onClick={reload}>Reconnect</button>
-              </p>
-            )}
-            {replayMessage && (
-              <p className="linus-error" role="alert">
-                {replayMessage}
-              </p>
-            )}
-            {copyState === 'copied' && (
-              <p className="linus-copy-status" role="status">
-                <Check size={13} /> Prompt copied
-              </p>
-            )}
-            {copyState === 'fallback' && (
-              <div className="linus-copy-fallback">
-                <label htmlFor="linus-export">Select and copy your recommendations</label>
-                <textarea
-                  id="linus-export"
-                  value={copyText}
-                  readOnly
-                  onFocus={(event) => {
-                    event.target.select()
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    setCopyFallback(false)
-                    resetClipboard()
-                  }}
-                >
-                  Close export
-                </button>
+                {canSelect && <button onClick={choosePulls}>Review other PRs</button>}
               </div>
-            )}
-          </div>
-        )}
-        <button
-          className="linus-portrait"
-          aria-label={open ? 'Minimize Linus' : 'Open Linus PR review'}
-          onClick={() => {
-            if (open) close()
-            else {
-              setOpen(true)
-              setHiddenEvidenceTurn(undefined)
-              localStorage.removeItem('slopbusters:linus-dismissed')
-            }
-          }}
-        >
+            </>
+          )}
+          {loading && (
+            <p className="muted" role="status">
+              Loading saved review…
+            </p>
+          )}
+          {replayLoading && (
+            <p className="muted" role="status">
+              Loading saved recommendations…
+            </p>
+          )}
+          {error && (
+            <p className="linus-error" role="alert">
+              {error} <button onClick={reload}>Reconnect</button>
+            </p>
+          )}
+          {replayMessage && (
+            <p className="linus-error" role="alert">
+              {replayMessage}
+            </p>
+          )}
+          {copyState === 'copied' && (
+            <p className="linus-copy-status" role="status">
+              <Check size={13} /> Prompt copied
+            </p>
+          )}
+          {copyState === 'fallback' && (
+            <div className="linus-copy-fallback">
+              <label htmlFor="linus-export">Select and copy your recommendations</label>
+              <textarea
+                id="linus-export"
+                value={copyText}
+                readOnly
+                onFocus={(event) => {
+                  event.target.select()
+                }}
+              />
+              <button
+                onClick={() => {
+                  setCopyFallback(false)
+                  resetClipboard()
+                }}
+              >
+                Close export
+              </button>
+            </div>
+          )}
+        </div>
+        <button className="linus-portrait" aria-label="Minimize Linus" onClick={close}>
           <img src={`/linus/${emotion}.png`} alt={`Linus, ${emotion}`} />
-          {!open && <span>Linus{active ? ' · reviewing' : ''}</span>}
         </button>
       </aside>
     </>

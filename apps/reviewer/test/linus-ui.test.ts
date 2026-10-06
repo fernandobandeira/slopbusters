@@ -24,7 +24,7 @@ beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => null }))
 afterEach(() => vi.unstubAllGlobals())
 
 describe('Linus entry and model settings', () => {
-  it('renders the invitation before any saved session exists', () => {
+  it('keeps the companion hidden until a review is requested', () => {
     const markup = renderToStaticMarkup(
       createElement(
         MemoryRouter,
@@ -36,10 +36,7 @@ describe('Linus entry and model settings', () => {
         }),
       ),
     )
-    expect(markup).toContain('Want me to look over your PRs?')
-    expect(markup).toContain('Choose PRs')
-    expect(markup).toContain('/linus/neutral.png')
-    expect(markup).toContain('Close Linus')
+    expect(markup).toBe('')
   })
   it('embeds selection controls in the chat bubble with cancellation before confirmation', () => {
     const markup = renderToStaticMarkup(

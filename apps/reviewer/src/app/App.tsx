@@ -2,6 +2,9 @@ import type { Repository } from '../../shared/domain/types'
 import { BobCompanion } from '../features/bob/BobCompanion'
 import { AppSidebar } from './AppSidebar'
 import { InboxPullActions } from './InboxPullActions'
+import { useReviewLaunch } from './useReviewLaunch'
+import type { ReviewCompanion } from '../components/StartReviewButton'
+import { PullReviewActions } from './PullReviewActions'
 import { useApiQuery } from '../lib/useApiQuery'
 import { usePullReview } from '../features/review/usePullReview'
 import { InboxPage } from '../features/inbox/InboxPage'
@@ -81,12 +84,37 @@ export function App() {
     routes.savedBobReviews,
     { query: { repository } },
     {
-      enabled: Boolean(repository) && route.kind === 'inbox',
-      refresh,
+      enabled: Boolean(repository) && (route.kind === 'inbox' || route.kind === 'pull'),
+      refresh: refresh + linusRefresh,
     },
   )
   const bobReviews = new Map(savedBob.data?.reviews.map((review) => [review.url, review]))
   const bobReplayId = new URLSearchParams(location.search).get('bob') ?? undefined
+  function openBob(url: string, sessionId: string) {
+    const target = new URL(
+      pull?.url === url ? location.pathname + location.search : reviewPath({ url, filter }),
+      window.location.origin,
+    )
+    target.searchParams.set('bob', sessionId)
+    void navigate(target.pathname + target.search)
+  }
+  const reviewLaunch = useReviewLaunch({ repository, onBobOpen: openBob, onError: setError })
+  function startReview(companion: ReviewCompanion, url: string) {
+    if (companion === 'linus') {
+      setLinusReplay(undefined)
+      setLinusSelection(undefined)
+    }
+    void reviewLaunch.start(companion, url)
+  }
+  function closeBob() {
+    const query = new URLSearchParams(location.search)
+    query.delete('bob')
+    void navigate(location.pathname + '?' + query.toString(), { replace: true })
+  }
+
+  const activeLinusReplay = linusReplay?.repository === repository ? linusReplay : undefined
+  const linusSessionId =
+    reviewLaunch.linusSession?.repository === repository ? reviewLaunch.linusSession.id : undefined
   const recommendations = new Map(
     savedLinus.recommendations.map((recommendation) => [recommendation.url, recommendation]),
   )
@@ -163,10 +191,17 @@ export function App() {
           pull={pr}
           recommendation={recommendations.get(pr.url)}
           bobReview={bobReviews.get(pr.url)}
+          onStartReview={
+            filter === 'mine'
+              ? (companion) => {
+                  startReview(companion, pr.url)
+                }
+              : undefined
+          }
+          reviewStarting={reviewLaunch.starting === pr.url}
+          reviewStartDisabled={Boolean(reviewLaunch.starting)}
           onBobReplay={(review) => {
-            const target = new URL(reviewPath({ url: pr.url, filter }), window.location.origin)
-            target.searchParams.set('bob', review.sessionId)
-            void navigate(target.pathname + target.search)
+            openBob(pr.url, review.sessionId)
           }}
           onReplay={(recommendation) => {
             setLinusSelection(undefined)
@@ -324,18 +359,45 @@ export function App() {
                     onReload={() => void reloadPull()}
                     reloading={reloading}
                     inboxUrl={inboxPath(repository, filter)}
-                    renderCompanion={({ draft, setDraft, ready, openReview, focusLine }) => (
-                      <BobCompanion
-                        key={`${pull.id}:${bobReplayId ?? ''}`}
-                        replaySessionId={bobReplayId}
+                    reviewActions={
+                      <PullReviewActions
                         pull={pull}
-                        draft={draft}
-                        setDraft={setDraft}
-                        ready={ready}
-                        openReview={openReview}
-                        focusLine={focusLine}
+                        startCompanion="bob"
+                        bobReview={bobReviews.get(pull.url)}
+                        recommendation={recommendations.get(pull.url)}
+                        onBobReplay={(review) => {
+                          openBob(pull.url, review.sessionId)
+                        }}
+                        onReplay={(recommendation) => {
+                          setLinusSelection(undefined)
+                          setLinusReplay({
+                            repository,
+                            sessionId: recommendation.sessionId,
+                            url: pull.url,
+                          })
+                        }}
+                        reviewStarting={Boolean(reviewLaunch.starting)}
+                        onStartReview={(companion) => {
+                          startReview(companion, pull.url)
+                        }}
                       />
-                    )}
+                    }
+                    renderCompanion={({ draft, setDraft, ready, openReview, focusLine }) =>
+                      bobReplayId && (
+                        <BobCompanion
+                          key={`${pull.id}:${bobReplayId}`}
+                          replaySessionId={bobReplayId}
+                          onClose={closeBob}
+                          onSessionUpdate={refreshLinus}
+                          pull={pull}
+                          draft={draft}
+                          setDraft={setDraft}
+                          ready={ready}
+                          openReview={openReview}
+                          focusLine={focusLine}
+                        />
+                      )
+                    }
                     titlebarTarget={titlebarTarget}
                   />
                 ) : (
@@ -367,15 +429,21 @@ export function App() {
             />
           </Routes>
         </main>
-        {repository && (
+        {repository && (activeLinusReplay || linusSessionId || selectingForLinus) && (
           <LinusCompanion
-            key={repository}
+            key={`${repository}:${activeLinusReplay ? 'replay' : linusSessionId}`}
+            sessionId={activeLinusReplay ? undefined : linusSessionId}
+            onClose={() => {
+              setLinusReplay(undefined)
+              setLinusSelection(undefined)
+              reviewLaunch.closeLinus()
+            }}
             repository={repository}
             pulls={myPulls}
             available={route.kind === 'inbox' && filter === 'mine'}
             preferences={preferences}
             currentPull={pull}
-            replayRequest={linusReplay?.repository === repository ? linusReplay : undefined}
+            replayRequest={activeLinusReplay}
             onSessionUpdate={refreshLinus}
             selection={{
               active: selectingForLinus,

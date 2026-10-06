@@ -8,7 +8,13 @@ import { useBobSession } from './useBobSession'
 import '../../linus.css'
 import './bob.css'
 
-export function BobCompanion(context: BobDraftContext & { replaySessionId?: string }) {
+export function BobCompanion(
+  context: BobDraftContext & {
+    replaySessionId?: string
+    onClose?: () => void
+    onSessionUpdate?: () => void
+  },
+) {
   const { pull } = context
   const job = useBobSession(`${pull.owner}/${pull.repo}`, pull.url, context.replaySessionId)
   const tour = useBobTour(pull, job.session)
@@ -16,6 +22,11 @@ export function BobCompanion(context: BobDraftContext & { replaySessionId?: stri
   const finding = tour.result?.advice.findings[tour.index - 1]
   const current = tour.result && bobSnapshotMatches(pull, tour.result.pull)
   const focusLine = useEffectEvent(context.focusLine)
+  const onSessionUpdate = useEffectEvent(() => context.onSessionUpdate?.())
+  const onClose = useEffectEvent(() => context.onClose?.())
+  useEffect(() => {
+    onSessionUpdate()
+  }, [job.session?.id, job.session?.results.length, job.session?.status])
   useEffect(() => {
     focusLine(open && current ? finding : undefined)
     return () => {
@@ -25,37 +36,29 @@ export function BobCompanion(context: BobDraftContext & { replaySessionId?: stri
   useEffect(() => {
     if (!open) return
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') {
+        setOpen(false)
+        onClose()
+      }
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => {
       window.removeEventListener('keydown', closeOnEscape)
     }
   }, [open])
+  if (!open) return null
+  function close() {
+    setOpen(false)
+    context.onClose?.()
+  }
   return (
     <aside
-      className={`linus-companion bob-companion ${open ? 'linus-open' : 'linus-minimized'}`}
+      className="linus-companion bob-companion linus-open"
       aria-label="Bob code review companion"
     >
-      {open && (
-        <BobPanel
-          job={job}
-          tour={tour}
-          context={context}
-          close={() => {
-            setOpen(false)
-          }}
-        />
-      )}
-      <button
-        className="linus-portrait"
-        aria-label={open ? 'Minimize Bob' : 'Open Bob code review'}
-        onClick={() => {
-          setOpen(!open)
-        }}
-      >
+      <BobPanel job={job} tour={tour} context={context} close={close} />
+      <button className="linus-portrait" aria-label="Minimize Bob" onClick={close}>
         <img src={`/unclebob/${tour.emotion}.png`} alt={`Bob, ${tour.emotion}`} />
-        {!open && <span>Bob{job.session?.status === 'running' ? ' · reviewing' : ''}</span>}
       </button>
     </aside>
   )

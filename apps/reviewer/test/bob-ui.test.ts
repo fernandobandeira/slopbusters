@@ -67,6 +67,7 @@ describe('Bob tour navigation and readability', () => {
     })
     render(
       createElement(BobCompanion, {
+        replaySessionId: 'saved',
         pull: result.pull,
         draft: { comments: [], summary: '', viewedFileIds: [] },
         setDraft: vi.fn(),
@@ -75,7 +76,6 @@ describe('Bob tour navigation and readability', () => {
         focusLine,
       }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Open Bob code review' }))
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(focusLine).toHaveBeenLastCalledWith(result.advice.findings[0])
@@ -84,6 +84,7 @@ describe('Bob tour navigation and readability', () => {
     expect(screen.getByText('Suggested improvement')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Minimize Bob' }))
     expect(focusLine).toHaveBeenLastCalledWith(undefined)
+    expect(screen.queryByRole('complementary', { name: 'Bob code review companion' })).toBeNull()
   })
   it('opens the requested saved review from its listing badge and marks a changed revision', () => {
     const onOpen = vi.fn()
@@ -125,7 +126,7 @@ describe('Bob tour navigation and readability', () => {
 })
 
 describe('Bob comment collection during the tour', () => {
-  it('invites the user to review the open PR with the supplied portraits', () => {
+  it('opens the requested review with the supplied portraits', () => {
     const act = vi.fn()
     vi.mocked(useBobSession).mockReturnValue({
       session: undefined,
@@ -137,6 +138,7 @@ describe('Bob comment collection during the tour', () => {
     })
     render(
       createElement(BobCompanion, {
+        replaySessionId: 'saved',
         pull: result.pull,
         draft: { comments: [], summary: '', viewedFileIds: [] },
         setDraft: vi.fn(),
@@ -145,7 +147,6 @@ describe('Bob comment collection during the tour', () => {
         focusLine: vi.fn(),
       }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Open Bob code review' }))
     fireEvent.click(screen.getByRole('button', { name: 'Review this PR' }))
 
     expect(act).toHaveBeenCalledWith('start', [result.pull.url])

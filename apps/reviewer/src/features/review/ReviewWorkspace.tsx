@@ -67,6 +67,7 @@ interface Props {
   inboxUrl: string
   renderCompanion?: (context: ReviewCompanionContext) => import('react').ReactNode
   titlebarTarget?: HTMLElement | null
+  reviewActions?: import('react').ReactNode
 }
 export function ReviewWorkspace({
   pull,
@@ -77,6 +78,7 @@ export function ReviewWorkspace({
   inboxUrl,
   titlebarTarget,
   renderCompanion,
+  reviewActions,
 }: Props) {
   const { draft, setDraft, ready: draftReady, error: storageError, flush } = useReviewDraft(pull)
   const {
@@ -252,43 +254,46 @@ export function ReviewWorkspace({
         </Link>
       )}
       <CompactReviewHeader pull={pull} />
-      {grouped && (
-        <div className="review-toolbar">
-          <Button
-            size="sm"
-            variant={discussionTray ? 'secondary' : 'ghost'}
-            onClick={() => {
-              setDiscussionTray(!discussionTray)
-            }}
-          >
-            <MessageSquare size={14} />
-            Discussions {discussions ? discussions.threads.length + draft.comments.length : '…'}
-          </Button>
-          {hasFeedback && (
+      <div className="review-toolbar">
+        {reviewActions}
+        {grouped && (
+          <>
             <Button
-              className="copy-feedback"
               size="sm"
-              variant="outline"
-              disabled={copied}
-              aria-live="polite"
-              onClick={() => void copyFeedback()}
+              variant={discussionTray ? 'secondary' : 'ghost'}
+              onClick={() => {
+                setDiscussionTray(!discussionTray)
+              }}
             >
-              {copied ? <Check size={13} /> : <Copy size={13} />}
-              {copied ? 'Copied' : 'Copy feedback'}
+              <MessageSquare size={14} />
+              Discussions {discussions ? discussions.threads.length + draft.comments.length : '…'}
             </Button>
-          )}
-          <Button
-            size="sm"
-            disabled={Boolean(submitted)}
-            onClick={() => {
-              setError('')
-              setSubmitOpen(true)
-            }}
-          >
-            {submitted ? 'Submitted' : 'Submit review'}
-          </Button>
-        </div>
-      )}
+            {hasFeedback && (
+              <Button
+                className="copy-feedback"
+                size="sm"
+                variant="outline"
+                disabled={copied}
+                aria-live="polite"
+                onClick={() => void copyFeedback()}
+              >
+                {copied ? <Check size={13} /> : <Copy size={13} />}
+                {copied ? 'Copied' : 'Copy feedback'}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              disabled={Boolean(submitted)}
+              onClick={() => {
+                setError('')
+                setSubmitOpen(true)
+              }}
+            >
+              {submitted ? 'Submitted' : 'Submit review'}
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   )
   return (

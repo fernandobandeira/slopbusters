@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import type { LinusSession } from '../../../shared/domain/linus'
 import { call, message } from '../../lib/api'
 
-export function useLinusSession(repository: string) {
+export function useLinusSession(repository: string, sessionId?: string) {
+  const [activeId, setActiveId] = useState(sessionId)
   const [session, setSession] = useState<LinusSession>()
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -12,7 +13,13 @@ export function useLinusSession(repository: string) {
   useEffect(() => {
     if (!repository) return
     const controller = new AbortController()
-    void call(routes.latestLinus, { query: { ...{ repository } } }, { signal: controller.signal })
+    const options = { signal: controller.signal }
+    const request = activeId
+      ? call(routes.getLinus, { params: { id: activeId } }, options).then((session) => ({
+          session,
+        }))
+      : call(routes.latestLinus, { query: { repository } }, options)
+    void request
       .then((result) => {
         if (!controller.signal.aborted) {
           setSession(result.session ?? undefined)
@@ -29,7 +36,7 @@ export function useLinusSession(repository: string) {
     return () => {
       controller.abort()
     }
-  }, [repository, refresh])
+  }, [repository, refresh, activeId])
   const runningId = session?.status === 'running' ? session.id : undefined
   useEffect(() => {
     if (!runningId) return
@@ -71,6 +78,7 @@ export function useLinusSession(repository: string) {
               ? await call(routes.retryLinus, { params })
               : await call(routes.continueLinus, { params })
       setSession(next)
+      setActiveId(next.id)
     } catch (cause) {
       setError(message(cause))
     } finally {
