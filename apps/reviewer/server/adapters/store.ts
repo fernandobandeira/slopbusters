@@ -277,6 +277,18 @@ export class ReviewerStore {
       .get(repository)
     return row ? gandalfSessionSchema.parse(JSON.parse(String(row.session))) : undefined
   }
+  pendingGandalfSessions(): GandalfSession[] {
+    return this.database
+      .prepare(
+        `SELECT session FROM (
+          SELECT session, ROW_NUMBER() OVER (
+            PARTITION BY repository ORDER BY created_at DESC, rowid DESC
+          ) AS position FROM gandalf_sessions
+        ) WHERE position = 1 AND json_extract(session, '$.status') = 'running'`,
+      )
+      .all()
+      .map((row) => gandalfSessionSchema.parse(JSON.parse(String(row.session))))
+  }
   savePreferences(preferences: Preferences): Preferences {
     const value = { ...this.getPreferences(), ...preferences }
     this.database

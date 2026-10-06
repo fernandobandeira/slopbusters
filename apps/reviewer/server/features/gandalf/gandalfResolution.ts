@@ -4,6 +4,7 @@ import { gandalfTurnSchema, type GandalfSession } from '../../../shared/domain/g
 import type { PullRequest } from '../../../shared/domain/types'
 import { runStructured } from '../../adapters/provider'
 import type { ConflictWorkspace, ConflictSnapshot } from '../../adapters/conflictWorkspace'
+import { GANDALF_PROVIDER_TIMEOUT_MS } from '../../limits'
 
 export function resolveWithGandalf(request: {
   pull: PullRequest
@@ -33,5 +34,6 @@ ${JSON.stringify(history.filter((turn) => turn.url === pull.url))}`
   return runStructured(model, prompt, gandalfTurnSchema, signal, {
     repository: { directory: workspace.directory },
     observer: request.observer,
+    timeoutMs: GANDALF_PROVIDER_TIMEOUT_MS,
   })
 }

@@ -7,6 +7,13 @@ import {
 import { spawn, type ChildProcess } from 'node:child_process'
 import { StringDecoder } from 'node:string_decoder'
 
+export class CommandTimeoutError extends Error {
+  constructor(command: string) {
+    super(`${command} timed out. Please try again.`)
+    this.name = 'CommandTimeoutError'
+  }
+}
+
 export function runCommand(params: {
   command: string
   args: string[]
@@ -46,7 +53,7 @@ export function runCommand(params: {
       finish(new Error('The operation was cancelled.'))
     }
     const timer = setTimeout(() => {
-      finish(new Error(`${params.command} timed out. Please try again.`))
+      finish(new CommandTimeoutError(params.command))
     }, params.timeoutMs ?? COMMAND_TIMEOUT_MS)
     params.signal?.addEventListener('abort', abort, { once: true })
     if (params.signal?.aborted) abort()

@@ -51,6 +51,7 @@ export class AgentSessions {
     sessionId: string,
     pass: Pick<AgentRun, 'model' | 'label' | 'url'>,
     execute: (observer: ProviderObserver) => Promise<T>,
+    signal?: AbortSignal,
   ) {
     const run: AgentRun = {
       id: randomUUID(),
@@ -73,7 +74,10 @@ export class AgentSessions {
       })
       this.store.saveRun({
         ...run,
-        status: this.store.getSession(sessionId).status === 'cancelled' ? 'cancelled' : 'complete',
+        status:
+          signal?.aborted || this.store.getSession(sessionId).status === 'cancelled'
+            ? 'cancelled'
+            : 'complete',
         finishedAt: new Date().toISOString(),
       })
       return result
@@ -81,7 +85,7 @@ export class AgentSessions {
       const root = this.store.getSession(sessionId)
       this.store.saveRun({
         ...run,
-        status: root.status === 'cancelled' ? 'cancelled' : 'failed',
+        status: signal?.aborted || root.status === 'cancelled' ? 'cancelled' : 'failed',
         finishedAt: new Date().toISOString(),
         error: publicError(cause, 'The model pass failed. Please retry.'),
       })

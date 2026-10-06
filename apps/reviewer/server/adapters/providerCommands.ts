@@ -24,6 +24,7 @@ export async function runCodex({
   repository,
   observer,
   events,
+  timeoutMs,
 }: Request) {
   const inspection = repository && 'url' in repository ? repository : undefined
 
@@ -64,7 +65,7 @@ export async function runCodex({
     input: prompt,
     cwd: repository?.directory ?? directory,
     signal,
-    timeoutMs: PROVIDER_TIMEOUT_MS,
+    timeoutMs: timeoutMs ?? PROVIDER_TIMEOUT_MS,
     onStdout: observer ? events.write : undefined,
   })
   return JSON.parse(await readFile(resultPath, 'utf8')) as unknown
@@ -79,6 +80,7 @@ export async function runClaude({
   repository,
   observer,
   events,
+  timeoutMs,
 }: Request) {
   const inspection = repository && 'url' in repository ? repository : undefined
 
@@ -127,7 +129,7 @@ export async function runClaude({
     input: prompt,
     cwd: repository?.directory ?? directory,
     signal,
-    timeoutMs: PROVIDER_TIMEOUT_MS,
+    timeoutMs: timeoutMs ?? PROVIDER_TIMEOUT_MS,
     onStdout: observer ? events.write : undefined,
   })
   if (observer) return events.finish()

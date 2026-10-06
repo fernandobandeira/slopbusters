@@ -1,6 +1,3 @@
-import { AgentSessionStore } from '../server/adapters/agentSessionStore'
-import { AgentSessions } from '../server/features/agent-sessions/agentSessions'
-import { readFileSync } from 'node:fs'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,6 +7,7 @@ import { ReviewerStore } from '../server/adapters/store'
 import { Provider, type PullRequest } from '../shared/domain/types'
 import type { GandalfTurn } from '../shared/domain/gandalf'
 import { UserError } from '../server/errors'
+import { CommandTimeoutError } from '../server/adapters/process'
 import { fixturePull } from './fixtures/pull'
 
 const primary = { provider: Provider.codex, model: 'gpt-6.1-sol' }
@@ -245,34 +243,144 @@ describe('Gandalf session lifecycle', () => {
       createdAt: '2999-01-01',
     })
     const restarted = new GandalfJobs({ store, loadPull, openWorkspace, resolve })
+    loadPull.mockResolvedValue({ ...fixturePull(), headSha: 'resolved-sha' })
+    const previousWorkspace = await openWorkspace({ ...fixturePull(), headSha: 'resolved-sha' })
+    openWorkspace.mockResolvedValue({ ...previousWorkspace, needsUpdate: false })
+    await restarted.resume()
+    await vi.waitFor(() => {
+      expect(restarted.get('interrupted').status).toBe('complete')
+    })
     expect(restarted.latest('review-room/example')).toMatchObject({
-      status: 'cancelled',
+      id: 'interrupted',
+      status: 'complete',
       results: [{ published: true }],
     })
+    expect(publish).toHaveBeenCalledTimes(1)
+    await restarted.close()
   })
 })
 
-it('records the preparation phase and private cause when no model pass could start', async () => {
-  const traces = new AgentSessionStore(directory)
-  jobs = new GandalfJobs({
-    store,
-    loadPull,
-    openWorkspace,
-    resolve,
-    sessions: new AgentSessions(traces),
+describe('Gandalf automatic recovery', () => {
+  it('waits for an interrupted pass to stop before automatically resuming after wake', async () => {
+    let interrupted = false
+    resolve.mockImplementationOnce(
+      ({ signal }) =>
+        new Promise((_done, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              setTimeout(() => {
+                interrupted = true
+                reject(new Error('Interrupted during sleep'))
+              }, 20)
+            },
+            { once: true },
+          )
+        }),
+    )
+    const session = jobs.start('review-room/example', [fixturePull().url])
+    await vi.waitFor(() => {
+      expect(resolve).toHaveBeenCalledTimes(1)
+    })
+    const pausing = jobs.suspend()
+    expect(jobs.get(session.id).status).toBe('running')
+    expect(jobs.get(session.id).progress).toContain('paused')
+    const waking = jobs.resume()
+    expect(interrupted).toBe(false)
+    await Promise.all([pausing, waking])
+    const saved = await completed(session.id)
+    expect(saved.error).toBeUndefined()
+    expect(interrupted).toBe(true)
+    expect(resolve).toHaveBeenCalledTimes(4)
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalledTimes(2)
   })
-  openWorkspace.mockRejectedValueOnce(new Error('private checkout failure'))
-  const started = jobs.start('review-room/example', [fixturePull().url])
-  const saved = await completed(started.id, 'failed')
-  expect(saved.failureContext).toBe(`Preparing conflicts for PR #${fixturePull().number}…`)
-  expect(traces.getSession(started.id)).toMatchObject({
-    status: 'failed',
-    failureContext: saved.failureContext,
-    runs: [],
+  it('resumes unfinished work on app restart without a UI read', async () => {
+    resolve.mockImplementationOnce(
+      ({ signal }) =>
+        new Promise((_done, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              reject(new Error('App stopped'))
+            },
+            { once: true },
+          )
+        }),
+    )
+    const session = jobs.start('review-room/example', [fixturePull().url])
+    await vi.waitFor(() => {
+      expect(resolve).toHaveBeenCalledTimes(1)
+    })
+    await jobs.close()
+    expect(store.getGandalfSession(session.id)?.status).toBe('running')
+    store.close()
+    store = new ReviewerStore({ dataDirectory: directory })
+    jobs = new GandalfJobs({ store, loadPull, openWorkspace, resolve })
+    await jobs.resume()
+    expect((await completed(session.id)).id).toBe(session.id)
+    expect(publish).toHaveBeenCalledTimes(1)
   })
-  expect(readFileSync(join(directory, 'agent-diagnostics', `${started.id}.log`), 'utf8')).toContain(
-    'private checkout failure',
-  )
-  await jobs.close()
-  traces.close()
+})
+
+describe('Gandalf recovery intent', () => {
+  it('does not resume explicit cancellation, failure, or completed work', async () => {
+    resolve.mockRejectedValueOnce(new UserError('The head changed. Retry.'))
+    const failed = jobs.start('review-room/example', [fixturePull().url])
+    await completed(failed.id, 'failed')
+    const complete = jobs.start('review-room/other', [fixturePull().url])
+    await completed(complete.id)
+    await jobs.suspend()
+    // This running record simulates work saved before sleep.
+    store.saveGandalfSession({
+      ...failed,
+      id: 'cancelled',
+      repository: 'review-room/cancelled',
+      status: 'running',
+    })
+    jobs.cancel('cancelled')
+    await jobs.resume()
+    expect(store.pendingGandalfSessions()).toEqual([])
+    expect(resolve).toHaveBeenCalledTimes(4)
+    expect(jobs.get('cancelled').status).toBe('cancelled')
+  })
+  it('does not revive an older interrupted session superseded by a newer session', async () => {
+    const session = jobs.start('review-room/example', [fixturePull().url])
+    await completed(session.id)
+    store.saveGandalfSession({
+      ...session,
+      id: 'older-interrupted',
+      createdAt: '2000-01-01',
+      status: 'running',
+    })
+    await jobs.resume()
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(store.pendingGandalfSessions()).toEqual([])
+  })
+})
+
+describe('Gandalf timeout recovery', () => {
+  it('automatically retries a timeout once with a fresh checkout, then exposes the cause', async () => {
+    resolve.mockRejectedValue(new CommandTimeoutError('codex'))
+    const session = jobs.start('review-room/example', [fixturePull().url])
+    const saved = await completed(session.id, 'failed')
+    expect(saved.error).toContain('timed out again')
+    expect(saved.timeoutRetries).toBe(1)
+    expect(resolve).toHaveBeenCalledTimes(2)
+    expect(openWorkspace).toHaveBeenCalledTimes(2)
+    expect(publish).not.toHaveBeenCalled()
+    resolve.mockResolvedValue(clean)
+    jobs.retry(session.id)
+    expect((await completed(session.id)).timeoutRetries).toBe(0)
+  })
+  it('finishes an automatically retried timeout under the same session', async () => {
+    resolve.mockRejectedValueOnce(new CommandTimeoutError('codex'))
+    const session = jobs.start('review-room/example', [fixturePull().url])
+    const saved = await completed(session.id)
+    expect(saved.timeoutRetries).toBe(1)
+    expect(saved.error).toBeUndefined()
+    expect(saved.failureContext).toBeUndefined()
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalledTimes(2)
+  })
 })

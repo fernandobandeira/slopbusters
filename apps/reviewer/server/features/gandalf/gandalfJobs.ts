@@ -4,8 +4,9 @@ import { organizationDefaults } from '../../../shared/domain/preferences'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
 import type { ReviewerStore } from '../../adapters/store'
 import type { ConflictWorkspace } from '../../adapters/conflictWorkspace'
+import { CommandTimeoutError } from '../../adapters/process'
 import { UserError, publicError } from '../../errors'
-import { MAX_GANDALF_TURNS } from '../../limits'
+import { MAX_GANDALF_TURNS, MAX_GANDALF_TIMEOUT_RETRIES } from '../../limits'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { resolveWithGandalf } from './gandalfResolution'
 
@@ -21,11 +22,18 @@ interface Options {
 export class GandalfJobs {
   private running = new Map<
     string,
-    { controller: AbortController; done: Promise<void>; repository: string }
+    {
+      controller: AbortController
+      done: Promise<void>
+      repository: string
+      session: GandalfSession
+    }
   >()
+  private suspended = false
   constructor(private options: Options) {}
 
   start(repository: string, urls: string[]): GandalfSession {
+    this.requireAwake()
     const previous = this.latest(repository)
     if (previous?.status === 'running') {
       if (JSON.stringify(previous.urls) === JSON.stringify(urls)) return previous
@@ -52,13 +60,14 @@ export class GandalfJobs {
   get(id: string): GandalfSession {
     const session = this.options.store.getGandalfSession(id)
     if (!session) throw new UserError('This Gandalf session is no longer available.', 404)
-    return this.recover(session)
+    return session
   }
   latest(repository: string): GandalfSession | undefined {
     const session = this.options.store.latestGandalfSession(repository)
-    return session && this.recover(session)
+    return session
   }
   retry(id: string): GandalfSession {
+    this.requireAwake()
     const session = this.get(id)
     if ([...this.running.values()].some((job) => job.repository === session.repository))
       throw new UserError('Wait for the current Gandalf session to stop before retrying.')
@@ -66,25 +75,55 @@ export class GandalfJobs {
       status: 'running',
       error: undefined,
       failureContext: undefined,
+      timeoutRetries: 0,
     })
     this.launch(session)
     this.save(session)
     return session
   }
   cancel(id: string): GandalfSession {
-    this.running.get(id)?.controller.abort()
-    const session = this.get(id)
+    const job = this.running.get(id)
+    const session = job?.session ?? this.get(id)
     if (session.status === 'running') {
       session.status = 'cancelled'
       session.progress = 'Resolution cancelled. Completed PR updates are saved.'
       this.save(session)
     }
+    job?.controller.abort()
     return session
   }
+  async suspend() {
+    this.suspended = true
+    const jobs = [...this.running.values()]
+    for (const job of jobs) {
+      job.controller.abort()
+      if (job.session.status === 'running')
+        this.progress(job.session, 'Resolution paused. It will resume when the app is awake.')
+    }
+    await Promise.allSettled(jobs.map((job) => job.done))
+  }
+  async resume() {
+    this.suspended = false
+    await Promise.allSettled(
+      [...this.running.values()]
+        .filter((job) => job.controller.signal.aborted)
+        .map((job) => job.done),
+    )
+    if (!this.isAwake()) return
+    for (const session of this.options.store.pendingGandalfSessions()) {
+      if ([...this.running.values()].some((job) => job.repository === session.repository)) continue
+      this.progress(session, 'Resuming resolution. Rechecking the current stack…')
+      this.launch(session)
+    }
+  }
   async close() {
-    const jobs = [...this.running.entries()]
-    for (const [id] of jobs) this.cancel(id)
-    await Promise.allSettled(jobs.map(([, job]) => job.done))
+    await this.suspend()
+  }
+  private requireAwake() {
+    if (!this.isAwake()) throw new UserError('Wait for the app to wake before starting resolution.')
+  }
+  private isAwake() {
+    return !this.suspended
   }
   private models() {
     const { organization: primary, companion } = this.options.store.getPreferences()
@@ -95,30 +134,44 @@ export class GandalfJobs {
       companion: companion ?? { provider, model: organizationDefaults[provider].model },
     }
   }
-  private recover(session: GandalfSession) {
-    if (session.status === 'running' && !this.running.has(session.id)) {
-      session.status = 'cancelled'
-      session.progress = 'Resolution interrupted when the app stopped. Retry the remaining PRs.'
-      this.save(session)
-    }
-    return session
-  }
   private launch(session: GandalfSession) {
     const controller = new AbortController()
-    const job = { controller, done: Promise.resolve(), repository: session.repository }
+    const job = { controller, done: Promise.resolve(), repository: session.repository, session }
     this.running.set(session.id, job)
-    job.done = this.run(session, controller.signal)
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) return
-        session.failureContext = session.progress
+    job.done = this.runWithRecovery(session, controller.signal).finally(() => {
+      this.running.delete(session.id)
+    })
+  }
+  private async runWithRecovery(session: GandalfSession, signal: AbortSignal) {
+    for (;;) {
+      try {
+        signal.throwIfAborted()
+        await this.run(session, signal)
+        return
+      } catch (cause) {
+        if (signal.aborted) return
         this.options.sessions?.diagnostic(session.id, session.progress, cause)
+        if (
+          cause instanceof CommandTimeoutError &&
+          (session.timeoutRetries ?? 0) < MAX_GANDALF_TIMEOUT_RETRIES
+        ) {
+          session.timeoutRetries = (session.timeoutRetries ?? 0) + 1
+          this.progress(
+            session,
+            'A command timed out. Automatically retrying the unfinished resolution…',
+          )
+          continue
+        }
+        session.failureContext = session.progress
         session.status = 'failed'
-        session.error = publicError(cause, 'Gandalf could not resolve these conflicts.')
+        session.error =
+          cause instanceof CommandTimeoutError
+            ? 'A resolution command timed out again. Retry the remaining PRs.'
+            : publicError(cause, 'Gandalf could not resolve these conflicts.')
         this.progress(session, 'Resolution stopped. Completed PR updates are saved.')
-      })
-      .finally(() => {
-        this.running.delete(session.id)
-      })
+        return
+      }
+    }
   }
   private async run(session: GandalfSession, signal: AbortSignal) {
     session.urls = (await this.options.plan?.(session.urls, signal)) ?? session.urls
@@ -130,8 +183,12 @@ export class GandalfJobs {
       signal.throwIfAborted()
       verifications.push(await this.resolvePull(session, url, signal))
     }
+    signal.throwIfAborted()
     this.progress(session, 'Verifying all updated branches…')
-    for (const verify of verifications) await verify()
+    for (const verify of verifications) {
+      signal.throwIfAborted()
+      await verify()
+    }
     signal.throwIfAborted()
     session.status = 'complete'
     this.progress(session, 'You may pass. All PRs and their stack layers are up to date.')
@@ -146,6 +203,7 @@ export class GandalfJobs {
     const pull = workspace.pull
     let resolvedSha = pull.headSha
     try {
+      signal.throwIfAborted()
       if (!workspace.needsUpdate) {
         await workspace.verify()
         const previous = session.results.find((result) => result.url === url)
@@ -188,10 +246,6 @@ export class GandalfJobs {
           published: true,
         })
       }
-      if (signal.aborted) {
-        session.status = 'cancelled'
-        session.progress = 'Resolution cancelled. Completed PR updates are saved.'
-      }
       this.save(session)
     } finally {
       await workspace.close()
@@ -218,6 +272,7 @@ export class GandalfJobs {
         `${role === 'primary' ? 'Primary' : 'Secondary'} ${index ? 'reviewing and fixing' : 'resolving'} PR #${pull.number} · turn ${index + 1}…`,
       )
       const snapshot = await workspace.inspect()
+      signal.throwIfAborted()
       const request: Parameters<typeof resolveWithGandalf>[0] = {
         pull,
         role,
@@ -273,6 +328,7 @@ export class GandalfJobs {
             url: request.pull.url,
           },
           execute,
+          request.signal,
         )
       : await execute()
   }

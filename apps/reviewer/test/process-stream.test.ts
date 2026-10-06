@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { runCommand } from '../server/adapters/process'
+import { CommandTimeoutError, runCommand } from '../server/adapters/process'
 
 it('streams output before completion and preserves UTF-8 across byte boundaries', async () => {
   const chunks: string[] = []
@@ -27,4 +27,13 @@ it('terminates a provider when its output cannot be recorded', async () => {
       },
     }),
   ).rejects.toThrow('Recording failed')
+})
+it('distinguishes timeouts from process failures for bounded automatic retry', async () => {
+  await expect(
+    runCommand({
+      command: process.execPath,
+      args: ['-e', 'setInterval(() => {}, 1000)'],
+      timeoutMs: 30,
+    }),
+  ).rejects.toBeInstanceOf(CommandTimeoutError)
 })

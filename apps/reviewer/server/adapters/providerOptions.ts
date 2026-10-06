@@ -4,6 +4,7 @@ import type { ProviderObserver } from '../../shared/domain/agentSession'
 export interface ProviderOptions {
   repository?: RepositoryContext | { directory: string }
   observer?: ProviderObserver
+  timeoutMs?: number
 }
 export function providerOptions(
   options?: ProviderOptions | RepositoryContext | { directory: string },

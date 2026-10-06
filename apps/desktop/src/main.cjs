@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, powerMonitor, session, shell } = require('electron')
 const { execFile } = require('node:child_process')
 const { readFileSync } = require('node:fs')
 const { homedir } = require('node:os')
@@ -324,6 +324,12 @@ async function start() {
     port: 0,
   })
   smokeStage('server-ready')
+  powerMonitor.on('suspend', () => {
+    if (!stopping && !quitting) void server.suspend().catch((error) => console.error('Pausing resolution failed:', error.message))
+  })
+  powerMonitor.on('resume', () => {
+    if (!stopping && !quitting) void server.resume().catch((error) => console.error('Resuming resolution failed:', error.message))
+  })
   updates = createUpdates({
     updater: require('electron-updater').autoUpdater,
     enabled: app.isPackaged && process.platform === 'darwin' && !smoke,

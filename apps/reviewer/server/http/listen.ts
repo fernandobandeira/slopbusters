@@ -23,9 +23,18 @@ export async function listen(
     throw new Error('Could not start the local review server.')
   const url = `http://127.0.0.1:${address.port}`
   setOrigin(url)
+  try {
+    await services.gandalfJobs.resume()
+  } catch (error) {
+    server.close()
+    await services.close()
+    throw error
+  }
   let closing: Promise<void> | undefined
   return {
     url,
+    suspend: () => services.gandalfJobs.suspend(),
+    resume: () => services.gandalfJobs.resume(),
     close() {
       closing ??= new Promise<void>((resolve, reject) => {
         server.close((error) => {
