@@ -24,7 +24,6 @@ export function BobReviewBadge({
       onClick={onOpen}
     >
       <img src="/unclebob/neutral.png" alt="" />
-      <span>Bob</span>
       <span className="tabular-nums">{review.findingCount}</span>
       {stale && <History size={12} className="muted" aria-hidden="true" />}
     </Button>

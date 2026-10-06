@@ -102,9 +102,9 @@ describe('Bob tour navigation and readability', () => {
         onOpen,
       }),
     )
-    fireEvent.click(
-      screen.getByRole('button', { name: /Open saved Bob review.*changed after Bob/ }),
-    )
+    const badge = screen.getByRole('button', { name: /Open saved Bob review.*changed after Bob/ })
+    expect(badge.textContent).toBe('1')
+    fireEvent.click(badge)
     expect(onOpen).toHaveBeenCalledOnce()
   })
   it('renders code identifiers, paragraphs and suggestions as readable Markdown without HTML', () => {
