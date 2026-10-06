@@ -1,3 +1,5 @@
+import { AgentSessionStore } from './adapters/agentSessionStore'
+import { AgentSessions } from './features/agent-sessions/agentSessions'
 import { ReviewerStore } from './adapters/store'
 import { createGitHub, type GitHub } from './adapters/github'
 import { createPullService } from './features/pulls/github'
@@ -44,6 +46,7 @@ export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
 export function createServices(options: ReviewerServerOptions) {
   configureSourceAssetsDirectory(options.sourceAssetsDirectory)
   const store = new ReviewerStore(options)
+  const agentSessions = new AgentSessions(new AgentSessionStore(options.dataDirectory))
   const github = options.github ?? createGitHub()
   const statuses = createPullStatusService(github)
   const stacks = createStackService(github, statuses)
@@ -69,9 +72,11 @@ export function createServices(options: ReviewerServerOptions) {
     options.linusSkillDirectory,
     openRepository,
     pulls.fetchPull,
+    agentSessions,
   )
   const bobJobs = new BobJobs({
     store,
+    sessions: agentSessions,
     staticDirectory: options.staticDirectory,
     skillDirectory: options.bobSkillDirectory,
     openRepository,
@@ -80,6 +85,7 @@ export function createServices(options: ReviewerServerOptions) {
   const conflictRemote = options.sourceRemoteUrl
   const gandalfJobs = new GandalfJobs({
     store,
+    sessions: agentSessions,
     loadPull: pulls.fetchPull,
     plan: createGandalfPlanner(stacks.getStackMetadata),
     openWorkspace: (pull, signal) =>
@@ -97,7 +103,7 @@ export function createServices(options: ReviewerServerOptions) {
           : undefined,
       }),
   })
-  const organizationJobs = new OrganizationJobs(store)
+  const organizationJobs = new OrganizationJobs(store, agentSessions)
   return {
     store,
     github,
@@ -112,6 +118,7 @@ export function createServices(options: ReviewerServerOptions) {
     linusJobs,
     bobJobs,
     gandalfJobs,
+    agentSessions,
     organizationJobs,
     navigateSource: (pull: PullRequest, request: Parameters<typeof navigator>[1]) =>
       navigator(pull, request),
@@ -140,6 +147,7 @@ export function createServices(options: ReviewerServerOptions) {
       navigator.close()
       await workspaces.close()
       await repository.close()
+      agentSessions.store.close()
       store.close()
     },
   }

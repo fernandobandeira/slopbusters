@@ -6,6 +6,7 @@ import { localOnly, contentSecurityPolicy, errorHandler } from './http/middlewar
 import { pullsRouter } from './http/pullsRouter'
 import { sourceRouter } from './http/sourceRouter'
 import { settingsRouter } from './http/settingsRouter'
+import { agentSessionsRouter } from './http/agentSessionsRouter'
 import { bobRouter } from './http/bobRouter'
 import { gandalfRouter } from './http/gandalfRouter'
 import { linusRouter } from './http/linusRouter'
@@ -28,6 +29,7 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
     pullsRouter(services),
     linusRouter(services),
     gandalfRouter(services),
+    agentSessionsRouter(services),
     bobRouter(services),
     sourceRouter(services),
     settingsRouter(services),

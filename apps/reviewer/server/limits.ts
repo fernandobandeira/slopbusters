@@ -53,3 +53,7 @@ export const MAX_SAVED_BOB_REVIEWS = 500
 export const MAX_GANDALF_TURNS = 20
 export const MAX_GANDALF_PULLS = 20
 export const MAX_GANDALF_PROMPT_BYTES = 4 * 1024 * 1024
+
+export const MAX_AGENT_EVENT_CHARS = 128 * 1024
+export const MAX_AGENT_EVENT_PAGE = 200
+export const MAX_AGENT_SESSIONS = 100

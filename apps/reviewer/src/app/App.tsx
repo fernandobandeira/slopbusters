@@ -1,3 +1,5 @@
+import { AgentActivity } from '../features/agent-sessions/AgentActivity'
+import { SessionsPage } from '../features/agent-sessions/SessionsPage'
 import type { Repository } from '../../shared/domain/types'
 import { GandalfCompanion } from '../features/gandalf/GandalfCompanion'
 import { inboxSections } from '../features/inbox/inboxSections'
@@ -59,7 +61,9 @@ export function App() {
   const route = readRoute(location)
   const [repositoryHistory, setRepositoryHistory] = useState(loadRepositoryHistory)
   const visitedRepository =
-    route.kind === 'inbox' || route.kind === 'pull' ? route.repository : undefined
+    route.kind === 'inbox' || route.kind === 'pull' || route.kind === 'sessions'
+      ? route.repository
+      : undefined
   const recentRepositories = visitedRepository
     ? visitRepository(repositoryHistory, visitedRepository)
     : repositoryHistory
@@ -254,11 +258,13 @@ export function App() {
               />
             ) : (
               <h1>
-                {route.kind === 'settings'
-                  ? 'Settings'
-                  : route.kind === 'not-found'
-                    ? 'Page not found'
-                    : `PR #${route.number}`}
+                {route.kind === 'sessions'
+                  ? 'Agent sessions'
+                  : route.kind === 'settings'
+                    ? 'Settings'
+                    : route.kind === 'not-found'
+                      ? 'Page not found'
+                      : `PR #${route.number}`}
               </h1>
             )}
             {route.kind === 'inbox' && (
@@ -282,6 +288,8 @@ export function App() {
             filter={filter}
             inbox={inbox}
             status={status}
+            repository={repository}
+            sessionsPage={route.kind === 'sessions'}
             settings={route.kind === 'settings'}
             inboxPage={route.kind === 'inbox'}
             onFilter={(next) => {
@@ -322,6 +330,23 @@ export function App() {
             </div>
           )}
           <Routes>
+            <Route
+              path="/sessions"
+              element={
+                <SessionsPage
+                  repository={route.kind === 'sessions' ? route.repository : undefined}
+                />
+              }
+            />
+            <Route
+              path="/sessions/:id"
+              element={
+                <SessionsPage
+                  id={route.kind === 'sessions' ? route.id : undefined}
+                  repository={route.kind === 'sessions' ? route.repository : undefined}
+                />
+              }
+            />
             <Route
               path="/settings"
               element={
@@ -432,39 +457,41 @@ export function App() {
             />
           </Routes>
         </main>
-        {repository && (activeLinusReplay || linusSessionId || selectingForLinus) && (
-          <LinusCompanion
-            key={`${repository}:${activeLinusReplay ? 'replay' : linusSessionId}`}
-            sessionId={activeLinusReplay ? undefined : linusSessionId}
-            onClose={() => {
-              setLinusReplay(undefined)
-              setLinusSelection(undefined)
-              reviewLaunch.closeLinus()
-            }}
-            repository={repository}
-            pulls={myPulls}
-            available={route.kind === 'inbox' && filter === 'mine'}
-            preferences={preferences}
-            currentPull={pull}
-            replayRequest={activeLinusReplay}
-            onSessionUpdate={refreshLinus}
-            selection={{
-              active: selectingForLinus,
-              urls: selectedLinusUrls,
-              onChoose: () => {
+        {repository &&
+          route.kind !== 'sessions' &&
+          (activeLinusReplay || linusSessionId || selectingForLinus) && (
+            <LinusCompanion
+              key={`${repository}:${activeLinusReplay ? 'replay' : linusSessionId}`}
+              sessionId={activeLinusReplay ? undefined : linusSessionId}
+              onClose={() => {
                 setLinusReplay(undefined)
-                setLinusSelection({ repository, urls: [] })
-                void navigate(inboxPath(repository, 'mine'))
-              },
-              onChange: (urls) => {
-                setLinusSelection({ repository, urls })
-              },
-              onCancel: () => {
                 setLinusSelection(undefined)
-              },
-            }}
-          />
-        )}
+                reviewLaunch.closeLinus()
+              }}
+              repository={repository}
+              pulls={myPulls}
+              available={route.kind === 'inbox' && filter === 'mine'}
+              preferences={preferences}
+              currentPull={pull}
+              replayRequest={activeLinusReplay}
+              onSessionUpdate={refreshLinus}
+              selection={{
+                active: selectingForLinus,
+                urls: selectedLinusUrls,
+                onChoose: () => {
+                  setLinusReplay(undefined)
+                  setLinusSelection({ repository, urls: [] })
+                  void navigate(inboxPath(repository, 'mine'))
+                },
+                onChange: (urls) => {
+                  setLinusSelection({ repository, urls })
+                },
+                onCancel: () => {
+                  setLinusSelection(undefined)
+                },
+              }}
+            />
+          )}
         {repository && gandalfRepository === repository && route.kind === 'inbox' && (
           <GandalfCompanion
             key={repository}
@@ -541,6 +568,7 @@ export function App() {
           </div>
         </DialogPopup>
       </Dialog>
+      {route.kind !== 'sessions' && <AgentActivity repository={repository || undefined} />}
       <UpdateButton />
     </div>
   )

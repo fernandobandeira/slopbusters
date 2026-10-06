@@ -1,11 +1,13 @@
 import { Link } from 'react-router'
-import { GitPullRequest, Plus, Settings } from 'lucide-react'
+import { GitPullRequest, Plus, Settings, MessagesSquare } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { inboxPulls, inboxFilters as filters, type InboxFilter } from '../features/inbox/inbox'
 import type { AppStatus, RepositoryInbox } from '../../shared/domain/types'
 export function AppSidebar({
   filter,
+  repository,
+  sessionsPage,
   inbox,
   status,
   settings,
@@ -14,6 +16,8 @@ export function AppSidebar({
   onOpenUrl,
 }: {
   filter: InboxFilter
+  repository?: string
+  sessionsPage?: boolean
   inbox?: RepositoryInbox
   status?: AppStatus
   settings: boolean
@@ -50,6 +54,13 @@ export function AppSidebar({
         <Plus size={14} />
         Open PR by URL
       </Button>
+      <Link
+        className={`nav-row ${sessionsPage ? 'active' : ''}`}
+        to={`/sessions${repository ? `?${new URLSearchParams({ repository })}` : ''}`}
+      >
+        <MessagesSquare size={15} />
+        Sessions
+      </Link>
       <div className="sidebar-bottom">
         <Link className={`nav-row ${settings ? 'active' : ''}`} to="/settings">
           <Settings size={15} /> Settings

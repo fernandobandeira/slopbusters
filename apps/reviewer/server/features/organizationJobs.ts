@@ -1,3 +1,4 @@
+import type { AgentSessions } from './agent-sessions/agentSessions'
 import { randomUUID } from 'node:crypto'
 import type { ReviewerStore } from '../adapters/store'
 import { organizePull } from './organization/organize'
@@ -16,7 +17,10 @@ export class OrganizationJobs {
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
   private readonly pending = new Set<Promise<void>>()
   private stopped = false
-  constructor(private readonly store: ReviewerStore) {}
+  constructor(
+    private readonly store: ReviewerStore,
+    private readonly sessions?: AgentSessions,
+  ) {}
 
   start(pullId: string, force: boolean) {
     if (this.stopped) throw new UserError('The reviewer is shutting down.', 503)
@@ -32,18 +36,40 @@ export class OrganizationJobs {
     const id = randomUUID()
     const job: Job = { status: 'running', controller: new AbortController(), pullId }
     this.jobs.set(id, job)
-    const pending = organizePull(pull, organization, job.controller.signal)
+    this.sessions?.start(id, 'grouping', {
+      repository: `${pull.owner}/${pull.repo}`,
+      urls: [pull.url],
+    })
+    const execute = (observer?: import('../../shared/domain/agentSession').ProviderObserver) =>
+      organizePull(pull, organization, job.controller.signal, observer)
+    const operation = this.sessions
+      ? this.sessions.run(
+          id,
+          { model: organization, label: 'Organize diff', url: pull.url },
+          execute,
+        )
+      : execute()
+    const pending = operation
       .then((groups) => {
+        job.controller.signal.throwIfAborted()
         this.store.savePull({
           ...this.store.getPull(pullId),
           groups,
           groupingSource: organization.provider,
         })
         job.status = 'complete'
+        this.sessions?.update({ id, status: 'complete', progress: 'Diff organized.' })
       })
       .catch((error: unknown) => {
         job.status = 'failed'
         job.error = publicError(error, 'Organization failed. Please retry.')
+        this.sessions?.diagnostic(id, 'Organizing diff', error)
+        this.sessions?.update({
+          id,
+          status: job.controller.signal.aborted ? 'cancelled' : 'failed',
+          progress: 'Organization stopped.',
+          error: job.error,
+        })
       })
       .finally(() => {
         this.pending.delete(pending)
@@ -66,10 +92,12 @@ export class OrganizationJobs {
   }
   cancel(id: string) {
     this.jobs.get(id)?.controller.abort()
+    if (this.jobs.has(id))
+      this.sessions?.update({ id, status: 'cancelled', progress: 'Organization cancelled.' })
   }
   async close() {
     this.stopped = true
-    for (const job of this.jobs.values()) job.controller.abort()
+    for (const id of this.jobs.keys()) this.cancel(id)
     for (const timer of this.timers) clearTimeout(timer)
     this.timers.clear()
     await Promise.allSettled(this.pending)

@@ -1,0 +1,367 @@
+.agent-activity {
+  position: fixed;
+  right: 20px;
+  top: 72px;
+  z-index: 45;
+  display: grid;
+  gap: 8px;
+  width: 260px;
+  max-width: calc(100vw - 24px);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.agent-activity-card,
+.session-history-card {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--foreground);
+  padding: 12px 14px;
+  box-shadow: 0 6px 24px #0002;
+  text-decoration: none;
+}
+.agent-activity-card {
+  min-width: 0;
+}
+.agent-activity-card:hover,
+.session-history-card:hover {
+  border-color: var(--primary);
+}
+.agent-activity-card > div,
+.session-history-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.agent-activity-card small {
+  display: block;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 6px;
+}
+.agent-model-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.agent-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  text-transform: capitalize;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.agent-state-running {
+  color: var(--primary);
+}
+.agent-state-failed {
+  color: var(--destructive);
+}
+.agent-state-complete {
+  color: var(--chart-2, var(--primary));
+}
+.sessions-index {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 1000px;
+  margin: 32px auto;
+  padding: 0 24px;
+}
+.sessions-index header {
+  margin-bottom: 28px;
+}
+.sessions-index h1 {
+  font-size: 30px;
+  margin: 0 0 8px;
+}
+.sessions-index header p {
+  color: var(--muted-foreground);
+}
+.session-history-card {
+  margin-bottom: 12px;
+  box-shadow: none;
+}
+.session-history-card p,
+.session-history-card small {
+  color: var(--muted-foreground);
+  margin: 8px 0 0;
+}
+.session-page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.session-heading {
+  padding: 20px 28px 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.session-heading > div {
+  flex: 1;
+}
+.session-heading a {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.session-heading h2 {
+  margin: 6px 0 0;
+  font-size: 20px;
+}
+.session-progress,
+.session-failure-context {
+  margin: 0;
+  padding: 8px 28px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.session-detail-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  border-top: 1px solid var(--border);
+}
+.session-pass-list {
+  padding: 16px 10px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+}
+.session-pass-list h3 {
+  margin: 0 10px 14px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.session-pass-list > p {
+  padding: 10px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.session-pass {
+  display: grid;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  text-decoration: none;
+  color: var(--foreground);
+}
+.session-pass:hover {
+  background: var(--muted);
+}
+.session-pass.selected {
+  background: var(--accent);
+  border-color: var(--primary);
+}
+.session-pass .agent-model-line {
+  margin: 0;
+}
+.session-pass > span:not(.agent-state),
+.session-pass > small {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.session-transcript {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.session-transcript > header {
+  padding: 14px 24px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.session-transcript time {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.session-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px 60px;
+}
+.session-message-column {
+  max-width: 900px;
+  margin: 0 auto;
+}
+.session-message {
+  padding: 16px 4px;
+}
+.session-message-activity {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.session-tool,
+.session-context {
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+}
+.session-tool summary,
+.session-context summary {
+  padding: 11px 14px;
+  cursor: pointer;
+}
+.session-tool summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.session-tool summary > span {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.session-tool pre {
+  padding: 14px;
+  margin: 0;
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+}
+.session-context .session-markdown {
+  padding: 4px 16px 16px;
+  max-height: 600px;
+  overflow: auto;
+}
+.session-working {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  padding: 12px 4px;
+}
+.session-jump {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 3px 18px #0003;
+}
+.session-markdown {
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.session-markdown p {
+  margin: 0 0 12px;
+}
+.session-markdown pre {
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 14px;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 12px;
+}
+.session-markdown :not(pre) > code {
+  background: var(--muted);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.session-markdown ul,
+.session-markdown ol {
+  padding-left: 24px;
+  margin: 8px 0 14px;
+}
+.session-markdown ul {
+  list-style: disc;
+}
+.session-markdown ol {
+  list-style: decimal;
+}
+.session-markdown h1,
+.session-markdown h2,
+.session-markdown h3 {
+  font-size: 1.2em;
+  margin: 18px 0 10px;
+  font-weight: 600;
+}
+.session-markdown a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.session-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.session-markdown th,
+.session-markdown td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.session-markdown blockquote {
+  padding-left: 16px;
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+}
+@media (max-width: 900px) {
+  .session-detail-layout {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+  .session-transcript > header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+@media (max-width: 650px) {
+  .session-detail-layout {
+    display: flex;
+    flex-direction: column;
+  }
+  .session-pass-list {
+    display: flex;
+    gap: 8px;
+    max-height: 180px;
+    flex-shrink: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .session-pass-list h3 {
+    display: none;
+  }
+  .session-pass {
+    min-width: 180px;
+    margin: 0;
+  }
+  .session-transcript {
+    flex: 1;
+  }
+  .agent-activity {
+    width: 230px;
+    right: 12px;
+  }
+}

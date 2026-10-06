@@ -5,7 +5,10 @@ import { Provider } from '../shared/domain/types'
 import type { LinusAdvice } from '../shared/domain/linus'
 import { fixturePull } from './fixtures/pull'
 
-vi.mock('../server/adapters/provider', () => ({ runStructured: vi.fn() }))
+vi.mock('../server/adapters/provider', async (original) => ({
+  ...(await original<typeof import('../server/adapters/provider')>()),
+  runStructured: vi.fn(),
+}))
 const advice: LinusAdvice = {
   verdict: 'keep',
   reasoning: 'One logical change',

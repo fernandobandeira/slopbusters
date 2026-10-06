@@ -38,7 +38,7 @@ describe('Bob model prompts and reconciliation', () => {
     expect(call[1]).toContain('newLine')
     expect(call[1]).toContain('AGENTS.md')
     expect(call[1]).toContain('Do not modify code')
-    expect(call[4]).toBe(repository)
+    expect(call[4]).toEqual({ repository, observer: undefined })
   })
   it('reconciles evidence and discloses missing source, partial patches and a failed reviewer', async () => {
     const pull = fixturePull()

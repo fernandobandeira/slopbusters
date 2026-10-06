@@ -1,3 +1,5 @@
+import type { AgentSessions } from './agent-sessions/agentSessions'
+import type { ProviderObserver } from '../../shared/domain/agentSession'
 import { randomUUID } from 'node:crypto'
 import type { OrganizationPreferences } from '../../shared/domain/preferences'
 import type { PendingReview, ReviewSession } from '../../shared/domain/reviewSession'
@@ -8,6 +10,7 @@ import { pullFingerprint } from '../reviewSnapshot'
 
 interface ReviewStrategy<Advice extends { limitations: string[] }> {
   name: string
+  sessions?: AgentSessions
   models: () => { primary: OrganizationPreferences; companion: OrganizationPreferences }
   skill: () => Promise<string>
   save: (session: ReviewSession<Advice>) => void
@@ -22,6 +25,7 @@ interface ReviewStrategy<Advice extends { limitations: string[] }> {
     signal: AbortSignal
     companion: boolean
     repository?: RepositoryContext
+    observer?: ProviderObserver
   }) => Promise<Advice>
   reconcile: (request: {
     pending: PendingReview<Advice>
@@ -29,6 +33,7 @@ interface ReviewStrategy<Advice extends { limitations: string[] }> {
     skill: string
     signal: AbortSignal
     repository?: RepositoryContext
+    observer?: ProviderObserver
   }) => Promise<Advice>
 }
 
@@ -62,7 +67,12 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
       results: [],
       createdAt: new Date().toISOString(),
     }
-    this.strategy.save(session)
+    this.strategy.sessions?.start(
+      session.id,
+      this.strategy.name === 'Bob' ? 'bob' : 'linus',
+      session,
+    )
+    this.save(session)
     this.launch(session)
     return session
   }
@@ -82,7 +92,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     session.status = 'running'
     session.error = undefined
     session.progress = 'Reconciling the available review…'
-    this.strategy.save(session)
+    this.save(session)
     this.launch(session, true)
     return session
   }
@@ -93,7 +103,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
       session.status = 'cancelled'
       session.progress = 'Review cancelled. Completed recommendations are saved.'
       session.pending = undefined
-      this.strategy.save(session)
+      this.save(session)
     }
     return session
   }
@@ -107,7 +117,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
       error: undefined,
       progress: 'Retrying the remaining PRs…',
     })
-    this.strategy.save(session)
+    this.save(session)
     this.launch(session)
     return session
   }
@@ -121,7 +131,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
       session.status = 'cancelled'
       session.progress =
         'Review interrupted when the app stopped. Completed recommendations are saved.'
-      this.strategy.save(session)
+      this.save(session)
     }
     return session
   }
@@ -132,10 +142,11 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     job.done = this.run(session, controller.signal, single)
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
+        this.strategy.sessions?.diagnostic(session.id, session.progress, cause)
         session.status = 'failed'
         session.error = publicError(cause, `${this.strategy.name} could not review these PRs.`)
         session.progress = 'Review stopped. Completed recommendations are saved.'
-        this.strategy.save(session)
+        this.save(session)
       })
       .finally(() => {
         if (this.running.get(session.id) === job) this.running.delete(session.id)
@@ -188,13 +199,22 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
         this.addSourceLimitation(pending, source.limitation)
       }
       this.progress(session, `The primary model is reconciling PR #${String(pending.pull.number)}…`)
-      const advice = await this.strategy.reconcile({
-        pending,
-        model: session.primary,
-        skill,
-        signal,
-        repository,
-      })
+      const execute = (observer?: ProviderObserver) =>
+        this.strategy.reconcile({
+          pending,
+          model: session.primary,
+          skill,
+          signal,
+          repository,
+          observer,
+        })
+      const advice = this.strategy.sessions
+        ? await this.strategy.sessions.run(
+            session.id,
+            { model: session.primary, label: 'Reconciliation', url: pending.pull.url },
+            execute,
+          )
+        : await execute()
       this.preserveSourceLimitations(pending, advice)
       signal.throwIfAborted()
       session.results.push({
@@ -204,7 +224,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
         reviewers: pending.reviews.filter((review) => review.advice).map((review) => review.model),
       })
       session.pending = undefined
-      this.strategy.save(session)
+      this.save(session)
       return true
     } finally {
       await repository?.close()
@@ -232,9 +252,29 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     this.progress(session, `Two reviewers are looking at PR #${String(pull.number)}…`)
     const models = [session.primary, session.companion] as const
     const outcomes = await Promise.allSettled(
-      models.map((model, reviewer) =>
-        this.strategy.review({ pull, model, skill, signal, companion: reviewer === 1, repository }),
-      ),
+      models.map((model, reviewer) => {
+        const execute = (observer?: ProviderObserver) =>
+          this.strategy.review({
+            pull,
+            model,
+            skill,
+            signal,
+            companion: reviewer === 1,
+            repository,
+            observer,
+          })
+        return this.strategy.sessions
+          ? this.strategy.sessions.run(
+              session.id,
+              {
+                model,
+                label: reviewer === 0 ? 'Primary review' : 'Companion review',
+                url: pull.url,
+              },
+              execute,
+            )
+          : execute()
+      }),
     )
     signal.throwIfAborted()
     return {
@@ -277,8 +317,12 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     ))
       if (!advice.limitations.includes(limitation)) advice.limitations.unshift(limitation)
   }
+  private save(session: ReviewSession<Advice>) {
+    this.strategy.save(session)
+    this.strategy.sessions?.sync(this.strategy.name === 'Bob' ? 'bob' : 'linus', session)
+  }
   private progress(session: ReviewSession<Advice>, progress: string): void {
     session.progress = progress
-    this.strategy.save(session)
+    this.save(session)
   }
 }

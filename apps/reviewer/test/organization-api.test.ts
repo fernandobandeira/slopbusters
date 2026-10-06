@@ -83,6 +83,7 @@ describe('automatic organization API', () => {
         pull,
         organization,
         expect.any(AbortSignal),
+        expect.any(Function),
       )
       finish(pull.groups)
       await vi.waitFor(async () => {
@@ -116,7 +117,12 @@ describe('automatic organization API', () => {
       const next = { provider: Provider.codex, model: 'custom-model' }
       await put(`${app.url}/api/preferences`, { organization: next })
       await organize(url)
-      expect(organizePull).toHaveBeenLastCalledWith(fixturePull(), next, expect.any(AbortSignal))
+      expect(organizePull).toHaveBeenLastCalledWith(
+        fixturePull(),
+        next,
+        expect.any(AbortSignal),
+        expect.any(Function),
+      )
     } finally {
       await app.close()
     }

@@ -4,7 +4,8 @@ import {
   PROCESS_TERMINATION_MS,
   MAX_STDERR_CHARS,
 } from '../limits'
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { StringDecoder } from 'node:string_decoder'
 
 export function runCommand(params: {
   command: string
@@ -16,6 +17,7 @@ export function runCommand(params: {
   signal?: AbortSignal
   includeStderr?: boolean
   maxOutputBytes?: number
+  onStdout?: (chunk: string) => void
 }): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(params.command, params.args, {
@@ -25,6 +27,7 @@ export function runCommand(params: {
       detached: process.platform !== 'win32',
       stdio: ['pipe', 'pipe', 'pipe'],
     })
+    const decoder = new StringDecoder('utf8')
     let output = ''
     let errors = ''
     let bytes = 0
@@ -35,18 +38,7 @@ export function runCommand(params: {
       clearTimeout(timer)
       params.signal?.removeEventListener('abort', abort)
       if (error) {
-        const kill = (signal: NodeJS.Signals) => {
-          try {
-            if (child.pid && process.platform !== 'win32') process.kill(-child.pid, signal)
-            else child.kill(signal)
-          } catch {
-            /* The process group may already have exited. */
-          }
-        }
-        kill('SIGTERM')
-        setTimeout(() => {
-          kill('SIGKILL')
-        }, PROCESS_TERMINATION_MS).unref()
+        terminateCommand(child)
         reject(error)
       } else resolve(params.includeStderr ? `${output}\n${errors}` : output)
     }
@@ -65,12 +57,19 @@ export function runCommand(params: {
       bytes += chunk.length
       if (bytes > (params.maxOutputBytes ?? MAX_COMMAND_OUTPUT_BYTES))
         finish(new Error('The response exceeded the local size limit.'))
-      else output += chunk.toString()
+      else {
+        const text = decoder.write(chunk)
+        output += text
+        notifyOutput(params.onStdout, text, finish)
+      }
     })
     child.stderr.on('data', (chunk: Buffer) => {
       errors = (errors + chunk.toString()).slice(-MAX_STDERR_CHARS)
     })
     child.on('close', (code) => {
+      const tail = decoder.end()
+      output += tail
+      if (tail) notifyOutput(params.onStdout, tail, finish)
       finish(
         code === 0
           ? undefined
@@ -82,4 +81,31 @@ export function runCommand(params: {
     })
     child.stdin.end(params.input ?? '')
   })
+}
+
+function notifyOutput(
+  observer: ((text: string) => void) | undefined,
+  text: string,
+  finish: (error: Error) => void,
+) {
+  try {
+    observer?.(text)
+  } catch (cause) {
+    finish(cause instanceof Error ? cause : new Error('Could not record provider output.'))
+  }
+}
+
+function terminateCommand(child: ChildProcess) {
+  const kill = (signal: NodeJS.Signals) => {
+    try {
+      if (child.pid && process.platform !== 'win32') process.kill(-child.pid, signal)
+      else child.kill(signal)
+    } catch {
+      /* The process group may already have exited. */
+    }
+  }
+  kill('SIGTERM')
+  setTimeout(() => {
+    kill('SIGKILL')
+  }, PROCESS_TERMINATION_MS).unref()
 }

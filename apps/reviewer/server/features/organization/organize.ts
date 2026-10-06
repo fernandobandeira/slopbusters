@@ -1,3 +1,4 @@
+import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import { MAX_REVIEW_SNAPSHOT_CHARACTERS } from '../../limits'
 import { z } from 'zod'
 import { Priority, type ChangeGroup, type PullRequest } from '../../../shared/domain/types'
@@ -54,6 +55,7 @@ export async function organizePull(
   pr: PullRequest,
   { provider, model }: OrganizationPreferences,
   signal: AbortSignal,
+  observer?: ProviderObserver,
 ): Promise<ChangeGroup[]> {
   const sections = pr.files.flatMap((file) =>
     file.hunks.map((hunk) => ({
@@ -69,5 +71,8 @@ export async function organizePull(
     throw new Error(
       'This PR exceeds the initial grouping limit. You can still review every available diff without grouping.',
     )
-  return validateGrouping(pr, await runStructured({ provider, model }, prompt, groupSchema, signal))
+  return validateGrouping(
+    pr,
+    await runStructured({ provider, model }, prompt, groupSchema, signal, { observer }),
+  )
 }

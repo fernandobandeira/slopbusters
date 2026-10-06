@@ -6,10 +6,12 @@ import type { ReviewerStore } from '../../adapters/store'
 import type { ConflictWorkspace } from '../../adapters/conflictWorkspace'
 import { UserError, publicError } from '../../errors'
 import { MAX_GANDALF_TURNS } from '../../limits'
+import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { resolveWithGandalf } from './gandalfResolution'
 
 interface Options {
   store: ReviewerStore
+  sessions?: AgentSessions
   loadPull: (url: string) => Promise<PullRequest>
   openWorkspace: (pull: PullRequest, signal: AbortSignal) => Promise<ConflictWorkspace>
   plan?: (urls: string[], signal: AbortSignal) => Promise<string[]>
@@ -42,7 +44,8 @@ export class GandalfJobs {
       results: [],
       turns: [],
     }
-    this.options.store.saveGandalfSession(session)
+    this.options.sessions?.start(session.id, 'gandalf', session)
+    this.save(session)
     this.launch(session)
     return session
   }
@@ -59,9 +62,13 @@ export class GandalfJobs {
     const session = this.get(id)
     if ([...this.running.values()].some((job) => job.repository === session.repository))
       throw new UserError('Wait for the current Gandalf session to stop before retrying.')
-    Object.assign(session, this.models(), { status: 'running', error: undefined })
+    Object.assign(session, this.models(), {
+      status: 'running',
+      error: undefined,
+      failureContext: undefined,
+    })
     this.launch(session)
-    this.options.store.saveGandalfSession(session)
+    this.save(session)
     return session
   }
   cancel(id: string): GandalfSession {
@@ -70,7 +77,7 @@ export class GandalfJobs {
     if (session.status === 'running') {
       session.status = 'cancelled'
       session.progress = 'Resolution cancelled. Completed PR updates are saved.'
-      this.options.store.saveGandalfSession(session)
+      this.save(session)
     }
     return session
   }
@@ -92,7 +99,7 @@ export class GandalfJobs {
     if (session.status === 'running' && !this.running.has(session.id)) {
       session.status = 'cancelled'
       session.progress = 'Resolution interrupted when the app stopped. Retry the remaining PRs.'
-      this.options.store.saveGandalfSession(session)
+      this.save(session)
     }
     return session
   }
@@ -103,6 +110,8 @@ export class GandalfJobs {
     job.done = this.run(session, controller.signal)
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
+        session.failureContext = session.progress
+        this.options.sessions?.diagnostic(session.id, session.progress, cause)
         session.status = 'failed'
         session.error = publicError(cause, 'Gandalf could not resolve these conflicts.')
         this.progress(session, 'Resolution stopped. Completed PR updates are saved.')
@@ -115,7 +124,7 @@ export class GandalfJobs {
     session.urls = (await this.options.plan?.(session.urls, signal)) ?? session.urls
     signal.throwIfAborted()
     session.results = session.results.filter((result) => session.urls.includes(result.url))
-    this.options.store.saveGandalfSession(session)
+    this.save(session)
     const verifications: (() => Promise<void>)[] = []
     for (const url of session.urls) {
       signal.throwIfAborted()
@@ -132,6 +141,7 @@ export class GandalfJobs {
     const loaded = await this.options.loadPull(url)
     signal.throwIfAborted()
     if (loaded.state !== 'open') throw new UserError('Select open PRs for conflict resolution.')
+    this.progress(session, `Preparing conflicts for PR #${loaded.number}…`)
     const workspace = await this.options.openWorkspace(loaded, signal)
     const pull = workspace.pull
     let resolvedSha = pull.headSha
@@ -182,7 +192,7 @@ export class GandalfJobs {
         session.status = 'cancelled'
         session.progress = 'Resolution cancelled. Completed PR updates are saved.'
       }
-      this.options.store.saveGandalfSession(session)
+      this.save(session)
     } finally {
       await workspace.close()
     }
@@ -208,16 +218,17 @@ export class GandalfJobs {
         `${role === 'primary' ? 'Primary' : 'Secondary'} ${index ? 'reviewing and fixing' : 'resolving'} PR #${pull.number} · turn ${index + 1}…`,
       )
       const snapshot = await workspace.inspect()
-      const turn = await (this.options.resolve ?? resolveWithGandalf)({
+      const request: Parameters<typeof resolveWithGandalf>[0] = {
         pull,
         role,
         initial: index === 0,
-        model: role === 'primary' ? session.primary : session.companion,
+        model: session[role === 'primary' ? 'primary' : 'companion'],
         workspace,
         snapshot,
         history: session.turns,
         signal,
-      })
+      }
+      const turn = await this.modelTurn(session.id, index, request)
       signal.throwIfAborted()
       await workspace.apply(turn.edits, turn.selections)
       const next = await workspace.inspect()
@@ -239,16 +250,39 @@ export class GandalfJobs {
         ],
         revision: next.revision,
       })
-      this.options.store.saveGandalfSession(session)
+      this.save(session)
       if (approvals.size === 2) return index + 1
     }
     throw new UserError(
       'The models have not agreed after 20 turns. Review their findings and retry; this PR was not updated.',
     )
   }
+  private async modelTurn(
+    sessionId: string,
+    index: number,
+    request: Parameters<typeof resolveWithGandalf>[0],
+  ) {
+    const execute = (observer?: import('../../../shared/domain/agentSession').ProviderObserver) =>
+      (this.options.resolve ?? resolveWithGandalf)({ ...request, observer })
+    return this.options.sessions
+      ? await this.options.sessions.run(
+          sessionId,
+          {
+            model: request.model,
+            label: `${request.role} · turn ${index + 1}`,
+            url: request.pull.url,
+          },
+          execute,
+        )
+      : await execute()
+  }
+  private save(session: GandalfSession) {
+    this.options.store.saveGandalfSession(session)
+    this.options.sessions?.sync('gandalf', session)
+  }
   private progress(session: GandalfSession, progress: string) {
     session.progress = progress
-    this.options.store.saveGandalfSession(session)
+    this.save(session)
   }
 }
 

@@ -8,6 +8,7 @@ import type { OrganizationPreferences } from '../../../shared/domain/preferences
 import type { PullRequest } from '../../../shared/domain/types'
 import { loadReviewSkill } from '../../adapters/reviewSkill'
 import { reviewEvidence } from '../../reviewSnapshot'
+import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import { runStructured } from '../../adapters/provider'
 import type { RepositoryContext } from '../../adapters/repositoryTools'
 
@@ -38,13 +39,17 @@ interface ReviewRequest {
   signal: AbortSignal
   companion: boolean
   repository?: RepositoryContext
+  observer?: ProviderObserver
 }
 export async function reviewWithBob(request: ReviewRequest): Promise<BobAdvice> {
   const { pull, model, skill, signal, companion, repository } = request
   const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nYou are the independent ${companion ? 'companion' : 'primary'} reviewer. Inspect the code for yourself; a clean review is valid.\n\nPR snapshot:\n${reviewEvidence(pull, 'Bob')}`
   return validateBobAdvice(
     pull,
-    await runStructured(model, prompt, bobAdviceSchema, signal, repository),
+    await runStructured(model, prompt, bobAdviceSchema, signal, {
+      repository,
+      observer: request.observer,
+    }),
   )
 }
 export async function reconcileWithBob(request: {
@@ -53,12 +58,16 @@ export async function reconcileWithBob(request: {
   skill: string
   signal: AbortSignal
   repository?: RepositoryContext
+  observer?: ProviderObserver
 }): Promise<BobAdvice> {
   const { pending, model, skill, signal, repository } = request
   const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nReconcile both independent reviews against the original code. Verify findings by evidence, not votes. Deduplicate overlapping findings, discard unsupported assertions and stylistic preferences, keep actionable concrete fixes, and preserve material unresolved disagreements. Do not concatenate the lists. Keep stable finding IDs when retaining a finding.\n\nPR snapshot:\n${reviewEvidence(pending.pull, 'Bob')}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
   const advice = validateBobAdvice(
     pending.pull,
-    await runStructured(model, prompt, bobAdviceSchema, signal, repository),
+    await runStructured(model, prompt, bobAdviceSchema, signal, {
+      repository,
+      observer: request.observer,
+    }),
   )
   if (pending.reviews.some((review) => !review.advice))
     advice.limitations.unshift(

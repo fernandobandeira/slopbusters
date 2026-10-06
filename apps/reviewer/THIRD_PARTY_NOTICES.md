@@ -6,6 +6,8 @@ The following files originated under `apps/web/src/` at that commit:
 
 - `components/ui/{button,badge,input,dialog,scroll-area}.tsx` and `components/ui/dialog-styles.ts`: reused with their original appearance and Base UI behavior.
 - `components/diffs/StyledDiffCodeView.tsx`: preserves T3’s shadow-root styling and virtualized geometry; types adapted to the installed Pierre viewer’s additional generic parameter. Slopbusters pairs its 22px line styling with matching virtual row metrics and adds space below the final file.
+- `components/chat/TimelineSystemDivider.tsx`: retains the transcript divider; tooltip actions are omitted.
+- `components/chat/SessionMarkdown.tsx`: extracts `ChatMarkdown.tsx`'s sanitized React Markdown pipeline for streamed transcripts; T3 workspace, media, clipboard, and editor actions are omitted. Session layout and provider event adapters are specific to Slopbusters.
 - `components/ProviderLogos.tsx`: only the OpenAI and ClaudeAI SVG components are extracted from upstream `components/Icons.tsx`; their fill classes are adapted to direct SVG fill attributes. These marks identify the installed providers and do not imply endorsement.
 - `components/DiffWorkerPoolProvider.tsx`: preserves T3’s shared worker lifecycle, readiness and theme synchronization; its Effect error wrapper is replaced with a native Error.
 - `lib/diffRendering.ts`: the shared diff surface CSS and theme resolver are extracted; application-specific patch utilities are omitted.

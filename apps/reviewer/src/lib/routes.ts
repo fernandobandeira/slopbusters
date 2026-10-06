@@ -14,6 +14,7 @@ type PullRoute = {
 export type AppRoute =
   | InboxRoute
   | PullRoute
+  | { kind: 'sessions'; id?: string; repository?: string; filter: InboxFilter }
   | { kind: 'settings'; repository?: undefined; filter: InboxFilter }
   | { kind: 'not-found' }
 export interface ReviewView {
@@ -23,6 +24,8 @@ export interface ReviewView {
 export function readRoute(params: { pathname: string; search: string }): AppRoute {
   const query = new URLSearchParams(params.search)
   const filter = inboxFilter(query.get('inbox'))
+  const sessionRoute = readSessionRoute(params.pathname, query, filter)
+  if (sessionRoute) return sessionRoute
   if (params.pathname === '/settings') return { kind: 'settings', filter }
   if (params.pathname === '/') return { kind: 'inbox', filter }
   const pull = matchPath('/repos/:owner/:repo/pulls/:number', params.pathname)
@@ -91,4 +94,20 @@ function inboxFilter(value: string | null): InboxFilter {
 }
 function validRepository(value: string | null): string | undefined {
   return value && /^[\w.-]+\/[\w.-]+$/.test(value) ? value : undefined
+}
+
+function readSessionRoute(
+  pathname: string,
+  query: URLSearchParams,
+  filter: InboxFilter,
+): AppRoute | undefined {
+  const sessions = matchPath('/sessions/:id', pathname)
+  if (pathname === '/sessions' || sessions)
+    return {
+      kind: 'sessions',
+      id: sessions?.params.id,
+      repository: validRepository(query.get('repository')),
+      filter,
+    }
+  return undefined
 }

@@ -1,3 +1,4 @@
+import type { AgentSessions } from '../agent-sessions/agentSessions'
 import type { BobAdvice } from '../../../shared/domain/bob'
 import { organizationDefaults } from '../../../shared/domain/preferences'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
@@ -11,6 +12,7 @@ import type { ReviewerStore } from '../../adapters/store'
 export class BobJobs extends DualReviewJobs<BobAdvice> {
   constructor(options: {
     store: ReviewerStore
+    sessions?: AgentSessions
     staticDirectory: string
     skillDirectory?: string
     openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<RepositoryContext>
@@ -19,6 +21,7 @@ export class BobJobs extends DualReviewJobs<BobAdvice> {
     const { store, staticDirectory, skillDirectory, openRepository, loadPull = fetchPull } = options
     super({
       name: 'Bob',
+      sessions: options.sessions,
       models: () => {
         const { organization: primary, companion } = store.getPreferences()
         if (!primary) throw new UserError('Choose your primary model in Settings first.')

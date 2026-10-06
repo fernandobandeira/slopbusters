@@ -1,3 +1,6 @@
+import { AgentSessionStore } from '../server/adapters/agentSessionStore'
+import { AgentSessions } from '../server/features/agent-sessions/agentSessions'
+import { readFileSync } from 'node:fs'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -247,4 +250,29 @@ describe('Gandalf session lifecycle', () => {
       results: [{ published: true }],
     })
   })
+})
+
+it('records the preparation phase and private cause when no model pass could start', async () => {
+  const traces = new AgentSessionStore(directory)
+  jobs = new GandalfJobs({
+    store,
+    loadPull,
+    openWorkspace,
+    resolve,
+    sessions: new AgentSessions(traces),
+  })
+  openWorkspace.mockRejectedValueOnce(new Error('private checkout failure'))
+  const started = jobs.start('review-room/example', [fixturePull().url])
+  const saved = await completed(started.id, 'failed')
+  expect(saved.failureContext).toBe(`Preparing conflicts for PR #${fixturePull().number}…`)
+  expect(traces.getSession(started.id)).toMatchObject({
+    status: 'failed',
+    failureContext: saved.failureContext,
+    runs: [],
+  })
+  expect(readFileSync(join(directory, 'agent-diagnostics', `${started.id}.log`), 'utf8')).toContain(
+    'private checkout failure',
+  )
+  await jobs.close()
+  traces.close()
 })

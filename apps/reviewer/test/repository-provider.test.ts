@@ -1,3 +1,5 @@
+import type { ProviderObserver } from '../shared/domain/agentSession'
+import { required } from './fixtures/bob'
 import { writeFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
@@ -82,4 +84,40 @@ describe('repository-aware provider execution', () => {
     expect(command.args).toContain('--safe-mode')
     expect(command.args[command.args.indexOf('--tools') + 1]).toBe('')
   })
+})
+
+it('streams Claude output while retaining structured result validation', async () => {
+  const observer = vi.fn<ProviderObserver>()
+  vi.mocked(runCommand).mockImplementation(({ onStdout }) => {
+    onStdout?.(
+      '{"type":"assistant","message":{"id":"message","content":[{"type":"text","text":"Reviewing"}]}}\n',
+    )
+    onStdout?.('{"type":"result","structured_output":{"answer":"Inspected"}}\n')
+    return Promise.resolve('')
+  })
+  const result = await runStructured(
+    { provider: Provider.claude, model: 'claude-opus-5-5' },
+    'Inspect this PR',
+    schema,
+    new AbortController().signal,
+    { repository, observer },
+  )
+  expect(result).toEqual({ answer: 'Inspected' })
+  expect(observer.mock.calls.map(([event]) => event.kind)).toEqual(['prompt', 'assistant'])
+  const command = required(vi.mocked(runCommand).mock.calls[0])[0]
+  expect(command.args).toContain('stream-json')
+  expect(command.args).toContain('--include-partial-messages')
+  vi.mocked(runCommand).mockImplementation(({ onStdout }) => {
+    onStdout?.('{"type":"result","structured_output":{"wrong":true}}\n')
+    return Promise.resolve('')
+  })
+  await expect(
+    runStructured(
+      { provider: Provider.claude, model: 'claude-opus-5-5' },
+      'Inspect this PR',
+      schema,
+      new AbortController().signal,
+      { observer },
+    ),
+  ).rejects.toThrow()
 })

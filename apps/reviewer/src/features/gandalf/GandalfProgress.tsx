@@ -35,6 +35,9 @@ export function GandalfProgress({
           {latest.summary}
         </p>
       )}
+      {session.failureContext && (
+        <p className="gandalf-detail">Stopped during: {session.failureContext}</p>
+      )}
       {session.error && <p role="alert">{session.error}</p>}
       {session.results.map((result) => (
         <p className="gandalf-detail" key={result.url}>

@@ -1,3 +1,4 @@
+import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import { gandalfTurnSchema, type GandalfSession } from '../../../shared/domain/gandalf'
 import type { PullRequest } from '../../../shared/domain/types'
@@ -13,6 +14,7 @@ export function resolveWithGandalf(request: {
   snapshot: ConflictSnapshot
   history: GandalfSession['turns']
   signal: AbortSignal
+  observer?: ProviderObserver
 }) {
   const { pull, role, initial, model, workspace, snapshot, history, signal } = request
   const prompt = `You are Gandalf, resolving merge conflicts for ${pull.owner}/${pull.repo} PR #${pull.number}.
@@ -28,5 +30,8 @@ Current resolution (complete diff from the original head, plus conflict file con
 ${JSON.stringify(snapshot)}
 Previous turns for this PR:
 ${JSON.stringify(history.filter((turn) => turn.url === pull.url))}`
-  return runStructured(model, prompt, gandalfTurnSchema, signal, { directory: workspace.directory })
+  return runStructured(model, prompt, gandalfTurnSchema, signal, {
+    repository: { directory: workspace.directory },
+    observer: request.observer,
+  })
 }

@@ -1,3 +1,4 @@
+import type { AgentSessions } from '../agent-sessions/agentSessions'
 import type { LinusAdvice } from '../../../shared/domain/linus'
 import { organizationDefaults } from '../../../shared/domain/preferences'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
@@ -16,11 +17,13 @@ export class LinusJobs extends DualReviewJobs<LinusAdvice> {
     ...dependencies: [
       openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<RepositoryContext>,
       loadPull?: typeof fetchPull,
+      sessions?: AgentSessions,
     ]
   ) {
-    const [openRepository, loadPull = fetchPull] = dependencies
+    const [openRepository, loadPull = fetchPull, sessions] = dependencies
     super({
       name: 'Linus',
+      sessions,
       models: () => {
         const { organization: primary, companion } = store.getPreferences()
         if (!primary) throw new UserError('Choose your primary model in Settings first.')
@@ -40,13 +43,13 @@ export class LinusJobs extends DualReviewJobs<LinusAdvice> {
       latest: (repository) => store.latestLinusSession(repository),
       loadPull,
       openRepository,
-      review: ({ pull, model, skill, signal, companion, repository }) =>
-        repository
-          ? reviewWithLinus(pull, model, skill, signal, companion, repository)
+      review: ({ pull, model, skill, signal, companion, repository, observer }) =>
+        repository || observer
+          ? reviewWithLinus(pull, model, skill, signal, companion, { repository, observer })
           : reviewWithLinus(pull, model, skill, signal, companion),
-      reconcile: ({ pending, model, skill, signal, repository }) =>
-        repository
-          ? reconcileWithLinus(pending, model, skill, signal, repository)
+      reconcile: ({ pending, model, skill, signal, repository, observer }) =>
+        repository || observer
+          ? reconcileWithLinus(pending, model, skill, signal, { repository, observer })
           : reconcileWithLinus(pending, model, skill, signal),
     })
   }

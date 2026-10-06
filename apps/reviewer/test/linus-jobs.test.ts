@@ -117,8 +117,17 @@ describe('dual Linus review sessions', () => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
     expect(prepare).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(reviewWithLinus).mock.calls.every((call) => call[5]! === context)).toBe(true)
-    expect(vi.mocked(reconcileWithLinus).mock.calls[0]![4]!).toBe(context)
+    expect(
+      vi
+        .mocked(reviewWithLinus)
+        .mock.calls.every(
+          (call) => call[5] && 'repository' in call[5] && call[5].repository === context,
+        ),
+    ).toBe(true)
+    expect(vi.mocked(reconcileWithLinus).mock.calls[0]![4]!).toEqual({
+      repository: context,
+      observer: undefined,
+    })
     await vi.waitFor(() => {
       expect(context.close).toHaveBeenCalledTimes(1)
     })

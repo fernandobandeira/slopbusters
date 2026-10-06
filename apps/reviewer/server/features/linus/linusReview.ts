@@ -9,7 +9,7 @@ import {
 } from '../../../shared/domain/linus'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import type { PullRequest } from '../../../shared/domain/types'
-import { runStructured } from '../../adapters/provider'
+import { runStructured, providerOptions, type ProviderOptions } from '../../adapters/provider'
 import type { RepositoryContext } from '../../adapters/repositoryTools'
 
 export const linusSkillFiles = ['SKILL.md', 'references/review-only.md']
@@ -45,10 +45,14 @@ export async function reviewWithLinus(
   skill: string,
   signal: AbortSignal,
   companion = false,
-  repository?: RepositoryContext,
+  options?: RepositoryContext | ProviderOptions,
 ): Promise<LinusAdvice> {
-  const prompt = `${skill}\n\n${contract}\n\n${repositoryInstructions(repository)}\n\n${companion ? 'You are the independent companion reviewer. Challenge weak reasoning and inspect possible review boundaries. You need not find a problem or disagree.' : 'You are the independent primary reviewer.'}\n\nPR snapshot:\n${reviewEvidence(pull)}`
-  return validateAdvice(pull, await runStructured(model, prompt, adviceSchema, signal, repository))
+  const { repository, observer } = providerOptions(options)
+  const prompt = `${skill}\n\n${contract}\n\n${repositoryInstructions(repository && 'url' in repository ? repository : undefined)}\n\n${companion ? 'You are the independent companion reviewer. Challenge weak reasoning and inspect possible review boundaries. You need not find a problem or disagree.' : 'You are the independent primary reviewer.'}\n\nPR snapshot:\n${reviewEvidence(pull)}`
+  return validateAdvice(
+    pull,
+    await runStructured(model, prompt, adviceSchema, signal, { repository, observer }),
+  )
 }
 
 export async function reconcileWithLinus(
@@ -56,12 +60,13 @@ export async function reconcileWithLinus(
   primary: OrganizationPreferences,
   skill: string,
   signal: AbortSignal,
-  repository?: RepositoryContext,
+  options?: RepositoryContext | ProviderOptions,
 ): Promise<LinusAdvice> {
-  const prompt = `${skill}\n\n${contract}\n\n${repositoryInstructions(repository)}\n\nReconcile the independent reviews below against the original snapshot. Choose the recommendation best supported by evidence, not by counting votes. Discard unsupported assertions. Preserve material unresolved disagreements in disagreements. If a reviewer failed, disclose the single-model review in limitations. Reconcile only findings within the title, description, and PR-boundary scope; discard code-review advice even if both reviewers agree. Rank the useful findings and compose at most three guided turns, without concatenating the two reviewers’ lists. Keep full wording and split plans in the structured fields. Be dry and precise, never insulting.\n\nPR snapshot:\n${reviewEvidence(pending.pull)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
+  const { repository, observer } = providerOptions(options)
+  const prompt = `${skill}\n\n${contract}\n\n${repositoryInstructions(repository && 'url' in repository ? repository : undefined)}\n\nReconcile the independent reviews below against the original snapshot. Choose the recommendation best supported by evidence, not by counting votes. Discard unsupported assertions. Preserve material unresolved disagreements in disagreements. If a reviewer failed, disclose the single-model review in limitations. Reconcile only findings within the title, description, and PR-boundary scope; discard code-review advice even if both reviewers agree. Rank the useful findings and compose at most three guided turns, without concatenating the two reviewers’ lists. Keep full wording and split plans in the structured fields. Be dry and precise, never insulting.\n\nPR snapshot:\n${reviewEvidence(pending.pull)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
   const advice = validateAdvice(
     pending.pull,
-    await runStructured(primary, prompt, adviceSchema, signal, repository),
+    await runStructured(primary, prompt, adviceSchema, signal, { repository, observer }),
   )
   if (pending.reviews.some((review) => !review.advice))
     advice.limitations.unshift(

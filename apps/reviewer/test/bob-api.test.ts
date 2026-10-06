@@ -1,3 +1,4 @@
+import { getAgentSession } from '../shared/api/agentSessions'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -101,6 +102,7 @@ describe('Bob API contracts and persistent tours', () => {
           )
         ).json(),
       )
+      await expectSavedTranscript(app.url, id)
       expect(latest.session?.id).toBe(id)
       expect(latest.session?.results[0]?.advice.findings).toEqual(fixtureBobAdvice().findings)
       saveFailedRetry(directory, required(latest.session))
@@ -148,4 +150,17 @@ async function expectSavedReviews(url: string, id: string) {
     await (await fetch(`${url}/api/bob/reviews?repository=elsewhere/repo`)).json(),
   )
   expect(elsewhere.reviews).toEqual([])
+}
+
+async function expectSavedTranscript(url: string, id: string) {
+  const transcript = getAgentSession.response.parse(
+    await (await fetch(`${url}/api/agent-sessions/${id}`)).json(),
+  )
+  expect(transcript).toMatchObject({ kind: 'bob', status: 'complete' })
+  expect(transcript.runs.map((run) => run.label)).toEqual([
+    'Primary review',
+    'Companion review',
+    'Reconciliation',
+  ])
+  expect(transcript.runs.every((run) => run.status === 'complete')).toBe(true)
 }
