@@ -1,8 +1,12 @@
 // @vitest-environment happy-dom
+import { GandalfCompanion } from '../src/features/gandalf/GandalfCompanion'
+import { BobCompanion } from '../src/features/bob/BobCompanion'
+import { LinusCompanion } from '../src/features/linus/LinusCompanion'
+import { fixturePull } from './fixtures/pull'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
-import { AgentActivity } from '../src/features/agent-sessions/AgentActivity'
+import { AgentSessionCard } from '../src/features/agent-sessions/AgentSessionCard'
 import { SessionsPage } from '../src/features/agent-sessions/SessionsPage'
 import { SessionMarkdown } from '~/components/chat/SessionMarkdown'
 import { Provider } from '../shared/domain/types'
@@ -68,7 +72,7 @@ it('shows a running model card linked to its session', async () => {
   vi.stubGlobal('fetch', fetchSessions())
   render(
     <MemoryRouter>
-      <AgentActivity repository="example/project" />
+      <AgentSessionCard sessionId="session" repository="example/project" />
     </MemoryRouter>,
   )
   const card = await screen.findByRole('link', { name: /Gandalf.*running.*Claude Opus 5.5/ })
@@ -161,3 +165,65 @@ it('sanitizes model Markdown and avoids loading remote images', () => {
 function requestUrl(input: RequestInfo | URL) {
   return typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
 }
+
+it.each(['gandalf', 'bob', 'linus'] as const)(
+  'keeps the %s session card inside its own chat bubble',
+  async (kind) => {
+    const job = { ...root, primary: first.model, companion: second.model, turns: [], results: [] }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = requestUrl(input)
+        return Promise.resolve(
+          Response.json(
+            url.includes('/agent-sessions')
+              ? { sessions: [{ ...session, kind }] }
+              : url.includes('/latest')
+                ? { session: job }
+                : job,
+          ),
+        )
+      }),
+    )
+    const renderSessionCard = (sessionId: string) => (
+      <AgentSessionCard sessionId={sessionId} repository={root.repository} />
+    )
+    const companions = {
+      gandalf: (
+        <GandalfCompanion
+          repository={root.repository}
+          pulls={[]}
+          ready
+          onClose={vi.fn()}
+          onComplete={vi.fn()}
+          renderSessionCard={renderSessionCard}
+        />
+      ),
+      bob: (
+        <BobCompanion
+          pull={{ ...fixturePull(), owner: 'example', repo: 'project', url: root.urls[0] ?? '' }}
+          draft={{ viewedFileIds: [], comments: [], summary: '' }}
+          setDraft={vi.fn()}
+          ready
+          openReview={vi.fn()}
+          focusLine={vi.fn()}
+          replaySessionId={root.id}
+          renderSessionCard={renderSessionCard}
+        />
+      ),
+      linus: (
+        <LinusCompanion
+          repository={root.repository}
+          pulls={[]}
+          available={false}
+          sessionId={root.id}
+          renderSessionCard={renderSessionCard}
+        />
+      ),
+    }
+    render(<MemoryRouter>{companions[kind]}</MemoryRouter>)
+    const card = await screen.findByRole('link', { name: /Claude Opus 5.5/ })
+    expect(card.closest('.gandalf-bubble, .linus-bubble')).not.toBeNull()
+    expect(card.getAttribute('href')).toBe('/sessions/session?repository=example%2Fproject')
+  },
+)

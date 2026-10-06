@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Button } from '~/components/ui/button'
 import { X } from 'lucide-react'
 import type { InboxPull } from '../../../shared/domain/types'
@@ -13,9 +13,17 @@ interface GandalfProps {
   ready: boolean
   onClose: () => void
   onComplete: () => void
+  renderSessionCard?: (sessionId: string) => ReactNode
 }
 
-export function GandalfCompanion({ repository, pulls, ready, onClose, onComplete }: GandalfProps) {
+export function GandalfCompanion({
+  repository,
+  pulls,
+  ready,
+  onClose,
+  onComplete,
+  renderSessionCard,
+}: GandalfProps) {
   const { session, busy, loading, error, act, reload } = useGandalfSession(repository, onComplete)
   const [selected, setSelected] = useState<string[]>([])
   const [choosing, setChoosing] = useState(true)
@@ -51,16 +59,19 @@ export function GandalfCompanion({ repository, pulls, ready, onClose, onComplete
           </p>
         )}
         {showingProgress ? (
-          <GandalfProgress
-            session={session}
-            busy={busy}
-            onCancel={() => void act('cancel')}
-            onRetry={() => void act('retry')}
-            onChoose={() => {
-              setSelected([])
-              setChoosing(true)
-            }}
-          />
+          <>
+            {renderSessionCard?.(session.id)}
+            <GandalfProgress
+              session={session}
+              busy={busy}
+              onCancel={() => void act('cancel')}
+              onRetry={() => void act('retry')}
+              onChoose={() => {
+                setSelected([])
+                setChoosing(true)
+              }}
+            />
+          </>
         ) : (
           <GandalfSelection
             pulls={pulls}

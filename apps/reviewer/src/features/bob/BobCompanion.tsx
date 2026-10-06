@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react'
+import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
 import { LoaderCircle, X } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import { bobSnapshotMatches } from '../../../shared/domain/bob'
@@ -13,6 +13,7 @@ export function BobCompanion(
     replaySessionId?: string
     onClose?: () => void
     onSessionUpdate?: () => void
+    renderSessionCard?: (sessionId: string) => ReactNode
   },
 ) {
   const { pull } = context
@@ -56,7 +57,13 @@ export function BobCompanion(
       className="linus-companion bob-companion linus-open"
       aria-label="Uncle Bob code review companion"
     >
-      <BobPanel job={job} tour={tour} context={context} close={close} />
+      <BobPanel
+        job={job}
+        tour={tour}
+        context={context}
+        close={close}
+        renderSessionCard={context.renderSessionCard}
+      />
       <button className="linus-portrait" aria-label="Minimize Uncle Bob" onClick={close}>
         <img src={`/unclebob/${tour.emotion}.png`} alt={`Uncle Bob, ${tour.emotion}`} />
       </button>
@@ -69,11 +76,13 @@ function BobPanel({
   tour,
   context,
   close,
+  renderSessionCard,
 }: {
   job: ReturnType<typeof useBobSession>
   tour: ReturnType<typeof useBobTour>
   context: BobDraftContext
   close: () => void
+  renderSessionCard?: (sessionId: string) => ReactNode
 }) {
   const { session, loading, busy, error, act } = job
   const { result, index, advance } = tour
@@ -87,6 +96,7 @@ function BobPanel({
           <X size={16} />
         </button>
       </header>
+      {session && renderSessionCard?.(session.id)}
       <BobJobControls job={job} hasResult={Boolean(result)} />
       {result && <BobTour result={result} index={index} advance={advance} context={context} />}
       {!result && (

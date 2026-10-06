@@ -1,6 +1,6 @@
 import { useClipboard } from '../../lib/useClipboard'
 import * as routes from '../../../shared/api'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import {
   ArrowUpRight,
@@ -189,6 +189,7 @@ export function LinusCompanion({
   replayRequest,
   onSessionUpdate,
   sessionId,
+  renderSessionCard,
   onClose,
 }: {
   repository: string
@@ -200,6 +201,7 @@ export function LinusCompanion({
   replayRequest?: LinusReplayRequest
   onSessionUpdate?: () => void
   sessionId?: string
+  renderSessionCard?: (sessionId: string) => ReactNode
   onClose?: () => void
 }) {
   const { session, loading, busy, error, act, reload } = useLinusSession(repository, sessionId)
@@ -243,6 +245,7 @@ export function LinusCompanion({
   const result = turn?.result
   const turnKey = result ? `${reviewId}:${index}:${result.fingerprint}` : ''
   const evidence = Boolean(turnKey && hiddenEvidenceTurn !== turnKey)
+  const activitySessionId = replayRequest?.sessionId ?? session?.id
   const active = session?.status === 'running'
   const reviewMode = mode === 'review' && !selecting && !replayLoading
   const emotion =
@@ -364,6 +367,7 @@ export function LinusCompanion({
               <X size={16} />
             </button>
           </header>
+          {!selecting && activitySessionId && renderSessionCard?.(activitySessionId)}
           {mode === 'intro' && !selecting && !replayLoading && (
             <>
               <p className="linus-speech">

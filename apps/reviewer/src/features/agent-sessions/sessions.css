@@ -1,16 +1,4 @@
-.agent-activity {
-  position: fixed;
-  right: 20px;
-  top: 72px;
-  z-index: 45;
-  display: grid;
-  gap: 8px;
-  width: 260px;
-  max-width: calc(100vw - 24px);
-  max-height: 50vh;
-  overflow-y: auto;
-}
-.agent-activity-card,
+.agent-session-card,
 .session-history-card {
   display: block;
   border: 1px solid var(--border);
@@ -21,21 +9,22 @@
   box-shadow: 0 6px 24px #0002;
   text-decoration: none;
 }
-.agent-activity-card {
+.agent-session-card {
   min-width: 0;
+  margin: 14px 0;
 }
-.agent-activity-card:hover,
+.agent-session-card:hover,
 .session-history-card:hover {
   border-color: var(--primary);
 }
-.agent-activity-card > div,
+.agent-session-card > div,
 .session-history-card > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
-.agent-activity-card small {
+.agent-session-card small {
   display: block;
   color: var(--muted-foreground);
   overflow: hidden;
@@ -359,9 +348,5 @@
   }
   .session-transcript {
     flex: 1;
-  }
-  .agent-activity {
-    width: 230px;
-    right: 12px;
   }
 }

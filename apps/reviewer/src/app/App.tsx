@@ -1,4 +1,4 @@
-import { AgentActivity } from '../features/agent-sessions/AgentActivity'
+import { AgentSessionCard } from '../features/agent-sessions/AgentSessionCard'
 import { SessionsPage } from '../features/agent-sessions/SessionsPage'
 import type { Repository } from '../../shared/domain/types'
 import { GandalfCompanion } from '../features/gandalf/GandalfCompanion'
@@ -177,6 +177,9 @@ export function App() {
     } catch (error) {
       setError(message(error))
     }
+  }
+  function renderSessionCard(sessionId: string) {
+    return <AgentSessionCard sessionId={sessionId} repository={repository} />
   }
   const myPulls = inbox ? inboxPulls(inbox, 'mine') : []
   const selectedLinusUrls =
@@ -419,6 +422,7 @@ export function App() {
                     renderCompanion={({ draft, setDraft, ready, openReview, focusLine }) =>
                       bobReplayId && (
                         <BobCompanion
+                          renderSessionCard={renderSessionCard}
                           key={`${pull.id}:${bobReplayId}`}
                           replaySessionId={bobReplayId}
                           onClose={closeBob}
@@ -461,6 +465,7 @@ export function App() {
           route.kind !== 'sessions' &&
           (activeLinusReplay || linusSessionId || selectingForLinus) && (
             <LinusCompanion
+              renderSessionCard={renderSessionCard}
               key={`${repository}:${activeLinusReplay ? 'replay' : linusSessionId}`}
               sessionId={activeLinusReplay ? undefined : linusSessionId}
               onClose={() => {
@@ -494,6 +499,7 @@ export function App() {
           )}
         {repository && gandalfRepository === repository && route.kind === 'inbox' && (
           <GandalfCompanion
+            renderSessionCard={renderSessionCard}
             key={repository}
             repository={repository}
             pulls={
@@ -568,7 +574,6 @@ export function App() {
           </div>
         </DialogPopup>
       </Dialog>
-      {route.kind !== 'sessions' && <AgentActivity repository={repository || undefined} />}
       <UpdateButton />
     </div>
   )
