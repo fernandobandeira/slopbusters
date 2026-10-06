@@ -385,6 +385,7 @@ export function App() {
                           })
                         }}
                         reviewStarting={Boolean(reviewLaunch.starting)}
+                        reviewStartDisabled={savedBob.loading}
                         onStartReview={(companion) => {
                           startReview(companion, pull.url)
                         }}

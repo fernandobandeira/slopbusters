@@ -34,6 +34,7 @@ export function PullReviewActions({
         <BobReviewBadge
           review={bobReview}
           headSha={pull.headSha}
+          showLabel={startCompanion === 'bob'}
           onOpen={() => {
             onBobReplay(bobReview)
           }}
@@ -48,7 +49,7 @@ export function PullReviewActions({
           }}
         />
       )}
-      {onStartReview && (
+      {onStartReview && !(startCompanion === 'bob' && bobReview) && (
         <StartReviewButton
           number={pull.number}
           busy={reviewStarting}

@@ -5,6 +5,9 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as routes from '../shared/api'
 import { Provider } from '../shared/domain/types'
+import type { BobReviewSummary } from '../shared/domain/bob'
+import { useApiQuery } from '../src/lib/useApiQuery'
+import { useBobSession } from '../src/features/bob/useBobSession'
 import { App } from '../src/app/App'
 import { call } from '../src/lib/api'
 import { useLinusSession } from '../src/features/linus/useLinusSession'
@@ -31,7 +34,7 @@ const recommendation = {
   verdict: 'keep',
   recommendationCount: 1,
 }
-const bobReview = {
+const bobReview: BobReviewSummary = {
   sessionId: 'saved-bob',
   createdAt: '',
   url: pull.url,
@@ -41,6 +44,9 @@ const bobReview = {
   findingCount: 1,
 }
 
+let savedReviews = [bobReview]
+let savedReviewsLoading = false
+
 vi.mock('../src/lib/api', async (original) => ({ ...(await original()), call: vi.fn() }))
 vi.mock('../src/lib/usePreferences', () => ({
   usePreferences: () => ({
@@ -49,11 +55,7 @@ vi.mock('../src/lib/usePreferences', () => ({
     reload: vi.fn(),
   }),
 }))
-vi.mock('../src/lib/useApiQuery', () => ({
-  useApiQuery: (route: { path: string }) => ({
-    data: route.path === '/bob/reviews' ? { reviews: [bobReview] } : undefined,
-  }),
-}))
+vi.mock('../src/lib/useApiQuery', () => ({ useApiQuery: vi.fn() }))
 vi.mock('../src/features/inbox/useInbox', () => ({
   useInbox: () => ({
     inbox: {
@@ -70,7 +72,7 @@ vi.mock('../src/features/linus/useLinusRecommendations', () => ({
   useLinusRecommendations: () => ({ recommendations: [recommendation] }),
 }))
 vi.mock('../src/features/linus/useLinusSession', () => ({ useLinusSession: vi.fn() }))
-vi.mock('../src/features/bob/useBobSession', () => ({ useBobSession: () => job }))
+vi.mock('../src/features/bob/useBobSession', () => ({ useBobSession: vi.fn() }))
 vi.mock('../src/features/review/usePullReview', () => ({
   usePullReview: (route: { kind: string }) => ({ pull: route.kind === 'pull' ? pull : undefined }),
 }))
@@ -92,6 +94,16 @@ vi.mock('../src/features/review/ReviewWorkspace', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  savedReviews = [bobReview]
+  savedReviewsLoading = false
+  vi.mocked(useApiQuery).mockImplementation((route) => ({
+    data: route.path === '/bob/reviews' ? { reviews: savedReviews } : undefined,
+    error: undefined,
+    loading: route.path === '/bob/reviews' && savedReviewsLoading,
+    setData: vi.fn(),
+    reload: vi.fn(),
+  }))
+  vi.mocked(useBobSession).mockReturnValue(job)
   vi.mocked(useLinusSession).mockReturnValue(job)
   vi.mocked(call).mockImplementation((route) => {
     if (route === routes.startBob || route === routes.startLinus)
@@ -145,20 +157,6 @@ describe('Review entry points', () => {
     },
   )
 
-  it('starts Uncle Bob directly on the single PR in the diff', async () => {
-    openPage(`/repos/${repository}/pulls/${pull.number}?inbox=mine&group=permissions&diff=split`)
-    expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: `Start review of PR #${pull.number}` }))
-    expect(screen.queryByRole('menu')).toBeNull()
-    expect(
-      await screen.findByRole('complementary', { name: 'Uncle Bob code review companion' }),
-    ).toBeTruthy()
-    expect(call).toHaveBeenCalledWith(routes.startBob, {
-      body: { repository, urls: [pull.url] },
-    })
-    expect(call).not.toHaveBeenCalledWith(routes.startLinus, expect.anything())
-  })
-
   it('reopens Uncle Bob from a saved badge after closing the panel', async () => {
     openPage()
     fireEvent.click(screen.getByRole('button', { name: /Open saved Uncle Bob review/ }))
@@ -180,6 +178,77 @@ describe('Review entry points', () => {
     expect(screen.getByText('Choose a primary model first.')).toBeTruthy()
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
     await choose('Uncle Bob')
+    expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
+  })
+})
+
+describe('Uncle Bob action in the diff view', () => {
+  it('starts Uncle Bob directly on the single PR in the diff', async () => {
+    savedReviews = []
+    openPage(`/repos/${repository}/pulls/${pull.number}?inbox=mine&group=permissions&diff=split`)
+    expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
+    fireEvent.click(
+      screen.getByRole('button', { name: `Ask Uncle Bob to review PR #${pull.number}` }),
+    )
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(
+      await screen.findByRole('complementary', { name: 'Uncle Bob code review companion' }),
+    ).toBeTruthy()
+    expect(call).toHaveBeenCalledWith(routes.startBob, {
+      body: { repository, urls: [pull.url] },
+    })
+    expect(call).not.toHaveBeenCalledWith(routes.startLinus, expect.anything())
+  })
+
+  it.each([
+    { findingCount: 1, headSha: pull.headSha },
+    { findingCount: 0, headSha: pull.headSha },
+    { findingCount: 3, headSha: 'previous-head' },
+  ])('reopens the saved review instead of starting another (%j)', async (review) => {
+    savedReviews = [{ ...bobReview, ...review }]
+    openPage(`/repos/${repository}/pulls/${pull.number}`)
+    const button = screen.getByRole('button', { name: /Open saved Uncle Bob review/ })
+    expect(button.textContent).toBe(`Ask Uncle Bob${review.findingCount}`)
+    expect(button.querySelector('img')?.getAttribute('src')).toBe('/unclebob/neutral.png')
+    expect(screen.queryByRole('button', { name: /Ask Uncle Bob to review/ })).toBeNull()
+
+    fireEvent.click(button)
+
+    expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
+    expect(useBobSession).toHaveBeenLastCalledWith(repository, pull.url, bobReview.sessionId)
+    expect(call).not.toHaveBeenCalledWith(routes.startBob, expect.anything())
+  })
+
+  it('waits for saved reviews before allowing a new review', () => {
+    savedReviews = []
+    savedReviewsLoading = true
+    openPage(`/repos/${repository}/pulls/${pull.number}`)
+    const button = screen.getByRole<HTMLButtonElement>('button', {
+      name: /Ask Uncle Bob to review/,
+    })
+
+    expect(button.disabled).toBe(true)
+    expect(call).not.toHaveBeenCalledWith(routes.startBob, expect.anything())
+  })
+
+  it('keeps the face visible and prevents another request while a new review is starting', async () => {
+    savedReviews = []
+    let finish!: (value: { id: string }) => void
+    vi.mocked(call).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    openPage(`/repos/${repository}/pulls/${pull.number}`)
+    const button = screen.getByRole<HTMLButtonElement>('button', {
+      name: /Ask Uncle Bob to review/,
+    })
+    fireEvent.click(button)
+
+    expect(button.disabled).toBe(true)
+    expect(button.textContent).toBe('Asking Uncle Bob…')
+    expect(button.querySelector('img')?.getAttribute('src')).toBe('/unclebob/neutral.png')
+    finish({ id: 'new-review' })
     expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
   })
 })

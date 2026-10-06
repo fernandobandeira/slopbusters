@@ -19,18 +19,24 @@ export function StartReviewButton({
   onStart: (companion: ReviewCompanion) => void
 }) {
   if (companion) {
+    const name = companion === 'bob' ? 'Uncle Bob' : 'Linus'
     return (
       <Button
         size="sm"
         variant="outline"
         disabled={busy || disabled}
-        aria-label={`Start review of PR #${number}`}
+        aria-label={`Ask ${name} to review PR #${number}`}
         onClick={() => {
           onStart(companion)
         }}
       >
+        <img
+          className="review-companion-icon"
+          src={companion === 'bob' ? '/unclebob/neutral.png' : '/linus/neutral.png'}
+          alt=""
+        />
         {busy ? <LoaderCircle size={13} className="animate-spin" /> : null}
-        {busy ? 'Starting…' : 'Start review'}
+        {busy ? `Asking ${name}…` : `Ask ${name}`}
       </Button>
     )
   }

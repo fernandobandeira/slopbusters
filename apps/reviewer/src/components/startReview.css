@@ -1,3 +1,8 @@
+.review-companion-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
 .review-menu-positioner {
   z-index: 100;
 }
