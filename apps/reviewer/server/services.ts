@@ -23,6 +23,7 @@ import { LinusJobs } from './features/linus/linusJobs'
 import { startRepositoryTools } from './adapters/repositoryTools'
 import { OrganizationJobs } from './features/organizationJobs'
 import { GandalfJobs } from './features/gandalf/gandalfJobs'
+import { createGandalfPlanner } from './features/gandalf/gandalfPlan'
 import { openConflictWorkspace } from './adapters/conflictWorkspace'
 import { logError } from './errors'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
@@ -80,6 +81,7 @@ export function createServices(options: ReviewerServerOptions) {
   const gandalfJobs = new GandalfJobs({
     store,
     loadPull: pulls.fetchPull,
+    plan: createGandalfPlanner(stacks.getStackMetadata),
     openWorkspace: (pull, signal) =>
       openConflictWorkspace({
         dataDirectory: options.dataDirectory,

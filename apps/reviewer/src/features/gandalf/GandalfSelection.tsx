@@ -44,6 +44,9 @@ export function GandalfSelection({
         ))}
       </div>
       {!pulls.length && <p className="muted">No PRs with conflicts in this view.</p>}
+      <p className="gandalf-detail">
+        Stacked PRs are updated bottom-up, including the other open layers in each selected stack.
+      </p>
       {!ready && (
         <p>
           Choose your primary model in <Link to="/settings">Settings</Link> first.

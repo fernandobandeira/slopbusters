@@ -25,6 +25,8 @@ export interface PullStack extends PullStackSummary {
   warnings: string[]
 }
 export interface PullStackResult {
+  /** Unknown or ambiguous dependencies must not be used to publish stack updates. */
+  incomplete?: boolean
   summary?: PullStackSummary
   stack: PullStack | null
   warnings: string[]
@@ -63,6 +65,7 @@ export function derivePullStack(pulls: BranchPull[], currentNumber: number): Pul
     if (seen.has(parent.number))
       return {
         stack: null,
+        incomplete: true,
         warnings: [
           'The branch dependencies contain a cycle; no stack order can be inferred safely.',
         ],
@@ -88,6 +91,7 @@ export function derivePullStack(pulls: BranchPull[], currentNumber: number): Pul
     if (seen.has(child.number))
       return {
         stack: null,
+        incomplete: true,
         warnings: [
           'The branch dependencies contain a cycle; no stack order can be inferred safely.',
         ],
@@ -96,9 +100,11 @@ export function derivePullStack(pulls: BranchPull[], currentNumber: number): Pul
     items.push(child)
     cursor = child
   }
-  if (items.length < 2) return { stack: null, warnings: [...new Set(warnings)] }
+  if (items.length < 2)
+    return { stack: null, warnings: [...new Set(warnings)], incomplete: warnings.length > 0 }
   const uniqueWarnings = [...new Set(warnings)]
   return {
+    incomplete: uniqueWarnings.length > 0,
     stack: {
       id: `derived:${current.repository.toLowerCase()}:${items.map((pull) => pull.number).join('-')}`,
       source: 'derived',

@@ -69,12 +69,14 @@ export function nativePullStack(
   if (!position)
     return {
       stack: null,
+      incomplete: true,
       warnings: ['GitHub did not include the selected pull request in its stack.'],
     }
   const numbers = value.pull_requests.map((pull) => pull.number)
   if (new Set(numbers).size !== numbers.length)
     return {
       stack: null,
+      incomplete: true,
       warnings: ['GitHub returned duplicate stack layers; no safe stack order is available.'],
     }
   const items = value.pull_requests.map((pull, index) => {
@@ -218,6 +220,7 @@ export function createStackService(
         // Membership is authoritative; never replace a known native stack with an incomplete inferred one.
         return {
           stack: null,
+          incomplete: true,
           summary:
             metadata.stack.position && metadata.stack.size && metadata.stack.base
               ? {
@@ -267,7 +270,7 @@ export function createStackService(
         'This chain is inferred from repository-qualified branch targets among open pull requests; it is not a GitHub native stack.',
       )
     const stack: PullStack | null = inferred.stack ? { ...inferred.stack, warnings } : null
-    return { stack, warnings }
+    return { stack, warnings, incomplete: inferred.incomplete }
   }
 
   async function getStackForPull(
@@ -309,5 +312,5 @@ export function createStackService(
     }
   }
 
-  return { listNativeStacks, getStackForPull }
+  return { listNativeStacks, getStackForPull, getStackMetadata }
 }

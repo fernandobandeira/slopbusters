@@ -17,6 +17,12 @@ vi.mock('../server/features/pulls/github', async (original) => ({
     fetchPullRevision: vi.fn(),
   })),
 }))
+vi.mock('../server/features/pulls/stacks', async (original) => ({
+  ...(await original<typeof import('../server/features/pulls/stacks')>()),
+  createStackService: vi.fn(() => ({
+    getStackMetadata: () => Promise.resolve({ stack: null, warnings: [] }),
+  })),
+}))
 vi.mock('../server/adapters/conflictWorkspace', () => ({ openConflictWorkspace: vi.fn() }))
 vi.mock('../server/features/gandalf/gandalfResolution', () => ({ resolveWithGandalf: vi.fn() }))
 const directories: string[] = []
@@ -79,6 +85,9 @@ describe('Gandalf persistence across restarts', () => {
     store.close()
     vi.mocked(openConflictWorkspace).mockResolvedValue({
       directory: path,
+      pull: fixturePull(),
+      needsUpdate: true,
+      verify: () => Promise.resolve(),
       conflicts: ['code.ts'],
       inspect: () => Promise.resolve({ revision: 'resolved', diff: '', conflicts: [] }),
       apply: () => Promise.resolve(),

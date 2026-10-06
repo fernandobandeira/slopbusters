@@ -35,18 +35,27 @@ function metadata() {
   return {
     state: 'open',
     head: { sha: originalHead, ref: 'feature', repo: { full_name: 'review-room/example' } },
-    base: { sha: originalBase },
+    base: { sha: originalBase, ref: 'main', repo: { full_name: 'review-room/example' } },
   }
 }
 async function open() {
   workspace = await openConflictWorkspace({
     dataDirectory: directory,
-    pull: { ...fixturePull(), headSha: originalHead, baseSha: originalBase },
+    pull: { ...fixturePull(), headBranch: 'feature', headSha: originalHead, baseSha: originalBase },
     github,
     signal: new AbortController().signal,
     remoteUrl: () => remote,
   })
   return workspace
+}
+async function readRemote(endpoint: string) {
+  if (endpoint.includes('/git/ref/heads/')) {
+    const branch = decodeURIComponent(
+      endpoint.slice(endpoint.indexOf('/git/ref/heads/') + '/git/ref/heads/'.length),
+    )
+    return { object: { sha: (await git(['rev-parse', `refs/heads/${branch}`])).trim() } }
+  }
+  return metadata()
 }
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'gandalf-git-'))
@@ -57,12 +66,90 @@ beforeEach(async () => {
   originalHead = await commit('export const value = "head"\n', 'Feature')
   await git(['checkout', '-q', 'main'])
   originalBase = await commit('export const value = "base"\n', 'Base')
-  rest.mockReset().mockImplementation(() => Promise.resolve(metadata()))
+  rest.mockReset().mockImplementation(readRemote)
 })
 afterEach(async () => {
   await workspace?.close()
   workspace = undefined
   await rm(directory, { recursive: true, force: true })
+})
+
+describe('live conflict revisions', () => {
+  it('uses live branch tips when the PR base SHA still points to an already integrated commit', async () => {
+    const staleBase = (await git(['merge-base', originalHead, originalBase])).trim()
+    const currentMetadata = metadata()
+    rest.mockImplementation((endpoint) =>
+      endpoint.includes('/git/ref/heads/')
+        ? readRemote(endpoint)
+        : Promise.resolve({
+            ...currentMetadata,
+            base: { ...currentMetadata.base, sha: staleBase },
+          }),
+    )
+    workspace = await openConflictWorkspace({
+      dataDirectory: directory,
+      pull: { ...fixturePull(), headBranch: 'feature', headSha: originalHead, baseSha: staleBase },
+      github,
+      signal: new AbortController().signal,
+      remoteUrl: () => remote,
+    })
+    expect(workspace.pull.baseSha).toBe(originalBase)
+    expect(workspace.needsUpdate).toBe(true)
+    expect(workspace.conflicts).toEqual(['code.ts'])
+  })
+})
+
+describe('stack update propagation', () => {
+  it('propagates a resolved parent through a clean child merge while retaining the child changes', async () => {
+    await git(['checkout', '-qb', 'child', originalHead])
+    await writeFile(join(remote, 'child.ts'), 'export const child = true\n')
+    await git(['add', 'child.ts'])
+    const childHead = await commit('export const value = "head"\n', 'Child')
+    await git(['checkout', '-q', 'main'])
+    const parent = await open()
+    await parent.apply([{ path: 'code.ts', content: 'export const value = "head-and-base"\n' }])
+    const resolvedParent = await parent.publish()
+    await parent.close()
+    rest.mockImplementation((endpoint) =>
+      endpoint.includes('/git/ref/heads/')
+        ? readRemote(endpoint)
+        : Promise.resolve({
+            state: 'open',
+            head: { sha: childHead, ref: 'child', repo: { full_name: 'review-room/example' } },
+            base: { sha: originalHead, ref: 'feature', repo: { full_name: 'review-room/example' } },
+          }),
+    )
+    workspace = await openConflictWorkspace({
+      dataDirectory: directory,
+      pull: {
+        ...fixturePull(),
+        headBranch: 'child',
+        baseBranch: 'feature',
+        headSha: childHead,
+        baseSha: originalHead,
+      },
+      github,
+      signal: new AbortController().signal,
+      remoteUrl: () => remote,
+    })
+    expect(workspace.conflicts).toEqual([])
+    expect(workspace.needsUpdate).toBe(true)
+    expect(workspace.pull.baseSha).toBe(resolvedParent)
+    await workspace.apply([])
+    const resolvedChild = await workspace.publish()
+    expect(await git(['show', `${resolvedChild}:code.ts`])).toContain('head-and-base')
+    expect(await git(['show', `${resolvedChild}:child.ts`])).toContain('child = true')
+    expect((await git(['merge-base', resolvedChild, originalBase])).trim()).toBe(originalBase)
+    await workspace.verify(resolvedChild)
+  })
+  it('recognizes an integrated live base without creating another update', async () => {
+    originalBase = originalHead
+    await git(['update-ref', 'refs/heads/main', originalBase])
+    const work = await open()
+    expect(work.conflicts).toEqual([])
+    expect(work.needsUpdate).toBe(false)
+    await work.verify()
+  })
 })
 
 describe('isolated conflict checkout and publication', () => {
@@ -89,11 +176,11 @@ describe('isolated conflict checkout and publication', () => {
   it('rejects changed heads or bases before publication', async () => {
     const work = await open()
     await work.apply([{ path: 'code.ts', content: 'resolved\n' }])
-    rest.mockResolvedValue({ ...metadata(), base: { sha: 'f'.repeat(40) } })
+    await commit('new base\n', 'Concurrent base')
     await expect(work.publish()).rejects.toThrow('changed during conflict resolution')
     expect((await git(['rev-parse', 'feature'])).trim()).toBe(originalHead)
   })
-  it('atomically refuses to overwrite a concurrently updated PR head even if metadata is stale', async () => {
+  it('refuses to overwrite a concurrently updated PR head even if PR metadata is stale', async () => {
     const work = await open()
     await work.apply([{ path: 'code.ts', content: 'resolved\n' }])
     await git(['checkout', '-q', 'feature'])

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GandalfJobs } from '../server/features/gandalf/gandalfJobs'
 import { ReviewerStore } from '../server/adapters/store'
-import { Provider } from '../shared/domain/types'
+import { Provider, type PullRequest } from '../shared/domain/types'
 import type { GandalfTurn } from '../shared/domain/gandalf'
 import { UserError } from '../server/errors'
 import { fixturePull } from './fixtures/pull'
@@ -25,10 +25,16 @@ let revision: string
 const publish = vi.fn(() => Promise.resolve('resolved-sha'))
 const close = vi.fn(() => Promise.resolve())
 const resolve = vi.fn<NonNullable<ConstructorParameters<typeof GandalfJobs>[0]['resolve']>>()
-const loadPull = vi.fn(() => Promise.resolve(fixturePull()))
-const openWorkspace = vi.fn(() =>
+const loadPull = vi.fn<ConstructorParameters<typeof GandalfJobs>[0]['loadPull']>(() =>
+  Promise.resolve(fixturePull()),
+)
+const verify = vi.fn(() => Promise.resolve())
+const openWorkspace = vi.fn((pull: PullRequest) =>
   Promise.resolve({
     directory,
+    pull,
+    needsUpdate: true,
+    verify,
     conflicts: ['code.ts'],
     inspect: () => Promise.resolve({ revision, diff: revision, conflicts: [] }),
     apply: (edits: GandalfTurn['edits']) => {
@@ -120,18 +126,85 @@ describe('Gandalf round robin', () => {
   })
 })
 
+describe('Gandalf stack resolution', () => {
+  it('reviews and publishes clean automatic merges instead of skipping stack updates', async () => {
+    const work = await openWorkspace(fixturePull())
+    openWorkspace.mockResolvedValue({ ...work, conflicts: [] })
+    const saved = await completed(jobs.start('review-room/example', [fixturePull().url]).id)
+    expect(resolve).toHaveBeenCalledTimes(3)
+    expect(saved.results[0]).toMatchObject({ published: true, rounds: 3 })
+    expect(verify).toHaveBeenCalledWith('resolved-sha')
+  })
+  it('revalidates previously skipped PRs on retry and replaces an obsolete conflict-free result', async () => {
+    const work = await openWorkspace(fixturePull())
+    openWorkspace.mockResolvedValueOnce({ ...work, needsUpdate: false })
+    const session = jobs.start('review-room/example', [fixturePull().url])
+    expect((await completed(session.id)).results[0]?.published).toBe(false)
+    jobs.retry(session.id)
+    const saved = await completed(session.id)
+    expect(saved.results).toHaveLength(1)
+    expect(saved.results[0]?.published).toBe(true)
+    expect(publish).toHaveBeenCalledTimes(1)
+  })
+  it('replans a stack bottom-up and loads each child only after its parent is published', async () => {
+    const pulls = [1, 2, 3].map((number) => ({
+      ...fixturePull(),
+      number,
+      url: fixturePull().url.replace(/\d+$/, String(number)),
+      headBranch: `layer-${number}`,
+      baseBranch: number === 1 ? 'main' : `layer-${number - 1}`,
+    }))
+    const urls = pulls.map((pull) => pull.url)
+    const plan = vi.fn(() => Promise.resolve(urls))
+    let published = 0
+    loadPull.mockImplementation(() => {
+      const pull = pulls[published]
+      if (!pull) throw new Error('Unexpected PR load')
+      return Promise.resolve({ ...pull, baseSha: published ? `resolved-${published}` : 'main-tip' })
+    })
+    publish.mockImplementation(() => Promise.resolve(`resolved-${++published}`))
+    jobs = new GandalfJobs({ store, loadPull, openWorkspace, resolve, plan })
+    const session = jobs.start(
+      'review-room/example',
+      pulls
+        .filter((pull) => pull.number !== 2)
+        .reverse()
+        .map((pull) => pull.url),
+    )
+    const saved = await completed(session.id)
+    expect(saved.urls).toEqual(urls)
+    expect(saved.results.map((result) => result.baseSha)).toEqual([
+      'main-tip',
+      'resolved-1',
+      'resolved-2',
+    ])
+    expect(saved.results.map((result) => result.number)).toEqual([1, 2, 3])
+    expect(loadPull.mock.calls.map(([url]) => url)).toEqual(urls)
+  })
+  it('keeps published updates but refuses completion if a branch changes during final verification', async () => {
+    verify.mockRejectedValueOnce(new UserError('The base changed. Retry.'))
+    const session = jobs.start('review-room/example', [fixturePull().url])
+    const saved = await completed(session.id, 'failed')
+    expect(saved.error).toContain('base changed')
+    expect(saved.results[0]?.published).toBe(true)
+  })
+})
+
 describe('Gandalf session lifecycle', () => {
   it('keeps completed updates and retries only the remaining PRs', async () => {
     const second = { ...fixturePull(), number: 200, url: fixturePull().url.replace(/\d+$/, '200') }
     loadPull
       .mockResolvedValueOnce(fixturePull())
       .mockRejectedValueOnce(new UserError('Unavailable'))
+      .mockResolvedValueOnce({ ...fixturePull(), headSha: 'resolved-sha' })
       .mockResolvedValue(second)
     const session = jobs.start('review-room/example', [fixturePull().url, second.url])
     expect((await completed(session.id, 'failed')).results).toHaveLength(1)
+    const previousWorkspace = await openWorkspace({ ...fixturePull(), headSha: 'resolved-sha' })
+    openWorkspace.mockResolvedValueOnce({ ...previousWorkspace, needsUpdate: false })
     jobs.retry(session.id)
     expect((await completed(session.id)).results).toHaveLength(2)
-    expect(loadPull).toHaveBeenCalledTimes(3)
+    expect(loadPull).toHaveBeenCalledTimes(4)
     expect(publish).toHaveBeenCalledTimes(2)
   })
   it('cancels an active model and never publishes its late response', async () => {

@@ -1,25 +1,15 @@
 import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile, lstat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { z } from 'zod'
 import type { PullRequest } from '../../shared/domain/types'
 import type { GandalfTurn } from '../../shared/domain/gandalf'
-import { repositoryQuery } from '../../shared/api/contract'
 import { MAX_FILE_BYTES, MAX_GANDALF_PROMPT_BYTES } from '../limits'
 import { UserError } from '../errors'
 import type { GitHub } from './github'
 import { hardenedGit } from './git'
 import { workspacePath } from './workspacePath'
+import { readConflictRevision } from './conflictRevision'
 
-const metadataSchema = z.object({
-  state: z.enum(['open', 'closed']),
-  head: z.object({
-    sha: z.string(),
-    ref: z.string(),
-    repo: z.object({ full_name: z.string() }).nullable(),
-  }),
-  base: z.object({ sha: z.string() }),
-})
 export interface ConflictSnapshot {
   revision: string
   diff: string
@@ -27,7 +17,10 @@ export interface ConflictSnapshot {
 }
 export interface ConflictWorkspace {
   directory: string
+  pull: PullRequest
+  needsUpdate: boolean
   conflicts: string[]
+  verify: (headSha?: string) => Promise<void>
   inspect: () => Promise<ConflictSnapshot>
   apply: (edits: GandalfTurn['edits']) => Promise<void>
   publish: () => Promise<string>
@@ -43,27 +36,31 @@ interface Options {
 
 /** A separate repository merges the base into the PR; only reviewed content is published. */
 export async function openConflictWorkspace(options: Options): Promise<ConflictWorkspace> {
-  const { pull, signal, github } = options
+  const { signal, github } = options
   const root = join(options.dataDirectory, 'conflict-workspaces')
   await mkdir(root, { recursive: true })
   const directory = await mkdtemp(join(root, 'gandalf-'))
   const git = (args: string[]) => hardenedGit(directory, args, { signal })
-  const endpoint = `repos/${pull.owner}/${pull.repo}/pulls/${pull.number}`
   try {
-    const metadata = metadataSchema.parse(await github.rest(endpoint, { signal }))
-    checkRevision(pull, metadata)
-    if (!metadata.head.repo) throw new UserError('The PR source repository is no longer available.')
-    const headRepository = repositoryQuery.parse({
-      repository: metadata.head.repo.full_name,
-    }).repository
+    const revision = await readConflictRevision(github, options.pull, signal)
+    const pull = { ...options.pull, headSha: revision.headSha, baseSha: revision.baseSha }
+    const verify = async (headSha = revision.headSha) => {
+      const current = await readConflictRevision(github, pull, signal)
+      if (JSON.stringify(current) !== JSON.stringify({ ...revision, headSha }))
+        throw new UserError('This PR changed during conflict resolution. Refresh it and retry.')
+    }
     const remote =
       options.remoteUrl ?? ((repository: string) => `https://github.com/${repository}.git`)
     await git(['init', '--template=', '--initial-branch=gandalf'])
-    await git(['check-ref-format', `refs/heads/${metadata.head.ref}`])
-    await fetchCommit(git, remote(headRepository), pull.headSha)
-    await fetchCommit(git, remote(`${pull.owner}/${pull.repo}`), pull.baseSha)
+    await git(['check-ref-format', `refs/heads/${pull.headBranch}`])
+    await fetchCommit(git, remote(revision.headRepository), pull.headSha)
+    await fetchCommit(git, remote(revision.baseRepository), pull.baseSha)
     await git(['checkout', '--quiet', '--detach', pull.headSha])
+    const needsUpdate = Boolean(
+      (await git(['rev-list', '--max-count=1', `${pull.headSha}..${pull.baseSha}`])).trim(),
+    )
     const conflicts = await mergeBase(git, pull.baseSha)
+    await verify()
     const allowed = await regularPaths(git)
     for (const path of conflicts)
       if (!allowed.has(path))
@@ -74,11 +71,13 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
       directory,
       pull,
       conflicts,
+      needsUpdate,
+      verify,
       allowed,
       git,
       publish: async () => {
         // The push also has an atomic head lease; this check covers a changed base or closed PR.
-        checkRevision(pull, metadataSchema.parse(await github.rest(endpoint, { signal })))
+        await verify()
         const tree = (await git(['write-tree'])).trim()
         const sha = (
           await git([
@@ -104,9 +103,9 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
           'credential.helper=!gh auth git-credential',
           'push',
           '--porcelain',
-          `--force-with-lease=refs/heads/${metadata.head.ref}:${pull.headSha}`,
-          remote(headRepository),
-          `${sha}:refs/heads/${metadata.head.ref}`,
+          `--force-with-lease=refs/heads/${pull.headBranch}:${pull.headSha}`,
+          remote(revision.headRepository),
+          `${sha}:refs/heads/${pull.headBranch}`,
         ])
         return sha
       },
@@ -117,14 +116,6 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
   }
 }
 
-function checkRevision(pull: PullRequest, metadata: z.infer<typeof metadataSchema>) {
-  if (
-    metadata.state !== 'open' ||
-    metadata.head.sha !== pull.headSha ||
-    metadata.base.sha !== pull.baseSha
-  )
-    throw new UserError('This PR changed during conflict resolution. Refresh it and retry.')
-}
 async function fetchCommit(git: (args: string[]) => Promise<string>, remote: string, sha: string) {
   if (!/^[a-f\d]{40,64}$/.test(sha)) throw new UserError('Invalid PR revision.')
   await git([
@@ -199,6 +190,8 @@ function workspaceOperations(options: {
   directory: string
   pull: PullRequest
   conflicts: string[]
+  needsUpdate: boolean
+  verify: (headSha?: string) => Promise<void>
   allowed: Set<string>
   git: (args: string[]) => Promise<string>
   publish: () => Promise<string>
@@ -206,7 +199,10 @@ function workspaceOperations(options: {
   const { directory, pull, conflicts, allowed, git } = options
   return {
     directory,
+    pull,
     conflicts,
+    needsUpdate: options.needsUpdate,
+    verify: options.verify,
     async inspect() {
       const diff = await git(['diff', '--no-ext-diff', '--no-textconv', pull.headSha, '--'])
       const files = await Promise.all(

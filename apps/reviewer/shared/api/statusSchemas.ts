@@ -70,6 +70,7 @@ export const stackSummarySchema = z.object({
   size: z.number(),
 })
 export const stackSchema = z.object({
+  incomplete: z.boolean().optional(),
   summary: stackSummarySchema.optional(),
   warnings: z.array(z.string()),
   stack: stackSummarySchema

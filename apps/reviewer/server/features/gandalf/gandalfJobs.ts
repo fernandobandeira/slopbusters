@@ -12,6 +12,7 @@ interface Options {
   store: ReviewerStore
   loadPull: (url: string) => Promise<PullRequest>
   openWorkspace: (pull: PullRequest, signal: AbortSignal) => Promise<ConflictWorkspace>
+  plan?: (urls: string[], signal: AbortSignal) => Promise<string[]>
   resolve?: typeof resolveWithGandalf
 }
 
@@ -111,64 +112,85 @@ export class GandalfJobs {
       })
   }
   private async run(session: GandalfSession, signal: AbortSignal) {
+    session.urls = (await this.options.plan?.(session.urls, signal)) ?? session.urls
+    signal.throwIfAborted()
+    session.results = session.results.filter((result) => session.urls.includes(result.url))
+    this.options.store.saveGandalfSession(session)
+    const verifications: (() => Promise<void>)[] = []
     for (const url of session.urls) {
       signal.throwIfAborted()
-      if (session.results.some((result) => result.url === url)) continue
-      this.progress(session, `Loading ${url}…`)
-      const pull = await this.options.loadPull(url)
-      signal.throwIfAborted()
-      if (pull.state !== 'open') throw new UserError('Select open PRs for conflict resolution.')
-      const workspace = await this.options.openWorkspace(pull, signal)
-      try {
-        if (!workspace.conflicts.length) {
-          session.results.push({
-            url,
-            number: pull.number,
-            title: pull.title,
-            headSha: pull.headSha,
-            baseSha: pull.baseSha,
-            resolvedSha: pull.headSha,
-            changedPaths: [],
-            rounds: 0,
-            published: false,
-          })
-        } else {
-          // Old attempts are not evidence for this freshly fetched revision.
-          session.turns = session.turns.filter((turn) => turn.url !== url)
-          const rounds = await this.roundRobin({ session, pull, workspace, signal })
-          signal.throwIfAborted()
-          this.progress(session, `Both models agree. Updating PR #${pull.number}…`)
-          const resolvedSha = await workspace.publish()
-          session.results.push({
-            url,
-            number: pull.number,
-            title: pull.title,
-            headSha: pull.headSha,
-            baseSha: pull.baseSha,
-            resolvedSha,
-            changedPaths: [
-              ...new Set(
-                session.turns
-                  .filter((turn) => turn.url === url)
-                  .flatMap((turn) => turn.changedPaths),
-              ),
-            ],
-            rounds,
-            published: true,
-          })
-        }
-        if (signal.aborted) {
-          session.status = 'cancelled'
-          session.progress = 'Resolution cancelled. Completed PR updates are saved.'
-        }
-        this.options.store.saveGandalfSession(session)
-      } finally {
-        await workspace.close()
-      }
+      verifications.push(await this.resolvePull(session, url, signal))
     }
+    this.progress(session, 'Verifying all updated branches…')
+    for (const verify of verifications) await verify()
     signal.throwIfAborted()
     session.status = 'complete'
-    this.progress(session, 'You may pass. All selected PRs are free of merge conflicts.')
+    this.progress(session, 'You may pass. All PRs and their stack layers are up to date.')
+  }
+  private async resolvePull(session: GandalfSession, url: string, signal: AbortSignal) {
+    this.progress(session, `Loading ${url}…`)
+    const loaded = await this.options.loadPull(url)
+    signal.throwIfAborted()
+    if (loaded.state !== 'open') throw new UserError('Select open PRs for conflict resolution.')
+    const workspace = await this.options.openWorkspace(loaded, signal)
+    const pull = workspace.pull
+    let resolvedSha = pull.headSha
+    try {
+      if (!workspace.needsUpdate) {
+        await workspace.verify()
+        const previous = session.results.find((result) => result.url === url)
+        this.saveResult(
+          session,
+          previous?.resolvedSha === pull.headSha && previous.baseSha === pull.baseSha
+            ? previous
+            : {
+                url,
+                number: pull.number,
+                title: pull.title,
+                headSha: pull.headSha,
+                baseSha: pull.baseSha,
+                resolvedSha: pull.headSha,
+                changedPaths: [],
+                rounds: 0,
+                published: false,
+              },
+        )
+      } else {
+        // Old attempts are not evidence for this freshly fetched revision.
+        session.turns = session.turns.filter((turn) => turn.url !== url)
+        const rounds = await this.roundRobin({ session, pull, workspace, signal })
+        signal.throwIfAborted()
+        this.progress(session, `Both models agree. Updating PR #${pull.number}…`)
+        resolvedSha = await workspace.publish()
+        this.saveResult(session, {
+          url,
+          number: pull.number,
+          title: pull.title,
+          headSha: pull.headSha,
+          baseSha: pull.baseSha,
+          resolvedSha,
+          changedPaths: [
+            ...new Set(
+              session.turns.filter((turn) => turn.url === url).flatMap((turn) => turn.changedPaths),
+            ),
+          ],
+          rounds,
+          published: true,
+        })
+      }
+      if (signal.aborted) {
+        session.status = 'cancelled'
+        session.progress = 'Resolution cancelled. Completed PR updates are saved.'
+      }
+      this.options.store.saveGandalfSession(session)
+    } finally {
+      await workspace.close()
+    }
+    return () => workspace.verify(resolvedSha)
+  }
+  private saveResult(session: GandalfSession, result: GandalfSession['results'][number]) {
+    session.results = session.results.filter((previous) => previous.url !== result.url)
+    session.results.push(result)
   }
   private async roundRobin(request: {
     session: GandalfSession
