@@ -24,7 +24,7 @@ import {
 } from '../features/inbox/repositoryHistory'
 import { Link, Routes, Route, useLocation, useNavigate } from 'react-router'
 import { inboxPath, readRoute, reviewPath } from '../lib/routes'
-import { LoaderCircle } from 'lucide-react'
+import { PullLoadingState } from '../features/review/PullLoadingState'
 import { Button } from '~/components/ui/button'
 
 import { Input } from '~/components/ui/input'
@@ -142,7 +142,7 @@ export function App() {
   useEffect(() => {
     if (refresh) reloadPreferences()
   }, [refresh, reloadPreferences])
-  const { pull, loading, pullError, updatePull, reloadPull, reloading } = usePullReview(
+  const { pull, loading, pullError, retryPull, updatePull, reloadPull, reloading } = usePullReview(
     route,
     location.pathname,
     navigate,
@@ -153,8 +153,7 @@ export function App() {
     refresh,
     enabled: route.kind === 'inbox',
   })
-  const displayError =
-    error || inboxError || pullError || statusQuery.error || repositoryQuery.error
+  const displayError = error || inboxError || statusQuery.error || repositoryQuery.error
   useEffect(() => {
     const initialRepository = repository || repositories[0]?.fullName
     if (location.pathname === '/' && initialRepository) {
@@ -322,12 +321,6 @@ export function App() {
               </Button>
             </div>
           )}
-          {loading && (
-            <div className="loading-banner" role="status">
-              <LoaderCircle size={15} className="animate-spin" />
-              Loading the PR and its original source…
-            </div>
-          )}
           <Routes>
             <Route
               path="/settings"
@@ -416,20 +409,14 @@ export function App() {
                     titlebarTarget={titlebarTarget}
                   />
                 ) : (
-                  <div className="empty-state">
-                    {loading ? 'Loading review…' : 'Unable to open this PR.'}
-                    <Link to={inboxPath(repository, filter)}>Back to inbox</Link>
-                    {!loading && (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          window.location.reload()
-                        }}
-                      >
-                        Try again
-                      </Button>
-                    )}
-                  </div>
+                  <PullLoadingState
+                    key={`${repository}:${route.kind === 'pull' ? route.number : 0}:${loading}`}
+                    number={route.kind === 'pull' ? route.number : 0}
+                    loading={loading}
+                    error={pullError}
+                    inboxUrl={inboxPath(repository, filter)}
+                    onRetry={retryPull}
+                  />
                 )
               }
             />

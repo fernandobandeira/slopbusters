@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import type { NavigateFunction } from 'react-router'
 import type { PullRequest } from '../../../shared/domain/types'
 import * as routes from '../../../shared/api'
@@ -16,6 +24,7 @@ export function usePullReview(
     pull?: PullRequest
     error?: string
   }>()
+  const { attempt, retryPull } = usePullRetry(setPullResult)
   const pullCache = useRef(new Map<string, PullRequest>())
   const pullUrl =
     route.kind === 'pull' ? `https://github.com/${route.repository}/pull/${route.number}` : ''
@@ -56,11 +65,12 @@ export function usePullReview(
     return () => {
       controller.abort()
     }
-  }, [pullUrl, revision, pullKey, navigate])
+  }, [pullUrl, revision, pullKey, navigate, attempt])
 
   const updatePull = useCallback(
     (pr: PullRequest) => {
       pullCache.current.set(pullKey, pr)
+      pullCache.current.set(`${pr.url}@${pr.id}`, pr)
       setPullResult({ key: pullKey, pull: pr })
     },
     [pullKey],
@@ -79,6 +89,7 @@ export function usePullReview(
   return {
     pull,
     loading,
+    retryPull,
     pullError: pullResult?.key === pullKey ? pullResult.error : undefined,
     updatePull,
     reloadPull,
@@ -161,4 +172,13 @@ function loadSnapshot(options: {
       })
   } else load = fromGitHub()
   return load
+}
+
+function usePullRetry<T>(setResult: Dispatch<SetStateAction<T | undefined>>) {
+  const [attempt, setAttempt] = useState(0)
+  const retryPull = useCallback(() => {
+    setResult(undefined)
+    setAttempt((value) => value + 1)
+  }, [setResult])
+  return { attempt, retryPull }
 }

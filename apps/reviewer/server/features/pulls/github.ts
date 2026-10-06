@@ -15,6 +15,9 @@ import { createMergeBaseLookup } from './mergeBase'
 import { UserError } from '../../errors'
 import type { SourceRepository } from '../../adapters/sourceRepository'
 import { loadOriginals } from './originals'
+import { ReviewNotFoundError } from '../../adapters/store'
+import { createCache } from '../../cache'
+import { MAX_REVISION_CACHE_ENTRIES } from '../../limits'
 import type { PullRevision } from '../../../shared/domain/updates'
 import { inboxStackSummaries, createStackService } from './stacks'
 
@@ -53,11 +56,17 @@ export function createPullService(
   github: GitHub = createGitHub(),
   stacks = createStackService(github),
   repository?: SourceRepository,
+  getSnapshot?: (id: string) => PullRequest,
 ) {
   const ghJson = github.rest
   const ghPages = github.paginate
   const listNativeStacks = stacks.listNativeStacks
   const mergeBase = createMergeBaseLookup(github)
+  const snapshots = createCache<PullRequest>({
+    max: MAX_REVISION_CACHE_ENTRIES,
+    // The store owns completed snapshots; this cache only joins concurrent downloads.
+    cacheable: () => false,
+  })
   /** Check the current revision without downloading patches or starting a provider. */
   async function fetchPullRevision(pr: PullRequest): Promise<PullRevision> {
     const metadata = z
@@ -126,11 +135,50 @@ export function createPullService(
   async function fetchPull(url: string): Promise<PullRequest> {
     const { owner, repo, number } = parsePullUrl(url)
     const endpoint = `repos/${owner}/${repo}/pulls/${number}`
-    const [metadata, changedFiles] = await Promise.all([
-      ghJson(endpoint),
+    const pr = pullSchema.parse(await ghJson(endpoint))
+    const id = createHash('sha256')
+      .update(`${owner}/${repo}/${number}/${pr.base.sha}/${pr.head.sha}`)
+      .digest('hex')
+      .slice(0, 24)
+    const snapshot = await snapshots.load(id, async () => {
+      try {
+        const saved = getSnapshot?.(id)
+        if (saved?.mergeBaseSha) return saved
+      } catch (error) {
+        if (!(error instanceof ReviewNotFoundError)) throw error
+      }
+      return downloadSnapshot({ owner, repo, number, endpoint, pr, id })
+    })
+    // Reuse immutable patches and groups while refreshing editable PR metadata.
+    return {
+      ...snapshot,
+      title: pr.title,
+      description: pr.body ?? '',
+      baseBranch: pr.base.ref,
+      headBranch: pr.head.ref,
+      state: pr.merged ? 'merged' : pr.state,
+    }
+  }
+
+  async function downloadSnapshot({
+    owner,
+    repo,
+    number,
+    endpoint,
+    pr,
+    id,
+  }: {
+    owner: string
+    repo: string
+    number: number
+    endpoint: string
+    pr: z.infer<typeof pullSchema>
+    id: string
+  }): Promise<PullRequest> {
+    const [changedFiles, mergeBaseSha] = await Promise.all([
       ghPages(`${endpoint}/files?per_page=100`),
+      mergeBase({ owner, repo, baseSha: pr.base.sha, headSha: pr.head.sha }),
     ])
-    const pr = pullSchema.parse(metadata)
     const inputs = z.array(fileSchema).parse(changedFiles)
     if (pr.changed_files != null && inputs.length !== pr.changed_files)
       throw new UserError(
@@ -146,12 +194,6 @@ export function createPullService(
         patch: file.patch,
       }),
     )
-    const mergeBaseSha = await mergeBase({
-      owner,
-      repo,
-      baseSha: pr.base.sha,
-      headSha: pr.head.sha,
-    })
     const warnings: string[] = []
     const incomplete = files.filter((file) => file.coverage !== 'complete')
     if (incomplete.length)
@@ -165,10 +207,7 @@ export function createPullService(
         'The PR changed while it was loading. Please reload it to get a consistent diff.',
       )
     return {
-      id: createHash('sha256')
-        .update(`${owner}/${repo}/${number}/${pr.base.sha}/${pr.head.sha}`)
-        .digest('hex')
-        .slice(0, 24),
+      id,
       owner,
       repo,
       number,

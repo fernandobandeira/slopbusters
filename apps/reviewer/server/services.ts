@@ -47,7 +47,7 @@ export function createServices(options: ReviewerServerOptions) {
   const statuses = createPullStatusService(github)
   const stacks = createStackService(github, statuses)
   const repository = new LocalSourceRepository(options.dataDirectory, options.sourceRemoteUrl)
-  const pulls = createPullService(github, stacks, repository)
+  const pulls = createPullService(github, stacks, repository, (id) => store.getPull(id))
   const checkRevision = createRevisionChecker(pulls.fetchPullRevision)
   const mergeBase = createMergeBaseLookup(github)
   const loadFileContent = createFileContentLoader(repository, github, mergeBase)
