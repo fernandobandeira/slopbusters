@@ -44,7 +44,7 @@ function Tour({ stale = false }: { stale?: boolean }) {
   })
 }
 
-describe('Bob tour navigation and readability', () => {
+describe('Uncle Bob tour navigation and readability', () => {
   it('focuses the existing diff on a finding and clears it when minimized', () => {
     const focusLine = vi.fn()
     vi.mocked(useBobSession).mockReturnValue({
@@ -80,11 +80,11 @@ describe('Bob tour navigation and readability', () => {
 
     expect(focusLine).toHaveBeenLastCalledWith(result.advice.findings[0])
     expect(screen.queryByRole('button', { name: 'Show code' })).toBeNull()
-    expect(screen.queryByRole('region', { name: 'Bob finding evidence' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Uncle Bob finding evidence' })).toBeNull()
     expect(screen.getByText('Suggested improvement')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Minimize Bob' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Minimize Uncle Bob' }))
     expect(focusLine).toHaveBeenLastCalledWith(undefined)
-    expect(screen.queryByRole('complementary', { name: 'Bob code review companion' })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: /Uncle Bob.*companion/ })).toBeNull()
   })
   it('opens the requested saved review from its listing badge and marks a changed revision', () => {
     const onOpen = vi.fn()
@@ -103,7 +103,9 @@ describe('Bob tour navigation and readability', () => {
         onOpen,
       }),
     )
-    const badge = screen.getByRole('button', { name: /Open saved Bob review.*changed after Bob/ })
+    const badge = screen.getByRole('button', {
+      name: /Open saved Uncle Bob review.*changed after Uncle Bob/,
+    })
     expect(badge.textContent).toBe('1')
     fireEvent.click(badge)
     expect(onOpen).toHaveBeenCalledOnce()
@@ -125,7 +127,7 @@ describe('Bob tour navigation and readability', () => {
   })
 })
 
-describe('Bob comment collection during the tour', () => {
+describe('Uncle Bob comment collection during the tour', () => {
   it('opens the requested review with the supplied portraits', () => {
     const act = vi.fn()
     vi.mocked(useBobSession).mockReturnValue({
@@ -179,6 +181,6 @@ describe('Bob comment collection during the tour', () => {
     expect(
       screen.getByRole<HTMLButtonElement>('button', { name: 'Add review comment' }).disabled,
     ).toBe(true)
-    expect(screen.getByText(/changed after Bob/)).toBeTruthy()
+    expect(screen.getByText(/changed after Uncle Bob/)).toBeTruthy()
   })
 })

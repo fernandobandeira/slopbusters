@@ -58,7 +58,7 @@ export function StartReviewButton({
                 onStart('bob')
               }}
             >
-              <strong>Bob</strong>
+              <strong>Uncle Bob</strong>
               <span>Code quality and readability</span>
             </Menu.Item>
             <Menu.Item

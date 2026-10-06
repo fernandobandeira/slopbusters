@@ -12,14 +12,14 @@ export function BobReviewBadge({
   onOpen: () => void
 }) {
   const stale = review.headSha !== headSha
-  const summary = `Bob: ${bobVerdictLabels[review.verdict]}. ${review.findingCount} findings.`
-  const revision = stale ? ' This PR changed after Bob reviewed it.' : ''
+  const summary = `Uncle Bob: ${bobVerdictLabels[review.verdict]}. ${review.findingCount} findings.`
+  const revision = stale ? ' This PR changed after Uncle Bob reviewed it.' : ''
   return (
     <Button
       className="linus-recommendation-badge"
       size="xs"
       variant="outline"
-      aria-label={`Open saved Bob review for PR #${review.number}. ${summary}${revision}`}
+      aria-label={`Open saved Uncle Bob review for PR #${review.number}. ${summary}${revision}`}
       title={`${summary}${revision}`}
       onClick={onOpen}
     >

@@ -54,11 +54,11 @@ export function BobCompanion(
   return (
     <aside
       className="linus-companion bob-companion linus-open"
-      aria-label="Bob code review companion"
+      aria-label="Uncle Bob code review companion"
     >
       <BobPanel job={job} tour={tour} context={context} close={close} />
-      <button className="linus-portrait" aria-label="Minimize Bob" onClick={close}>
-        <img src={`/unclebob/${tour.emotion}.png`} alt={`Bob, ${tour.emotion}`} />
+      <button className="linus-portrait" aria-label="Minimize Uncle Bob" onClick={close}>
+        <img src={`/unclebob/${tour.emotion}.png`} alt={`Uncle Bob, ${tour.emotion}`} />
       </button>
     </aside>
   )
@@ -82,8 +82,8 @@ function BobPanel({
   return (
     <div className="linus-bubble">
       <header>
-        <span className="linus-eyebrow">BOB · CODE REVIEW</span>
-        <button className="linus-icon-button" aria-label="Close Bob" onClick={close}>
+        <span className="linus-eyebrow">UNCLE BOB · CODE REVIEW</span>
+        <button className="linus-icon-button" aria-label="Close Uncle Bob" onClick={close}>
           <X size={16} />
         </button>
       </header>

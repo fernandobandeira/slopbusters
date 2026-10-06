@@ -64,7 +64,7 @@ export function BobTour({
         )}
         {stale && (
           <p className="linus-notice">
-            This PR changed after Bob’s review. Review it again before adding comments.
+            This PR changed after Uncle Bob’s review. Review it again before adding comments.
           </p>
         )}
         {finding && (

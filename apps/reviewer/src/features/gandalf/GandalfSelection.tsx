@@ -49,10 +49,6 @@ export function GandalfSelection({
           Choose your primary model in <Link to="/settings">Settings</Link> first.
         </p>
       )}
-      <p className="gandalf-detail">
-        Your primary model resolves, then both models take turns reviewing and fixing. I update each
-        PR when both agree.
-      </p>
       <Button size="sm" disabled={disabled || !ready || !selected.length} onClick={onStart}>
         Resolve {selected.length || ''} {selected.length === 1 ? 'PR' : 'PRs'}
       </Button>

@@ -107,7 +107,7 @@ afterEach(() => {
 function openPage(path = `/repos/${repository}/pulls?inbox=mine`) {
   render(createElement(MemoryRouter, { initialEntries: [path] }, createElement(App)))
 }
-async function choose(companion: 'Bob' | 'Linus') {
+async function choose(companion: 'Uncle Bob' | 'Linus') {
   fireEvent.click(screen.getByRole('button', { name: `Start review of PR #${pull.number}` }))
   fireEvent.click(await screen.findByRole('menuitem', { name: new RegExp(companion) }))
 }
@@ -120,14 +120,14 @@ describe('Review entry points', () => {
     expect(Boolean(screen.queryByRole('button', { name: /Start review/ }))).toBe(filter === 'mine')
   })
 
-  it.each(['Bob', 'Linus'] as const)(
+  it.each(['Uncle Bob', 'Linus'] as const)(
     'starts %s on the selected PR from My PRs',
     async (companion) => {
       openPage()
       await choose(companion)
       await waitFor(() => {
         expect(call).toHaveBeenCalledWith(
-          companion === 'Bob' ? routes.startBob : routes.startLinus,
+          companion === 'Uncle Bob' ? routes.startBob : routes.startLinus,
           { body: { repository, urls: [pull.url] } },
         )
       })
@@ -145,13 +145,13 @@ describe('Review entry points', () => {
     },
   )
 
-  it('starts Bob directly on the single PR in the diff', async () => {
+  it('starts Uncle Bob directly on the single PR in the diff', async () => {
     openPage(`/repos/${repository}/pulls/${pull.number}?inbox=mine&group=permissions&diff=split`)
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: `Start review of PR #${pull.number}` }))
     expect(screen.queryByRole('menu')).toBeNull()
     expect(
-      await screen.findByRole('complementary', { name: 'Bob code review companion' }),
+      await screen.findByRole('complementary', { name: 'Uncle Bob code review companion' }),
     ).toBeTruthy()
     expect(call).toHaveBeenCalledWith(routes.startBob, {
       body: { repository, urls: [pull.url] },
@@ -159,27 +159,27 @@ describe('Review entry points', () => {
     expect(call).not.toHaveBeenCalledWith(routes.startLinus, expect.anything())
   })
 
-  it('reopens Bob from a saved badge after closing the panel', async () => {
+  it('reopens Uncle Bob from a saved badge after closing the panel', async () => {
     openPage()
-    fireEvent.click(screen.getByRole('button', { name: /Open saved Bob review/ }))
-    expect(await screen.findByRole('button', { name: 'Close Bob' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Close Bob' }))
+    fireEvent.click(screen.getByRole('button', { name: /Open saved Uncle Bob review/ }))
+    expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close Uncle Bob' }))
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Close Bob' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Close Uncle Bob' })).toBeNull()
     })
-    fireEvent.click(screen.getByRole('button', { name: /Open saved Bob review/ }))
-    expect(await screen.findByRole('button', { name: 'Close Bob' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Open saved Uncle Bob review/ }))
+    expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
     expect(call).not.toHaveBeenCalledWith(routes.startBob, expect.anything())
   })
 
   it('reports a failed start without opening a companion and allows retry', async () => {
     vi.mocked(call).mockRejectedValueOnce(new Error('Choose a primary model first.'))
     openPage()
-    await choose('Bob')
+    await choose('Uncle Bob')
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByText('Choose a primary model first.')).toBeTruthy()
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
-    await choose('Bob')
-    expect(await screen.findByRole('button', { name: 'Close Bob' })).toBeTruthy()
+    await choose('Uncle Bob')
+    expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
   })
 })

@@ -69,7 +69,7 @@ export function InboxPage({
         )}
         {bobReviewsError && (
           <p role="status" className="inbox-warning">
-            Could not load saved Bob reviews: {bobReviewsError}
+            Could not load saved Uncle Bob reviews: {bobReviewsError}
           </p>
         )}
         {inbox?.warnings?.map((warning) => (

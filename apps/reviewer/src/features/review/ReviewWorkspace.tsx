@@ -435,11 +435,6 @@ export function ReviewWorkspace({
               locations.
             </div>
           )}
-        {selectedHunks.length > 0 && (
-          <div className="review-progress-note" role="status">
-            {viewedCount} of {selectedHunks.length} diff sections viewed in this group.
-          </div>
-        )}
         {pull.warnings.map((warning) => (
           <div className="warning-banner" key={warning}>
             {warning}
