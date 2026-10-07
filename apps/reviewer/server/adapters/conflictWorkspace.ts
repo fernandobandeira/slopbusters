@@ -8,7 +8,7 @@ import { UserError } from '../errors'
 import type { GitHub } from './github'
 import { hardenedGit } from './git'
 import { workspacePath } from './workspacePath'
-import { readConflictRevision } from './conflictRevision'
+import { BaseAdvancedError, readConflictRevision, verifyConflictRevision } from './conflictRevision'
 import { conflictIndex } from './conflictIndex'
 import { createConflictChoices } from './conflictChoices'
 
@@ -51,11 +51,8 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
   try {
     const revision = await readConflictRevision(github, options.pull, signal)
     const pull = { ...options.pull, headSha: revision.headSha, baseSha: revision.baseSha }
-    const verify = async (headSha = revision.headSha) => {
-      const current = await readConflictRevision(github, pull, signal)
-      if (JSON.stringify(current) !== JSON.stringify({ ...revision, headSha }))
-        throw new UserError('This PR changed during conflict resolution. Refresh it and retry.')
-    }
+    const verify = (headSha = revision.headSha) =>
+      verifyConflictRevision(github, pull, { ...revision, headSha }, signal)
     const remote =
       options.remoteUrl ?? ((repository: string) => `https://github.com/${repository}.git`)
     await git(['init', '--template=', '--initial-branch=gandalf'])
@@ -84,7 +81,11 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
       git,
       publish: async () => {
         // The push also has an atomic head lease; this check covers a changed base or closed PR.
-        await verify()
+        // A base that only gained commits still contains the reviewed merge parent, so the
+        // resolution is published and the job's final check merges the newer commits.
+        await verify().catch((error: unknown) => {
+          if (!(error instanceof BaseAdvancedError)) throw error
+        })
         const tree = (await git(['write-tree'])).trim()
         const sha = (
           await git([

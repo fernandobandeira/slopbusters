@@ -7,6 +7,7 @@ import { ReviewerStore } from '../server/adapters/store'
 import { AgentSessions } from '../server/features/agent-sessions/agentSessions'
 import { GandalfJobs } from '../server/features/gandalf/gandalfJobs'
 import { NetworkError } from '../server/adapters/network'
+import { BaseAdvancedError } from '../server/adapters/conflictRevision'
 import type { GandalfTurn } from '../shared/domain/gandalf'
 import { Provider, type PullRequest } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
@@ -216,6 +217,43 @@ describe('GitHub outages', () => {
   })
 })
 
+describe('base branches that gain commits during resolution', () => {
+  it('keeps the published update and rechecks the stack against the newer base', async () => {
+    const fixture = recoveryFixture()
+    const { jobs, publish, verify, urls } = fixture
+    try {
+      verify.mockRejectedValueOnce(new BaseAdvancedError())
+      const started = jobs.start('review-room/example', urls)
+      await vi.waitFor(() => {
+        expect(jobs.get(started.id).status).toBe('complete')
+      })
+      expect(jobs.get(started.id).baseRetries).toBe(1)
+      expect(publish).toHaveBeenCalledTimes(2)
+      expect(jobs.get(started.id).results.map((result) => result.published)).toEqual([true, true])
+    } finally {
+      await fixture.close()
+    }
+  })
+
+  it('stops once the base keeps moving past the recheck budget', async () => {
+    const fixture = recoveryFixture()
+    const { jobs, verify, urls } = fixture
+    try {
+      verify.mockRejectedValue(new BaseAdvancedError())
+      const started = jobs.start('review-room/example', urls)
+      await vi.waitFor(() => {
+        expect(jobs.get(started.id).status).toBe('failed')
+      })
+      expect(jobs.get(started.id)).toMatchObject({
+        baseRetries: 3,
+        error: new BaseAdvancedError().message,
+      })
+    } finally {
+      await fixture.close()
+    }
+  })
+})
+
 function recoveryFixture(networkRetryDelaysMs = [0, 0]) {
   const directory = mkdtempSync(join(tmpdir(), 'gandalf-recovery-'))
   const store = new ReviewerStore({ dataDirectory: directory })
@@ -237,6 +275,7 @@ function recoveryFixture(networkRetryDelaysMs = [0, 0]) {
     .fn<NonNullable<ConstructorParameters<typeof GandalfJobs>[0]['resolve']>>()
     .mockResolvedValue(clean)
   const plan = vi.fn(() => Promise.resolve(urls))
+  const verify = vi.fn(() => Promise.resolve())
   const openWorkspace = vi.fn((pull: PullRequest) =>
     Promise.resolve({
       directory,
@@ -245,7 +284,7 @@ function recoveryFixture(networkRetryDelaysMs = [0, 0]) {
       conflicts: [],
       inspect: () => Promise.resolve({ revision: 'revision', diff: '', conflicts: [] }),
       apply: () => Promise.resolve(),
-      verify: () => Promise.resolve(),
+      verify,
       publish: () => publish(pull),
       close: () => Promise.resolve(),
     }),
@@ -274,6 +313,7 @@ function recoveryFixture(networkRetryDelaysMs = [0, 0]) {
     publish,
     urls,
     plan,
+    verify,
     openWorkspace,
     directory,
     async close() {
