@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile, lstat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { PullRequest } from '../../shared/domain/types'
-import type { GandalfTurn } from '../../shared/domain/gandalf'
+import type { GandalfTask, GandalfTurn } from '../../shared/domain/gandalf'
 import { MAX_FILE_BYTES, MAX_GANDALF_PROMPT_BYTES } from '../limits'
 import { UserError } from '../errors'
 import type { GitHub } from './github'
@@ -37,6 +37,7 @@ interface Options {
   pull: PullRequest
   github: GitHub
   signal: AbortSignal
+  task?: GandalfTask
   remoteUrl?: (repository: string) => string
 }
 
@@ -65,7 +66,11 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
     )
     const conflicts = await mergeBase(git, pull.baseSha)
     await verify()
-    const { regular: allowed, structural } = conflictIndex(await git(['ls-files', '--stage', '-z']))
+    const {
+      regular: allowed,
+      structural,
+      tracked,
+    } = conflictIndex(await git(['ls-files', '--stage', '-z']))
     const choices = createConflictChoices(directory, git, structural, pull)
     for (const path of conflicts)
       if (!allowed.has(path) && !structural.has(path))
@@ -77,6 +82,8 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
       needsUpdate,
       verify,
       allowed,
+      task: options.task ?? 'conflicts',
+      tracked,
       choices,
       git,
       publish: async () => {
@@ -87,6 +94,9 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
           if (!(error instanceof BaseAdvancedError)) throw error
         })
         const tree = (await git(['write-tree'])).trim()
+        if (!needsUpdate && tree === (await git(['rev-parse', `${pull.headSha}^{tree}`])).trim())
+          return pull.headSha
+        const parents = needsUpdate ? [pull.headSha, pull.baseSha] : [pull.headSha]
         const sha = (
           await git([
             '-c',
@@ -95,12 +105,9 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
             'user.email=gandalf@slopbusters.local',
             'commit-tree',
             tree,
-            '-p',
-            pull.headSha,
-            '-p',
-            pull.baseSha,
+            ...parents.flatMap((parent) => ['-p', parent]),
             '-m',
-            `Resolve merge conflicts for PR #${pull.number}`,
+            commitMessage(options.task ?? 'conflicts', pull, needsUpdate),
           ])
         ).trim()
         signal.throwIfAborted()
@@ -112,6 +119,13 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
     await rm(directory, { recursive: true, force: true })
     throw error
   }
+}
+
+function commitMessage(task: GandalfTask, pull: PullRequest, merged: boolean) {
+  if (task === 'conflicts') return `Resolve merge conflicts for PR #${pull.number}`
+  return merged
+    ? `Merge ${pull.baseBranch} and fix CI for PR #${pull.number}`
+    : `Fix CI for PR #${pull.number}`
 }
 
 /** The lease rejects the push if the PR head moved after the workspace fetched it. */
@@ -171,6 +185,27 @@ async function mergeBase(git: (args: string[]) => Promise<string>, sha: string) 
   }
   return (await git(['diff', '--name-only', '--diff-filter=U', '-z'])).split('\0').filter(Boolean)
 }
+/** Fixing CI may need a new fixture or test file, but never weaker CI configuration. */
+async function admitCiEdit(
+  directory: string,
+  edit: GandalfTurn['edits'][number],
+  allowed: Set<string>,
+  tracked: Set<string>,
+) {
+  if (/^\.github(\/|$)/i.test(edit.path))
+    throw new UserError(`Gandalf does not change CI configuration: ${edit.path}.`)
+  if (allowed.has(edit.path) || !creatable(edit.path, tracked)) return
+  if (edit.content === null)
+    throw new UserError(`The resolution deletes a file that does not exist: ${edit.path}.`)
+  await mkdir(dirname(safePath(directory, edit.path, new Set([edit.path]))), { recursive: true })
+  allowed.add(edit.path)
+}
+/** A new file may not replace a tracked path or sit beneath a tracked file. */
+function creatable(path: string, tracked: Set<string>) {
+  if (tracked.has(path)) return false
+  const parts = path.split('/')
+  return parts.slice(0, -1).every((_, index) => !tracked.has(parts.slice(0, index + 1).join('/')))
+}
 function safePath(directory: string, path: string, allowed: Set<string>) {
   if (
     !allowed.has(path) ||
@@ -201,6 +236,8 @@ function workspaceOperations(options: {
   needsUpdate: boolean
   verify: (headSha?: string) => Promise<void>
   allowed: Set<string>
+  task: GandalfTask
+  tracked: Set<string>
   choices: ReturnType<typeof createConflictChoices>
   git: (args: string[]) => Promise<string>
   publish: () => Promise<string>
@@ -233,6 +270,7 @@ function workspaceOperations(options: {
       if (new Set(edits.map((edit) => edit.path)).size !== edits.length)
         throw new UserError('The model returned duplicate file edits.')
       for (const edit of edits) {
+        if (options.task === 'ci') await admitCiEdit(directory, edit, allowed, options.tracked)
         const target = safePath(directory, edit.path, allowed)
         await textFile(directory, edit.path, allowed)
         if (

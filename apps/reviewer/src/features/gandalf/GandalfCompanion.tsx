@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Button } from '~/components/ui/button'
 import { X } from 'lucide-react'
 import type { InboxPull } from '../../../shared/domain/types'
+import type { GandalfSession, GandalfTask } from '../../../shared/domain/gandalf'
 import { useGandalfSession } from './useGandalfSession'
 import { GandalfSelection } from './GandalfSelection'
 import { GandalfProgress } from './GandalfProgress'
@@ -9,6 +10,7 @@ import './gandalf.css'
 
 interface GandalfProps {
   repository: string
+  task?: GandalfTask
   pulls: InboxPull[]
   ready: boolean
   onClose: () => void
@@ -18,30 +20,29 @@ interface GandalfProps {
 
 export function GandalfCompanion({
   repository,
+  task = 'conflicts',
   pulls,
   ready,
   onClose,
   onComplete,
   renderSessionCard,
 }: GandalfProps) {
-  const { session, busy, loading, error, act, reload } = useGandalfSession(repository, onComplete)
+  const { session, busy, loading, error, act, reload } = useGandalfSession(
+    repository,
+    task,
+    onComplete,
+  )
   const [selected, setSelected] = useState<string[]>([])
   const [choosing, setChoosing] = useState(true)
   const active = session?.status === 'running'
   const selection = selected.filter((url) => pulls.some((pull) => pull.url === url))
   const showingProgress = session && (active || !choosing)
-  const emotion = active
-    ? 'thinking'
-    : showingProgress
-      ? session.status === 'complete'
-        ? 'happy'
-        : 'angry'
-      : 'neutral'
+  const emotion = gandalfEmotion(showingProgress ? session : undefined)
   useCloseOnEscape(onClose)
   return (
-    <aside className="gandalf-companion" aria-label="Gandalf conflict companion">
+    <aside className="gandalf-companion" aria-label={labels[task].companion}>
       <div className="gandalf-bubble">
-        <GandalfHeader onClose={onClose} />
+        <GandalfHeader task={showingProgress ? session.task : task} onClose={onClose} />
         {session && choosing && !active && (
           <Button
             size="sm"
@@ -74,6 +75,7 @@ export function GandalfCompanion({
           </>
         ) : (
           <GandalfSelection
+            task={task}
             pulls={pulls}
             selected={selection}
             onChange={setSelected}
@@ -96,10 +98,21 @@ export function GandalfCompanion({
   )
 }
 
-function GandalfHeader({ onClose }: { onClose: () => void }) {
+const labels = {
+  conflicts: { companion: 'Gandalf conflict companion', header: 'GANDALF · CONFLICT RESOLUTION' },
+  ci: { companion: 'Gandalf CI companion', header: 'GANDALF · FIX CI' },
+}
+
+function gandalfEmotion(session: GandalfSession | undefined) {
+  if (!session) return 'neutral'
+  if (session.status === 'running') return 'thinking'
+  return session.status === 'complete' ? 'happy' : 'angry'
+}
+
+function GandalfHeader({ task, onClose }: { task: GandalfTask; onClose: () => void }) {
   return (
     <header>
-      <span>GANDALF · CONFLICT RESOLUTION</span>
+      <span>{labels[task].header}</span>
       <button aria-label="Close Gandalf" onClick={onClose}>
         <X size={16} />
       </button>

@@ -19,6 +19,7 @@ interface Props {
   onSelectionChange: (urls: string[]) => void
   onFilter: (filter: InboxFilter) => void
   onResolveConflicts?: (pulls: InboxPull[]) => void
+  onFixCi?: (pulls: InboxPull[]) => void
   renderPullActions: (pull: InboxPull) => ReactNode
 }
 export function InboxPage({
@@ -35,6 +36,7 @@ export function InboxPage({
   onFilter,
   renderPullActions,
   onResolveConflicts,
+  onFixCi,
 }: Props) {
   const visible = inbox ? inboxPulls(inbox, filter) : []
   const sections = inboxSections(visible)
@@ -102,6 +104,17 @@ export function InboxPage({
                       }}
                     >
                       Resolve conflicts
+                    </Button>
+                  )}
+                  {section.id === 'failing-ci' && filter === 'mine' && onFixCi && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        onFixCi(section.pulls)
+                      }}
+                    >
+                      Fix CI
                     </Button>
                   )}
                 </div>
