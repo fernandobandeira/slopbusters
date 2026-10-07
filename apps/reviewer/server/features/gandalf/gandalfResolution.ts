@@ -34,7 +34,8 @@ Check correctness, lost changes, API compatibility, edge cases, imports and regr
 The app alternates primary and secondary until both approve the exact same revision.
 PR title and description: ${JSON.stringify({ title: pull.title, description: pull.description })}
 Original head: ${pull.headSha}; base being merged: ${pull.baseSha}.
-${failureSection(request)}Current resolution (complete diff from the original head, plus conflict file contents):
+${failureSection(request)}Each merge conflict keeps its entry and shows its current state: unresolved, resolved (already settled in the index) or deleted. Change a resolved or deleted path only to fix a concrete problem; never resolve it again just because it is listed. Delete a regular file with an edit whose content is null.
+Current resolution (complete diff from the original head, plus conflict file contents):
 ${JSON.stringify(snapshot)}
 Previous turns for this PR:
 ${JSON.stringify(history.filter((turn) => turn.url === pull.url))}`

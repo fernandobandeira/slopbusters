@@ -17,6 +17,8 @@ export interface ConflictSnapshot {
   diff: string
   conflicts: {
     path: string
+    /** Every merge conflict stays listed; later turns see which ones are already settled. */
+    state: 'unresolved' | 'resolved' | 'deleted'
     content: string
     choices?: { side: 'head' | 'base'; type: 'file' | 'symlink'; content: string }[]
   }[]
@@ -185,6 +187,13 @@ async function mergeBase(git: (args: string[]) => Promise<string>, sha: string) 
   }
   return (await git(['diff', '--name-only', '--diff-filter=U', '-z'])).split('\0').filter(Boolean)
 }
+async function conflictStates(git: (args: string[]) => Promise<string>) {
+  const paths = async (args: string[]) => new Set((await git(args)).split('\0').filter(Boolean))
+  const unmerged = await paths(['diff', '--name-only', '--diff-filter=U', '-z'])
+  const indexed = await paths(['ls-files', '-z'])
+  return (path: string): ConflictSnapshot['conflicts'][number]['state'] =>
+    unmerged.has(path) ? 'unresolved' : indexed.has(path) ? 'resolved' : 'deleted'
+}
 /** Fixing CI may need a new fixture or test file, but never weaker CI configuration. */
 async function admitCiEdit(
   directory: string,
@@ -251,22 +260,30 @@ function workspaceOperations(options: {
     verify: options.verify,
     async inspect() {
       const diff = await git(['diff', '--no-ext-diff', '--no-textconv', pull.headSha, '--'])
+      const state = await conflictStates(git)
       const files = await Promise.all(
-        conflicts.map(async (path) =>
-          allowed.has(path)
-            ? {
-                path,
-                content: await textFile(directory, path, allowed),
-              }
-            : options.choices.inspect(path),
-        ),
+        conflicts.map(async (path) => ({
+          ...(allowed.has(path)
+            ? { path, content: await textFile(directory, path, allowed) }
+            : await options.choices.inspect(path)),
+          state: state(path),
+        })),
       )
       const data = JSON.stringify({ diff, conflicts: files })
       if (Buffer.byteLength(data) > MAX_GANDALF_PROMPT_BYTES)
         throw new UserError('These conflicts exceed the automatic resolution size limit.')
       return { revision: createHash('sha256').update(data).digest('hex'), diff, conflicts: files }
     },
-    async apply(edits, selections = []) {
+    async apply(requestedEdits, requestedSelections = []) {
+      // Deleting a regular conflict file through a selection means the same as a deletion edit.
+      const deletions = requestedSelections.filter(
+        (selection) => selection.side === 'delete' && allowed.has(selection.path),
+      )
+      const edits = [
+        ...requestedEdits,
+        ...deletions.map((selection) => ({ path: selection.path, content: null })),
+      ]
+      const selections = requestedSelections.filter((selection) => !deletions.includes(selection))
       if (new Set(edits.map((edit) => edit.path)).size !== edits.length)
         throw new UserError('The model returned duplicate file edits.')
       for (const edit of edits) {
@@ -282,9 +299,14 @@ function workspaceOperations(options: {
           throw new UserError(
             `The resolution has invalid content or conflict markers: ${edit.path}.`,
           )
-        if (edit.content === null) await rm(target, { force: true })
-        else await writeFile(target, edit.content)
-        await git(['add', '--all', '--', edit.path])
+        if (edit.content === null) {
+          await rm(target, { force: true })
+          // An earlier turn may already have deleted it; that is still the requested result.
+          await git(['rm', '--cached', '--ignore-unmatch', '--quiet', '--', edit.path])
+        } else {
+          await writeFile(target, edit.content)
+          await git(['add', '--all', '--', edit.path])
+        }
       }
       await options.choices.apply(selections)
       if ((await git(['ls-files', '--unmerged'])).trim())
