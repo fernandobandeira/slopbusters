@@ -1,12 +1,18 @@
 import { randomUUID } from 'node:crypto'
+import { setTimeout as sleep } from 'node:timers/promises'
 import type { GandalfSession, GandalfTurn } from '../../../shared/domain/gandalf'
 import { organizationDefaults } from '../../../shared/domain/preferences'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
 import type { ReviewerStore } from '../../adapters/store'
 import type { ConflictWorkspace } from '../../adapters/conflictWorkspace'
 import { CommandTimeoutError } from '../../adapters/process'
+import { NetworkError } from '../../adapters/network'
 import { UserError, publicError } from '../../errors'
-import { MAX_GANDALF_TURNS, MAX_GANDALF_TIMEOUT_RETRIES } from '../../limits'
+import {
+  GANDALF_NETWORK_RETRY_DELAYS_MS,
+  MAX_GANDALF_TURNS,
+  MAX_GANDALF_TIMEOUT_RETRIES,
+} from '../../limits'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { resolveWithGandalf } from './gandalfResolution'
 
@@ -17,6 +23,7 @@ interface Options {
   openWorkspace: (pull: PullRequest, signal: AbortSignal) => Promise<ConflictWorkspace>
   plan?: (urls: string[], signal: AbortSignal) => Promise<string[]>
   resolve?: typeof resolveWithGandalf
+  networkRetryDelaysMs?: readonly number[]
 }
 
 export class GandalfJobs {
@@ -76,6 +83,7 @@ export class GandalfJobs {
       error: undefined,
       failureContext: undefined,
       timeoutRetries: 0,
+      networkRetries: 0,
     })
     this.launch(session)
     this.save(session)
@@ -151,29 +159,46 @@ export class GandalfJobs {
       } catch (cause) {
         if (signal.aborted) return
         this.options.sessions?.diagnostic(session.id, session.progress, cause)
-        if (
-          cause instanceof CommandTimeoutError &&
-          (session.timeoutRetries ?? 0) < MAX_GANDALF_TIMEOUT_RETRIES
-        ) {
-          session.timeoutRetries = (session.timeoutRetries ?? 0) + 1
-          this.progress(
-            session,
-            'A command timed out. Automatically retrying the unfinished resolution…',
-          )
-          continue
-        }
+        if (await this.retryAutomatically(session, cause, signal)) continue
         session.failureContext = session.progress
         session.status = 'failed'
         session.error =
           cause instanceof CommandTimeoutError
             ? 'A resolution command timed out again. Retry the remaining PRs.'
-            : publicError(cause, 'Gandalf could not resolve these conflicts.')
+            : publicError(cause, 'Gandalf stopped on an unexpected error. Retry the remaining PRs.')
         this.progress(session, 'Resolution stopped. Completed PR updates are saved.')
         return
       }
     }
   }
+  /** Rechecks the stack from the start; published layers are detected as up to date. */
+  private async retryAutomatically(session: GandalfSession, cause: unknown, signal: AbortSignal) {
+    if (
+      cause instanceof CommandTimeoutError &&
+      (session.timeoutRetries ?? 0) < MAX_GANDALF_TIMEOUT_RETRIES
+    ) {
+      session.timeoutRetries = (session.timeoutRetries ?? 0) + 1
+      this.progress(
+        session,
+        'A command timed out. Automatically retrying the unfinished resolution…',
+      )
+      return true
+    }
+    const delays = this.options.networkRetryDelaysMs ?? GANDALF_NETWORK_RETRY_DELAYS_MS
+    const attempt = session.networkRetries ?? 0
+    const delay = delays[attempt]
+    if (!(cause instanceof NetworkError) || delay === undefined) return false
+    session.networkRetries = attempt + 1
+    this.progress(
+      session,
+      `GitHub did not respond. Retrying automatically in ${String(Math.round(delay / 1000))} seconds (attempt ${String(attempt + 1)} of ${String(delays.length)})…`,
+    )
+    // Cancellation and sleep end the wait; the loop then stops on the aborted signal.
+    await sleep(delay, undefined, { signal }).catch(() => undefined)
+    return true
+  }
   private async run(session: GandalfSession, signal: AbortSignal) {
+    this.progress(session, 'Refreshing the PR stack from GitHub…')
     session.urls = (await this.options.plan?.(session.urls, signal)) ?? session.urls
     signal.throwIfAborted()
     session.results = session.results.filter((result) => session.urls.includes(result.url))
@@ -230,6 +255,8 @@ export class GandalfJobs {
         signal.throwIfAborted()
         this.progress(session, `Both models agree. Updating PR #${pull.number}…`)
         resolvedSha = await workspace.publish()
+        // Published progress earns a fresh budget for later connection drops.
+        session.networkRetries = 0
         this.saveResult(session, {
           url,
           number: pull.number,

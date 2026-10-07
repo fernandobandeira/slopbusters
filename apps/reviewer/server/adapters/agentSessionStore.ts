@@ -106,7 +106,7 @@ export class AgentSessionStore {
     if (!/^[a-f\d-]+$/i.test(id)) throw new Error('Invalid diagnostic identity.')
     const directory = join(this.directory, 'agent-diagnostics')
     mkdirSync(directory, { recursive: true, mode: 0o700 })
-    const error = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause)
+    const error = describeError(cause)
     writeFileSync(
       join(directory, `${id}.log`),
       `${new Date().toISOString()}\n${context}\n${error.slice(0, MAX_AGENT_EVENT_CHARS)}\n`,
@@ -137,4 +137,11 @@ export class AgentSessionStore {
           this.saveRun({ ...run, status: 'cancelled', finishedAt: new Date().toISOString() })
     }
   }
+}
+
+/** Wrapped failures keep their command output in the cause chain. */
+function describeError(cause: unknown): string {
+  if (!(cause instanceof Error)) return String(cause)
+  const own = cause.stack ?? cause.message
+  return cause.cause === undefined ? own : `${own}\nCaused by: ${describeError(cause.cause)}`
 }

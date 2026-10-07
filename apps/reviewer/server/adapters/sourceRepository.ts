@@ -45,11 +45,17 @@ export class LocalSourceRepository {
     return { directory, key: JSON.stringify([owner, repo, sha]) }
   }
 
-  private git(directory: string, args: string[], maxOutputBytes = MAX_GIT_OUTPUT_BYTES) {
+  private git(
+    directory: string,
+    args: string[],
+    maxOutputBytes = MAX_GIT_OUTPUT_BYTES,
+    network?: 'fetch',
+  ) {
     return hardenedGit(directory, args, {
       bare: true,
       signal: this.controller.signal,
       maxOutputBytes,
+      network,
     })
   }
 
@@ -110,6 +116,7 @@ export class LocalSourceRepository {
             `${sha}:${ref}`,
           ],
           4096,
+          'fetch',
         )
       })
     this.queues.set(directory, next)

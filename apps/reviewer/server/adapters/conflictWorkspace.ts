@@ -46,7 +46,8 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
   const root = join(options.dataDirectory, 'conflict-workspaces')
   await mkdir(root, { recursive: true })
   const directory = await mkdtemp(join(root, 'gandalf-'))
-  const git = (args: string[]) => hardenedGit(directory, args, { signal })
+  const git = (args: string[], network?: 'fetch') =>
+    hardenedGit(directory, args, { signal, network })
   try {
     const revision = await readConflictRevision(github, options.pull, signal)
     const pull = { ...options.pull, headSha: revision.headSha, baseSha: revision.baseSha }
@@ -102,17 +103,7 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
           ])
         ).trim()
         signal.throwIfAborted()
-        await hardenedGit(directory, [
-          '-c',
-          'credential.helper=',
-          '-c',
-          'credential.helper=!gh auth git-credential',
-          'push',
-          '--porcelain',
-          `--force-with-lease=refs/heads/${pull.headBranch}:${pull.headSha}`,
-          remote(revision.headRepository),
-          `${sha}:refs/heads/${pull.headBranch}`,
-        ])
+        await pushResolution(directory, remote(revision.headRepository), pull, sha)
         return sha
       },
     })
@@ -122,20 +113,45 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
   }
 }
 
-async function fetchCommit(git: (args: string[]) => Promise<string>, remote: string, sha: string) {
+/** The lease rejects the push if the PR head moved after the workspace fetched it. */
+async function pushResolution(directory: string, remote: string, pull: PullRequest, sha: string) {
+  await hardenedGit(
+    directory,
+    [
+      '-c',
+      'credential.helper=',
+      '-c',
+      'credential.helper=!gh auth git-credential',
+      'push',
+      '--porcelain',
+      `--force-with-lease=refs/heads/${pull.headBranch}:${pull.headSha}`,
+      remote,
+      `${sha}:refs/heads/${pull.headBranch}`,
+    ],
+    { network: 'push' },
+  )
+}
+async function fetchCommit(
+  git: (args: string[], network?: 'fetch') => Promise<string>,
+  remote: string,
+  sha: string,
+) {
   if (!/^[a-f\d]{40,64}$/.test(sha)) throw new UserError('Invalid PR revision.')
-  await git([
-    '-c',
-    'credential.helper=',
-    '-c',
-    'credential.helper=!gh auth git-credential',
+  await git(
+    [
+      '-c',
+      'credential.helper=',
+      '-c',
+      'credential.helper=!gh auth git-credential',
+      'fetch',
+      '--quiet',
+      '--no-tags',
+      '--no-recurse-submodules',
+      remote,
+      sha,
+    ],
     'fetch',
-    '--quiet',
-    '--no-tags',
-    '--no-recurse-submodules',
-    remote,
-    sha,
-  ])
+  )
 }
 async function mergeBase(git: (args: string[]) => Promise<string>, sha: string) {
   try {

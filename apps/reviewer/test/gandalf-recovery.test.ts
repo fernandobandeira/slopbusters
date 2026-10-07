@@ -1,11 +1,12 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { AgentSessionStore } from '../server/adapters/agentSessionStore'
 import { ReviewerStore } from '../server/adapters/store'
 import { AgentSessions } from '../server/features/agent-sessions/agentSessions'
 import { GandalfJobs } from '../server/features/gandalf/gandalfJobs'
+import { NetworkError } from '../server/adapters/network'
 import type { GandalfTurn } from '../shared/domain/gandalf'
 import { Provider, type PullRequest } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
@@ -143,7 +144,79 @@ it('keeps cancellation permanent when the user cancels while sleep cleanup is st
   }
 })
 
-function recoveryFixture() {
+describe('GitHub outages', () => {
+  const unreachable = 'GitHub could not be reached. Check your internet connection and retry.'
+  const outage = () =>
+    new NetworkError(unreachable, new Error('dial tcp 140.82.113.6:443: i/o timeout'))
+
+  it('waits out a short outage and keeps the network cause in the diagnostics', async () => {
+    const fixture = recoveryFixture()
+    const { jobs, plan, publish, directory, urls } = fixture
+    try {
+      plan.mockRejectedValueOnce(outage()).mockRejectedValueOnce(outage())
+      const started = jobs.start('review-room/example', urls)
+      await vi.waitFor(() => {
+        expect(jobs.get(started.id).status).toBe('complete')
+      })
+      expect(jobs.get(started.id).error).toBeUndefined()
+      expect(jobs.get(started.id).networkRetries).toBe(0)
+      expect(plan).toHaveBeenCalledTimes(3)
+      expect(publish).toHaveBeenCalledTimes(2)
+      const log = readFileSync(join(directory, 'agent-diagnostics', `${started.id}.log`), 'utf8')
+      expect(log).toContain('Refreshing the PR stack from GitHub…')
+      expect(log).toContain('Caused by: Error: dial tcp 140.82.113.6:443: i/o timeout')
+    } finally {
+      await fixture.close()
+    }
+  })
+
+  it('names the connection problem once the automatic retries are spent', async () => {
+    const fixture = recoveryFixture()
+    const { jobs, plan, urls } = fixture
+    try {
+      plan.mockRejectedValue(outage())
+      const started = jobs.start('review-room/example', urls)
+      await vi.waitFor(() => {
+        expect(jobs.get(started.id).status).toBe('failed')
+      })
+      expect(jobs.get(started.id)).toMatchObject({
+        error: unreachable,
+        failureContext: 'Refreshing the PR stack from GitHub…',
+        networkRetries: 2,
+      })
+      expect(plan).toHaveBeenCalledTimes(3)
+      plan.mockResolvedValue(urls)
+      jobs.retry(started.id)
+      await vi.waitFor(() => {
+        expect(jobs.get(started.id).status).toBe('complete')
+      })
+    } finally {
+      await fixture.close()
+    }
+  })
+
+  it('stops waiting when the user cancels during the retry delay', async () => {
+    const fixture = recoveryFixture([60_000])
+    const { jobs, plan, urls } = fixture
+    try {
+      plan.mockRejectedValue(outage())
+      const started = jobs.start('review-room/example', urls)
+      await vi.waitFor(() => {
+        expect(jobs.get(started.id).progress).toBe(
+          'GitHub did not respond. Retrying automatically in 60 seconds (attempt 1 of 1)…',
+        )
+      })
+      jobs.cancel(started.id)
+      await jobs.close()
+      expect(jobs.get(started.id).status).toBe('cancelled')
+      expect(plan).toHaveBeenCalledOnce()
+    } finally {
+      await fixture.close()
+    }
+  })
+})
+
+function recoveryFixture(networkRetryDelaysMs = [0, 0]) {
   const directory = mkdtempSync(join(tmpdir(), 'gandalf-recovery-'))
   const store = new ReviewerStore({ dataDirectory: directory })
   store.savePreferences({ organization: { provider: Provider.codex, model: 'gpt-6.1-sol' } })
@@ -192,6 +265,7 @@ function recoveryFixture() {
       })
     },
     openWorkspace,
+    networkRetryDelaysMs,
   })
   return {
     jobs,
