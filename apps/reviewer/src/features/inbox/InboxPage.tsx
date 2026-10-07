@@ -37,10 +37,7 @@ export function InboxPage({
   onResolveConflicts,
 }: Props) {
   const visible = inbox ? inboxPulls(inbox, filter) : []
-  const sections =
-    filter === 'mine' && !onResolveConflicts
-      ? [{ id: 'all', label: '', pulls: visible }]
-      : inboxSections(visible)
+  const sections = inboxSections(visible)
   return (
     <>
       <div className="inbox-content">
@@ -81,7 +78,6 @@ export function InboxPage({
           loading={inboxLoading}
           repository={repository}
           statusLoading={statusLoading}
-          enabled={filter !== 'mine' || Boolean(onResolveConflicts)}
         />
         {inboxLoading ? (
           <div className="empty-state" role="status">
@@ -91,32 +87,24 @@ export function InboxPage({
         ) : visible.length ? (
           <div className="pr-list">
             {sections.map((section) => (
-              <section
-                className="inbox-section"
-                key={section.id}
-                aria-label={section.label || 'Pull requests'}
-              >
-                {section.label && (
-                  <div className="inbox-conflict-heading">
-                    <h2 className="inbox-section-title">
-                      {section.id === 'unknown' && statusLoading
-                        ? 'Checking status'
-                        : section.label}
-                      <span>{section.pulls.length}</span>
-                    </h2>
-                    {section.id === 'conflicts' && filter === 'mine' && onResolveConflicts && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          onResolveConflicts(section.pulls)
-                        }}
-                      >
-                        Resolve conflicts
-                      </Button>
-                    )}
-                  </div>
-                )}
+              <section className="inbox-section" key={section.id} aria-label={section.label}>
+                <div className="inbox-conflict-heading">
+                  <h2 className="inbox-section-title">
+                    {section.id === 'unknown' && statusLoading ? 'Checking status' : section.label}
+                    <span>{section.pulls.length}</span>
+                  </h2>
+                  {section.id === 'conflicts' && filter === 'mine' && onResolveConflicts && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        onResolveConflicts(section.pulls)
+                      }}
+                    >
+                      Resolve conflicts
+                    </Button>
+                  )}
+                </div>
                 {section.pulls.map((pr) => (
                   <PullRow
                     key={pr.number}
