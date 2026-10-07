@@ -221,6 +221,7 @@ async function verifySmoke(window) {
     return { title: document.title, theme: preferences.theme, titlebar: true, renderer: Boolean(document.querySelector('.app-shell main')) };
   })()`)
   const contextResult = phase === 'write' ? await require('./context-smoke.cjs').verifyContextRenderer(window) : {}
+  const repositoryResult = await require('./repository-smoke.cjs').verifyRepositoryHistory(window, phase)
   await verifyUpdateFooter(window)
   smokeStage('renderer-verified')
   if (phase === 'write') await window.webContents.executeJavaScript(`(() => {
@@ -238,7 +239,7 @@ async function verifySmoke(window) {
   if (readFileSync(join(app.getPath('userData'), 'reviewer.sqlite')).subarray(0, 16).toString() !== 'SQLite format 3\0') throw new Error('The persistent reviewer SQLite database was not created.')
   app.quit()
   if (window.isEnabled()) throw new Error('The window still accepts edits while the close flush is pending.')
-  console.log(JSON.stringify({ smoke: phase, electron: process.versions.electron, sqlite: true, sourceParsers: true, sandbox: window.webContents.getLastWebPreferences().sandbox, closeInputBlocked: true, ...workspaceResult, ...contextResult, ...result }))
+  console.log(JSON.stringify({ smoke: phase, electron: process.versions.electron, sqlite: true, sourceParsers: true, sandbox: window.webContents.getLastWebPreferences().sandbox, closeInputBlocked: true, ...workspaceResult, ...repositoryResult, ...contextResult, ...result }))
 }
 
 async function verifyUpdateFooter(window) {

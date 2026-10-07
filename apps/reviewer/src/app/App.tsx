@@ -19,11 +19,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { UpdateButton } from '../components/UpdateButton'
 import { AppTitleBar } from './AppTitleBar'
 import { RepositorySwitcher } from '../features/inbox/RepositorySwitcher'
-import {
-  loadRepositoryHistory,
-  saveRepositoryHistory,
-  visitRepository,
-} from '../features/inbox/repositoryHistory'
+import { useRepositoryHistory } from '../features/inbox/useRepositoryHistory'
 import { Link, Routes, Route, useLocation, useNavigate } from 'react-router'
 import { inboxPath, readRoute, reviewPath } from '../lib/routes'
 import { PullLoadingState } from '../features/review/PullLoadingState'
@@ -59,15 +55,12 @@ export function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const route = readRoute(location)
-  const [repositoryHistory, setRepositoryHistory] = useState(loadRepositoryHistory)
   const visitedRepository =
     route.kind === 'inbox' || route.kind === 'pull' || route.kind === 'sessions'
       ? route.repository
       : undefined
-  const recentRepositories = visitedRepository
-    ? visitRepository(repositoryHistory, visitedRepository)
-    : repositoryHistory
-  if (recentRepositories !== repositoryHistory) setRepositoryHistory(recentRepositories)
+  const { recentRepositories, historyLoading, historyError } =
+    useRepositoryHistory(visitedRepository)
   const lastRepository = recentRepositories[0] ?? ''
   const repository =
     route.kind === 'not-found' ? lastRepository : (route.repository ?? lastRepository)
@@ -155,19 +148,17 @@ export function App() {
   const { inbox, inboxLoading, inboxError, inboxStatusLoading } = useInbox(repository, {
     filter,
     refresh,
-    enabled: route.kind === 'inbox',
+    enabled: route.kind === 'inbox' && !historyLoading,
   })
-  const displayError = error || inboxError || statusQuery.error || repositoryQuery.error
+  const displayError =
+    error || historyError || inboxError || statusQuery.error || repositoryQuery.error
   useEffect(() => {
+    if (historyLoading) return
     const initialRepository = repository || repositories[0]?.fullName
     if (location.pathname === '/' && initialRepository) {
       void navigate(inboxPath(initialRepository, filter), { replace: true })
     }
-  }, [location.pathname, repository, repositories, filter, navigate])
-
-  useEffect(() => {
-    saveRepositoryHistory(recentRepositories)
-  }, [recentRepositories])
+  }, [location.pathname, repository, repositories, filter, navigate, historyLoading])
 
   function openPull(pullUrl: string) {
     try {

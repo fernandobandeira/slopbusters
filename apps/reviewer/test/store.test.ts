@@ -144,6 +144,39 @@ describe('SQLite review storage', () => {
 })
 
 describe('embedded review API', () => {
+  it('restores recent repositories through the API after restarting on another port', async () => {
+    const path = directory()
+    const options = { dataDirectory: path, staticDirectory: path, port: 0 }
+    const first = await startReviewerServer(options)
+    const recentRepositories = ['owner/last', 'owner/previous']
+    try {
+      const response = await fetch(`${first.url}/api/preferences`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recentRepositories }),
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ recentRepositories })
+      for (const invalid of [['invalid'], Array.from({ length: 11 }, () => 'owner/repo')]) {
+        const rejected = await fetch(`${first.url}/api/preferences`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recentRepositories: invalid }),
+        })
+        expect(rejected.status).toBe(400)
+      }
+    } finally {
+      await first.close()
+    }
+    const second = await startReviewerServer(options)
+    try {
+      const response = await fetch(`${second.url}/api/preferences`)
+      expect(await response.json()).toEqual({ recentRepositories })
+    } finally {
+      await second.close()
+    }
+  })
+
   it('serves validated durable drafts/preferences and rejects unrelated local origins', async () => {
     const path = directory()
     const pull = fixturePull()

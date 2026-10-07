@@ -36,6 +36,24 @@ export function saveRepositoryHistory(history: string[], storage?: RepositorySto
   }
 }
 
+export function createRepositoryHistoryWriter(save: (history: string[]) => Promise<unknown>) {
+  let pending = Promise.resolve()
+  let latest: string[] | undefined
+  let saved: string | undefined
+  function write(history: string[]) {
+    latest = history
+    const key = JSON.stringify(history)
+    const next = pending.then(async () => {
+      if (key === saved) return
+      await save(history)
+      saved = key
+    })
+    pending = next.catch(() => undefined)
+    return next
+  }
+  return { write, flush: () => (latest ? write(latest) : pending) }
+}
+
 function normalizeRepositories(values: unknown[]): string[] {
   const seen = new Set<string>()
   return values

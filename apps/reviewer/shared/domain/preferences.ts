@@ -18,6 +18,15 @@ export const preferencesSchema = z
     theme: z.string().min(1).max(80).optional(),
     organization: organizationSchema.optional(),
     companion: organizationSchema.optional(),
+    recentRepositories: z
+      .array(
+        z
+          .string()
+          .max(300)
+          .regex(/^[\w.-]+\/[\w.-]+$/),
+      )
+      .max(10)
+      .optional(),
   })
   .strict()
 

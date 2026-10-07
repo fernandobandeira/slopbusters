@@ -3,6 +3,7 @@ import {
   loadRepositoryHistory,
   saveRepositoryHistory,
   visitRepository,
+  createRepositoryHistoryWriter,
 } from '../src/features/inbox/repositoryHistory'
 
 function storage(values: Record<string, string> = {}) {
@@ -77,5 +78,45 @@ describe('repository visit history', () => {
     expect(() => {
       saveRepositoryHistory(['owner/repo'], unavailable)
     }).not.toThrow()
+  })
+})
+
+describe('durable repository history writes', () => {
+  it('serializes rapid selections and waits for the latest selection before closing', async () => {
+    const saved: string[][] = []
+    let release!: () => void
+    const pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const writer = createRepositoryHistoryWriter(async (history) => {
+      if (history[0] === 'owner/first') await pending
+      saved.push(history)
+    })
+    const first = writer.write(['owner/first'])
+    const second = writer.write(['owner/second', 'owner/first'])
+    let closed = false
+    const close = writer.flush().then(() => {
+      closed = true
+    })
+    await Promise.resolve()
+    expect(closed).toBe(false)
+    release()
+    await Promise.all([first, second, close])
+    expect(saved).toEqual([['owner/first'], ['owner/second', 'owner/first']])
+    expect(closed).toBe(true)
+  })
+
+  it('retries a failed selection during the desktop close flush', async () => {
+    let fail = true
+    const saved: string[][] = []
+    const writer = createRepositoryHistoryWriter((history) => {
+      if (fail) return Promise.reject(new Error('Storage unavailable'))
+      saved.push(history)
+      return Promise.resolve()
+    })
+    await expect(writer.write(['owner/last'])).rejects.toThrow('Storage unavailable')
+    fail = false
+    await writer.flush()
+    expect(saved).toEqual([['owner/last']])
   })
 })

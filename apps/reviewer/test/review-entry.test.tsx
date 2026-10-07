@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { createElement, type ComponentProps } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as routes from '../shared/api'
 import { Provider } from '../shared/domain/types'
@@ -13,6 +13,7 @@ import { call } from '../src/lib/api'
 import { useLinusSession } from '../src/features/linus/useLinusSession'
 import type { ReviewWorkspace } from '../src/features/review/ReviewWorkspace'
 import { fixturePull } from './fixtures/pull'
+import type { Preferences } from '../shared/domain/preferences'
 
 const pull = fixturePull()
 const repository = `${pull.owner}/${pull.repo}`
@@ -46,12 +47,17 @@ const bobReview: BobReviewSummary = {
 
 let savedReviews = [bobReview]
 let savedReviewsLoading = false
+let preferences: Preferences | undefined = { organization: model }
+const savePreferences = vi.fn((changes: Preferences) =>
+  Promise.resolve({ ...preferences, ...changes }),
+)
 
 vi.mock('../src/lib/api', async (original) => ({ ...(await original()), call: vi.fn() }))
 vi.mock('../src/lib/usePreferences', () => ({
   usePreferences: () => ({
-    preferences: { organization: model },
+    preferences,
     preferencesError: '',
+    save: savePreferences,
     reload: vi.fn(),
   }),
 }))
@@ -96,6 +102,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   savedReviews = [bobReview]
   savedReviewsLoading = false
+  preferences = { organization: model }
   vi.mocked(useApiQuery).mockImplementation((route) => ({
     data: route.path === '/bob/reviews' ? { reviews: savedReviews } : undefined,
     error: undefined,
@@ -117,7 +124,7 @@ afterEach(() => {
 })
 
 function openPage(path = `/repos/${repository}/pulls?inbox=mine`) {
-  render(createElement(MemoryRouter, { initialEntries: [path] }, createElement(App)))
+  return render(createElement(MemoryRouter, { initialEntries: [path] }, createElement(App)))
 }
 async function choose(companion: 'Uncle Bob' | 'Linus') {
   fireEvent.click(screen.getByRole('button', { name: `Start review of PR #${pull.number}` }))
@@ -179,6 +186,79 @@ describe('Review entry points', () => {
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
     await choose('Uncle Bob')
     expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
+  })
+})
+
+function CurrentPath() {
+  return createElement('output', { 'aria-label': 'Current path' }, useLocation().pathname)
+}
+
+describe('repository startup selection', () => {
+  it('waits for durable history before choosing a repository from GitHub', async () => {
+    preferences = undefined
+    vi.mocked(useApiQuery).mockImplementation((route) => ({
+      data:
+        route === routes.getRepositories
+          ? { repositories: [{ fullName: 'owner/github-first', description: '', private: false }] }
+          : undefined,
+      error: undefined,
+      loading: false,
+      setData: vi.fn(),
+      reload: vi.fn(),
+    }))
+    const app = createElement(MemoryRouter, null, createElement(App), createElement(CurrentPath))
+    const view = render(app)
+    expect(screen.getByLabelText('Current path').textContent).toBe('/')
+    expect(savePreferences).not.toHaveBeenCalled()
+
+    preferences = { organization: model, recentRepositories: ['owner/last', 'owner/previous'] }
+    view.rerender(createElement(MemoryRouter, null, createElement(App), createElement(CurrentPath)))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current path').textContent).toBe('/repos/owner/last/pulls')
+    })
+  })
+
+  it('prefers durable history to stale browser storage and restores its order after reopening', async () => {
+    localStorage.setItem('slopbusters:repository', 'owner/stale')
+    preferences = { organization: model, recentRepositories: ['owner/last', 'owner/previous'] }
+    const view = openPage('/')
+    expect(screen.getByRole('button', { name: 'Switch repository: owner/last' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Switch repository: owner/last' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'owner/previous' }))
+    await waitFor(() => {
+      expect(savePreferences).toHaveBeenLastCalledWith({
+        recentRepositories: ['owner/previous', 'owner/last'],
+      })
+    })
+    await window.slopbustersFlushReviews?.()
+    view.unmount()
+    localStorage.clear()
+    preferences = { organization: model, recentRepositories: ['owner/previous', 'owner/last'] }
+    openPage('/')
+    expect(screen.getByRole('button', { name: 'Switch repository: owner/previous' })).toBeTruthy()
+  })
+
+  it('migrates browser history when durable history has not been saved yet', async () => {
+    localStorage.setItem('slopbusters:repository', 'owner/legacy')
+    openPage('/')
+    expect(screen.getByRole('button', { name: 'Switch repository: owner/legacy' })).toBeTruthy()
+    await waitFor(() => {
+      expect(savePreferences).toHaveBeenCalledWith({ recentRepositories: ['owner/legacy'] })
+    })
+  })
+
+  it('preserves an explicit repository route while restoring history', async () => {
+    preferences = { organization: model, recentRepositories: ['owner/last', 'owner/previous'] }
+    openPage('/repos/external/from-link/pulls')
+    expect(
+      screen.getByRole('button', { name: 'Switch repository: external/from-link' }),
+    ).toBeTruthy()
+    await waitFor(() => {
+      expect(savePreferences).toHaveBeenCalledWith({
+        recentRepositories: ['external/from-link', 'owner/last', 'owner/previous'],
+      })
+    })
   })
 })
 
