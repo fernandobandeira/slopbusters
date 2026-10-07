@@ -101,13 +101,17 @@ describe('actionable inbox sections', () => {
   })
 
   it.each(['CHANGES_REQUESTED', 'REVIEW_REQUIRED'] as const)(
-    'puts %s before a failing check',
+    'puts a failing check before %s so Gandalf can fix it',
     (reviewDecision) => {
       const blocked = pull(3, { reviewDecision, checksState: 'FAILURE' })
+      const review = pull(7, { reviewDecision })
 
-      const sections = inboxSections([blocked])
+      const sections = inboxSections([review, blocked])
 
-      expect(sections[0]?.id).toBe('reviews')
+      expect(sections).toEqual([
+        { id: 'failing-ci', label: 'Failing CI', pulls: [blocked] },
+        { id: 'reviews', label: 'Reviews', pulls: [review] },
+      ])
     },
   )
 

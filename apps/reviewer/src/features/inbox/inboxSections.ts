@@ -4,8 +4,8 @@ import type { PullStatus } from '../../../shared/domain/pullStatus'
 export type InboxSectionId =
   | 'conflicts'
   | 'comments'
-  | 'reviews'
   | 'failing-ci'
+  | 'reviews'
   | 'pending-checks'
   | 'actions'
   | 'unknown'
@@ -20,8 +20,8 @@ export interface InboxSection {
 const sectionLabels: { id: InboxSectionId; label: string }[] = [
   { id: 'conflicts', label: 'Merge conflicts' },
   { id: 'comments', label: 'Unresolved comments' },
-  { id: 'reviews', label: 'Reviews' },
   { id: 'failing-ci', label: 'Failing CI' },
+  { id: 'reviews', label: 'Reviews' },
   { id: 'pending-checks', label: 'Checks pending' },
   { id: 'actions', label: 'Drafts and other actions' },
   { id: 'unknown', label: 'Status unavailable' },
@@ -41,8 +41,9 @@ function sectionFor(pull: InboxPull): InboxSectionId {
   if (!status) return pull.isDraft ? 'actions' : 'unknown'
   if (status.mergeable === 'CONFLICTING' || status.mergeState === 'DIRTY') return 'conflicts'
   if ((status.unresolvedReviewThreads ?? 0) > 0) return 'comments'
-  if (needsReview(status)) return 'reviews'
+  // Failing CI comes before reviews: the author can act on it, and reviewers would wait for it.
   if (hasFailingChecks(status)) return 'failing-ci'
+  if (needsReview(status)) return 'reviews'
   if (
     ['PENDING', 'EXPECTED'].includes(status.checksState ?? '') ||
     status.checks.some((check) => check.status !== 'completed')
