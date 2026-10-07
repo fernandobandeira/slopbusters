@@ -279,6 +279,7 @@ pre {
 }
 .nav-row:hover {
   background: var(--surface-hover);
+  text-decoration: none;
 }
 .open-url {
   justify-content: flex-start;

@@ -70,9 +70,11 @@ function SessionDetail({ id, repository }: { id: string; repository?: string }) 
           </Link>
         )}
       </header>
-      <p className="session-progress" role="status">
-        {session.progress}
-      </p>
+      {session.status !== 'complete' && (
+        <p className="session-progress" role="status">
+          {session.progress}
+        </p>
+      )}
       {session.failureContext && (
         <p className="session-failure-context">Stopped during: {session.failureContext}</p>
       )}

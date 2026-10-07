@@ -10,27 +10,26 @@
   text-decoration: none;
 }
 .agent-session-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   min-width: 0;
   margin: 14px 0;
 }
+.agent-session-card .agent-model-line {
+  margin: 0;
+}
 .agent-session-card:hover,
 .session-history-card:hover {
-  border-color: var(--primary);
+  background: var(--surface-hover);
+  text-decoration: none;
 }
-.agent-session-card > div,
 .session-history-card > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-.agent-session-card small {
-  display: block;
-  color: var(--muted-foreground);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-top: 6px;
 }
 .agent-model-line {
   display: flex;
@@ -152,6 +151,7 @@
 }
 .session-pass:hover {
   background: var(--muted);
+  text-decoration: none;
 }
 .session-pass.selected {
   background: var(--accent);

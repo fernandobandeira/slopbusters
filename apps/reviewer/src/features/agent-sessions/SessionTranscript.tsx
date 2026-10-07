@@ -19,6 +19,7 @@ export function SessionTranscript({ sessionId, run }: { sessionId: string; run: 
       viewport.current.scrollTop = viewport.current.scrollHeight
   }, [result?.events])
   const state = result?.run ?? run
+  const events = result ? withoutEchoedResult(result.events) : []
   return (
     <section className="session-transcript" aria-label={`${modelName(run.model)} transcript`}>
       <header>
@@ -45,7 +46,7 @@ export function SessionTranscript({ sessionId, run }: { sessionId: string; run: 
           />
           {!result && <p role="status">Loading transcript…</p>}
           {result?.error && <p role="alert">{result.error}</p>}
-          {result?.events.map((event) => (
+          {events.map((event) => (
             <TranscriptItem key={event.id} event={event} />
           ))}
           {state.status === 'running' && (
@@ -85,8 +86,28 @@ export function SessionTranscript({ sessionId, run }: { sessionId: string; run: 
   )
 }
 
+function isResult(event: AgentEvent) {
+  return event.id === 'result' && event.title === 'Result'
+}
+
+/** The model's raw JSON answer repeats the structured result that SessionResult already shows. */
+function withoutEchoedResult(events: AgentEvent[]) {
+  if (!events.some(isResult)) return events
+  return events.filter((event) => isResult(event) || !isRawJson(event))
+}
+
+function isRawJson(event: AgentEvent) {
+  if (event.kind !== 'assistant') return false
+  try {
+    const value: unknown = JSON.parse(event.text)
+    return typeof value === 'object' && value !== null
+  } catch {
+    return false
+  }
+}
+
 function TranscriptItem({ event }: { event: AgentEvent }) {
-  if (event.id === 'result' && event.title === 'Result') return <SessionResult text={event.text} />
+  if (isResult(event)) return <SessionResult text={event.text} />
   if (event.kind === 'tool')
     return (
       <details className="session-tool">

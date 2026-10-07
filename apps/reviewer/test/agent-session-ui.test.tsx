@@ -75,7 +75,7 @@ it('shows a running model card linked to its session', async () => {
       <AgentSessionCard sessionId="session" repository="example/project" />
     </MemoryRouter>,
   )
-  const card = await screen.findByRole('link', { name: /Gandalf.*running.*Claude Opus 5.5/ })
+  const card = await screen.findByRole('link', { name: /^Claude Opus 5.5\s*running$/ })
   expect(card.getAttribute('href')).toBe('/sessions/session?repository=example%2Fproject')
 })
 it('opens the current pass and lets the user revisit a previous model run', async () => {
@@ -95,6 +95,40 @@ it('opens the current pass and lets the user revisit a previous model run', asyn
       .getByRole('link', { name: /Codex Sol 6.1.*Primary review/ })
       .getAttribute('aria-current'),
   ).toBe('page')
+})
+it('shows the structured result without repeating the raw JSON answer', async () => {
+  const answer = '{"groups":[{"title":"Raw group"}]}'
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) =>
+      requestUrl(input).includes('/runs/')
+        ? Promise.resolve(
+            Response.json({
+              run: { ...second, status: 'complete' },
+              events: [
+                event(answer),
+                {
+                  ...event('{\n  "groups": []\n}'),
+                  id: 'result',
+                  title: 'Result',
+                  sequence: 2,
+                  position: 2,
+                },
+              ],
+              cursor: 2,
+              more: false,
+            }),
+          )
+        : fetchSessions()(input),
+    ),
+  )
+  render(
+    <MemoryRouter initialEntries={['/sessions/session']}>
+      <SessionsPage id="session" />
+    </MemoryRouter>,
+  )
+  expect(await screen.findByText('Structured output')).toBeTruthy()
+  expect(screen.queryByText(answer)).toBeNull()
 })
 it('ignores a late transcript response after selecting a different pass', async () => {
   const fetcher = fetchSessions()
