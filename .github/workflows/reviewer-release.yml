@@ -20,12 +20,21 @@ permissions:
 jobs:
   release:
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 90
     permissions:
       contents: write
+      actions: read
     env:
       REVIEWER_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
+      # Manual retries use the current release tools with the original tagged app.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+      - name: Preserve release tools
+        run: |
+          mkdir -p "$RUNNER_TEMP/reviewer-release-tools"
+          cp apps/desktop/scripts/notarization*.mjs "$RUNNER_TEMP/reviewer-release-tools/"
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref_name }}
@@ -62,15 +71,58 @@ jobs:
       - run: pnpm licenses:check
       - run: pnpm lint
       - run: pnpm test
-      - name: Build, sign, and notarize Apple Silicon app
+      - name: Test notarization recovery
+        run: node --test "$RUNNER_TEMP/reviewer-release-tools/notarization.test.mjs"
+      - name: Find saved notarization submission
+        id: checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node "$RUNNER_TEMP/reviewer-release-tools/notarization-cli.mjs" find
+      - name: Restore signed app and submission ID
+        if: steps.checkpoint.outputs.found == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.checkpoint.outputs.artifact-name }}
+          run-id: ${{ steps.checkpoint.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: apps/desktop/release/notary-checkpoint
+      - name: Build and sign Apple Silicon app
+        if: steps.checkpoint.outputs.found != 'true'
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_FOR_PULL_REQUEST: "false"
+        run: pnpm --dir apps/desktop dist --mac --arm64 --dir --publish never --config.forceCodeSigning=true --config.mac.notarize=false
+      - name: Submit signed app without waiting
+        if: steps.checkpoint.outputs.found != 'true'
+        env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node "$RUNNER_TEMP/reviewer-release-tools/notarization-cli.mjs" submit
+      - name: Save signed app and submission before waiting
+        if: steps.checkpoint.outputs.found != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.checkpoint.outputs.artifact-name }}
+          path: apps/desktop/release/notary-checkpoint/
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+      - name: Wait for Apple acceptance and staple ticket
+        timeout-minutes: 70
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node "$RUNNER_TEMP/reviewer-release-tools/notarization-cli.mjs" finish
+      - name: Build installers from the accepted app
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_FOR_PULL_REQUEST: "false"
-        run: pnpm --dir apps/desktop dist --mac --arm64 --publish never --config.forceCodeSigning=true
+        run: pnpm --dir apps/desktop exec electron-builder --prepackaged release/mac-arm64/Slopbusters.app --mac dmg zip --arm64 --publish never --config.forceCodeSigning=true --config.mac.notarize=false
       - name: Verify signature, notarization, and packaged startup
         run: |
           app='apps/desktop/release/mac-arm64/Slopbusters.app'
@@ -80,6 +132,13 @@ jobs:
           spctl --assess --type execute --verbose=2 "$app"
           node apps/desktop/scripts/smoke.mjs --executable="$PWD/$app/Contents/MacOS/Slopbusters"
           test -s apps/desktop/release/latest-mac.yml
+      - name: Upload Apple rejection diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reviewer-notarization-diagnostics-${{ github.run_attempt }}
+          path: apps/desktop/release/notarization-log.json
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: reviewer-mac-arm64

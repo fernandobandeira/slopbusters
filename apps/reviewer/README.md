@@ -87,4 +87,12 @@ pnpm build
 
 Tests cover diff coordinates, move/copy detection, grouping completeness, GitHub review payloads, inbox filtering, URL navigation, discussion pagination and revision checks, and reply validation. Browser checks exercise the live GitHub picker/inbox and PR review interactions without publishing a review.
 
+## Mac releases
+
+Push a `reviewer-vX.Y.Z` tag matching the desktop package version to run **Release reviewer for Mac**. Signing, submission, waiting, and installer creation are separate steps. Before waiting for Apple, the workflow retains the signed app and submission ID as a GitHub artifact for 30 days. It polls with bounded commands, retries temporary status failures and ticket propagation, and uploads diagnostics for rejected submissions.
+
+If Apple takes longer than the one-hour waiting budget, rerun the failed job or run the workflow on `main` with the same unpublished tag. It automatically resumes the retained submission, checking the app version, tagged commit, signing team, and archive checksum. Manual runs use current release tools with the original tagged source. A missing or expired checkpoint requires a new build and submission. Apple credentials are never stored in the checkpoint.
+
+The workflow creates installers from the accepted, stapled app. It verifies its signature, ticket, Gatekeeper assessment, and packaged startup before publishing the release and update feed. Published versions cannot be overwritten.
+
 The app's original code is MIT licensed; copied T3 code retains its own copyright notice. See [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the [port and publication review](../../docs/reviewer-port.md). The repository README includes a single-line T3 Code credit, and the built app includes its full license notice.

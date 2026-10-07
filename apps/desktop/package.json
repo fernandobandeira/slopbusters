@@ -15,7 +15,8 @@
     "dist": "pnpm build && electron-builder",
     "test": "node scripts/smoke.mjs",
     "smoke": "pnpm build && pnpm test",
-    "test:updates": "node --test scripts/updates.test.cjs"
+    "test:updates": "node --test scripts/updates.test.cjs",
+    "test:release": "node --test scripts/notarization.test.mjs"
   },
   "devDependencies": {
     "electron": "44.4.2",
