@@ -5,11 +5,13 @@ import { organizationDefaults } from '../../../shared/domain/preferences'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
 import type { ReviewerStore } from '../../adapters/store'
 import type { ConflictWorkspace } from '../../adapters/conflictWorkspace'
+import { BaseAdvancedError } from '../../adapters/conflictRevision'
 import { CommandTimeoutError } from '../../adapters/process'
 import { NetworkError } from '../../adapters/network'
 import { UserError, publicError } from '../../errors'
 import {
   GANDALF_NETWORK_RETRY_DELAYS_MS,
+  MAX_GANDALF_BASE_RETRIES,
   MAX_GANDALF_TURNS,
   MAX_GANDALF_TIMEOUT_RETRIES,
 } from '../../limits'
@@ -84,6 +86,7 @@ export class GandalfJobs {
       failureContext: undefined,
       timeoutRetries: 0,
       networkRetries: 0,
+      baseRetries: 0,
     })
     this.launch(session)
     this.save(session)
@@ -184,6 +187,17 @@ export class GandalfJobs {
       )
       return true
     }
+    if (
+      cause instanceof BaseAdvancedError &&
+      (session.baseRetries ?? 0) < MAX_GANDALF_BASE_RETRIES
+    ) {
+      session.baseRetries = (session.baseRetries ?? 0) + 1
+      this.progress(
+        session,
+        'A base branch gained commits during resolution. Rechecking the stack against them…',
+      )
+      return true
+    }
     const delays = this.options.networkRetryDelaysMs ?? GANDALF_NETWORK_RETRY_DELAYS_MS
     const attempt = session.networkRetries ?? 0
     const delay = delays[attempt]
@@ -257,19 +271,26 @@ export class GandalfJobs {
         resolvedSha = await workspace.publish()
         // Published progress earns a fresh budget for later connection drops.
         session.networkRetries = 0
+        // A recheck after the base moved builds on this session's earlier update; keep its report.
+        const previous = session.results.find(
+          (result) => result.url === url && result.published && result.resolvedSha === pull.headSha,
+        )
         this.saveResult(session, {
           url,
           number: pull.number,
           title: pull.title,
-          headSha: pull.headSha,
+          headSha: previous?.headSha ?? pull.headSha,
           baseSha: pull.baseSha,
           resolvedSha,
           changedPaths: [
-            ...new Set(
-              session.turns.filter((turn) => turn.url === url).flatMap((turn) => turn.changedPaths),
-            ),
+            ...new Set([
+              ...(previous?.changedPaths ?? []),
+              ...session.turns
+                .filter((turn) => turn.url === url)
+                .flatMap((turn) => turn.changedPaths),
+            ]),
           ],
-          rounds,
+          rounds: (previous?.rounds ?? 0) + rounds,
           published: true,
         })
       }

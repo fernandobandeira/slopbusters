@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { hardenedGit } from '../server/adapters/git'
 import { openConflictWorkspace, type ConflictWorkspace } from '../server/adapters/conflictWorkspace'
+import { BaseAdvancedError } from '../server/adapters/conflictRevision'
 import type { GitHub } from '../server/adapters/github'
 import { fixturePull } from './fixtures/pull'
 
@@ -54,6 +55,15 @@ async function readRemote(endpoint: string) {
       endpoint.slice(endpoint.indexOf('/git/ref/heads/') + '/git/ref/heads/'.length),
     )
     return { object: { sha: (await git(['rev-parse', `refs/heads/${branch}`])).trim() } }
+  }
+  const comparison = /\/compare\/(\w+)\.\.\.(\w+)/.exec(endpoint)
+  if (comparison) {
+    const [, previous = '', next = ''] = comparison
+    const contained = await git(['merge-base', '--is-ancestor', previous, next]).then(
+      () => true,
+      () => false,
+    )
+    return { status: previous === next ? 'identical' : contained ? 'ahead' : 'diverged' }
   }
   return metadata()
 }
@@ -173,12 +183,24 @@ describe('isolated conflict checkout and publication', () => {
     )
     expect(await readFile(join(remote, 'code.ts'), 'utf8')).toBe('export const value = "base"\n')
   })
-  it('rejects changed heads or bases before publication', async () => {
+  it('rejects a rewritten base before publication', async () => {
+    const work = await open()
+    await work.apply([{ path: 'code.ts', content: 'resolved\n' }])
+    await git(['reset', '-q', '--hard', `${originalBase}^`])
+    await commit('rewritten base\n', 'Rewritten base')
+    await expect(work.publish()).rejects.toThrow('changed during conflict resolution')
+    expect((await git(['rev-parse', 'feature'])).trim()).toBe(originalHead)
+  })
+  it('publishes against a base that only gained commits and asks for a recheck afterwards', async () => {
     const work = await open()
     await work.apply([{ path: 'code.ts', content: 'resolved\n' }])
     await commit('new base\n', 'Concurrent base')
-    await expect(work.publish()).rejects.toThrow('changed during conflict resolution')
-    expect((await git(['rev-parse', 'feature'])).trim()).toBe(originalHead)
+    const resolved = await work.publish()
+    expect((await git(['rev-parse', 'feature'])).trim()).toBe(resolved)
+    expect((await git(['show', '-s', '--format=%P', resolved])).trim()).toBe(
+      `${originalHead} ${originalBase}`,
+    )
+    await expect(work.verify(resolved)).rejects.toThrow(BaseAdvancedError)
   })
   it('refuses to overwrite a concurrently updated PR head even if PR metadata is stale', async () => {
     const work = await open()

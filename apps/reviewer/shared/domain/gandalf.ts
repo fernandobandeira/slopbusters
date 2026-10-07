@@ -26,6 +26,7 @@ export const gandalfSessionSchema = z.object({
   failureContext: z.string().optional(),
   timeoutRetries: z.number().int().nonnegative().optional(),
   networkRetries: z.number().int().nonnegative().optional(),
+  baseRetries: z.number().int().nonnegative().optional(),
   turns: z.array(
     z.object({
       url: z.string(),
