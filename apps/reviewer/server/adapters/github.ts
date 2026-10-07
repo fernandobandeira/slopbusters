@@ -8,6 +8,8 @@ export interface GitHubOptions {
   headers?: string[]
   jq?: string
   raw?: boolean
+  /** CI logs contain color codes, which gh refuses to print without this flag. */
+  allowEscapeSequences?: boolean
   maxOutputBytes?: number
   timeoutMs?: number
   signal?: AbortSignal
@@ -43,6 +45,7 @@ export function createGitHub(runner = runCommand, retryDelaysMs?: readonly numbe
           ...(options.method ? ['--method', options.method] : []),
           ...(options.body === undefined ? [] : ['--input', '-']),
           ...(options.jq ? ['--jq', options.jq] : []),
+          ...(options.allowEscapeSequences ? ['--allow-escape-sequences'] : []),
           ...extra,
         ],
         input: options.body === undefined ? undefined : JSON.stringify(options.body),

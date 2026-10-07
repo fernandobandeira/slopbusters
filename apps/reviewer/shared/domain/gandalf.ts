@@ -13,9 +13,14 @@ export const gandalfTurnSchema = z.object({
 })
 export type GandalfTurn = z.infer<typeof gandalfTurnSchema>
 
+/** Gandalf either brings PRs up to date with their bases or fixes their failing CI checks. */
+export const gandalfTaskSchema = z.enum(['conflicts', 'ci'])
+export type GandalfTask = z.infer<typeof gandalfTaskSchema>
+
 export const gandalfSessionSchema = z.object({
   id: z.string(),
   repository: z.string(),
+  task: gandalfTaskSchema.default('conflicts'),
   urls: z.array(z.string()),
   primary: organizationSchema,
   companion: organizationSchema,

@@ -27,6 +27,7 @@ import { OrganizationJobs } from './features/organizationJobs'
 import { GandalfJobs } from './features/gandalf/gandalfJobs'
 import { createGandalfPlanner } from './features/gandalf/gandalfPlan'
 import { openConflictWorkspace } from './adapters/conflictWorkspace'
+import { loadCiFailures } from './adapters/ciFailures'
 import { logError } from './errors'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
 import type { PullRequest } from '../shared/domain/types'
@@ -88,12 +89,14 @@ export function createServices(options: ReviewerServerOptions) {
     sessions: agentSessions,
     loadPull: pulls.fetchPull,
     plan: createGandalfPlanner(stacks.getStackMetadata),
-    openWorkspace: (pull, signal) =>
+    loadFailures: (pull, signal) => loadCiFailures(github, pull, signal),
+    openWorkspace: (pull, signal, task) =>
       openConflictWorkspace({
         dataDirectory: options.dataDirectory,
         pull,
         github,
         signal,
+        task,
         remoteUrl: conflictRemote
           ? (name) => {
               const [owner, repo] = name.split('/')

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import * as routes from '../../../shared/api'
-import type { GandalfSession } from '../../../shared/domain/gandalf'
+import type { GandalfSession, GandalfTask } from '../../../shared/domain/gandalf'
 import { useApiQuery } from '../../lib/useApiQuery'
 import { call, message } from '../../lib/api'
 
-export function useGandalfSession(repository: string, onComplete: () => void) {
+export function useGandalfSession(repository: string, task: GandalfTask, onComplete: () => void) {
   const [session, setSession] = useState<GandalfSession>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -49,7 +49,7 @@ export function useGandalfSession(repository: string, onComplete: () => void) {
       const params = { id: current?.id ?? '' }
       const next =
         action === 'start'
-          ? await call(routes.startGandalf, { body: { repository, urls } })
+          ? await call(routes.startGandalf, { body: { repository, urls, task } })
           : action === 'retry'
             ? await call(routes.retryGandalf, { params })
             : await call(routes.cancelGandalf, { params })

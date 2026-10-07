@@ -45,7 +45,11 @@ export function GandalfProgress({
             PR #{result.number}
           </a>
           {' · '}
-          {result.published ? `Updated ${result.resolvedSha.slice(0, 8)}` : 'Already up to date'}
+          {result.published
+            ? `Updated ${result.resolvedSha.slice(0, 8)}`
+            : session.task === 'ci'
+              ? 'No changes needed'
+              : 'Already up to date'}
         </p>
       ))}
       <GandalfHistory turns={session.turns} />

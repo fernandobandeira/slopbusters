@@ -1,8 +1,25 @@
 import { Link } from 'react-router'
 import type { InboxPull } from '../../../shared/domain/types'
+import type { GandalfTask } from '../../../shared/domain/gandalf'
 import { Button } from '~/components/ui/button'
 
+const copy = {
+  conflicts: {
+    speech: 'You shall not pass… until these conflicts are resolved.',
+    question: 'Which PRs should I resolve?',
+    empty: 'No PRs with conflicts in this view.',
+    verb: 'Resolve',
+  },
+  ci: {
+    speech: 'You shall not pass… until CI is green.',
+    question: 'Which PRs should I fix?',
+    empty: 'No PRs with failing CI in this view.',
+    verb: 'Fix',
+  },
+}
+
 export function GandalfSelection({
+  task,
   pulls,
   selected,
   onChange,
@@ -10,6 +27,7 @@ export function GandalfSelection({
   ready,
   disabled,
 }: {
+  task: GandalfTask
   pulls: InboxPull[]
   selected: string[]
   onChange: (urls: string[]) => void
@@ -19,8 +37,8 @@ export function GandalfSelection({
 }) {
   return (
     <>
-      <p className="gandalf-speech">You shall not pass… until these conflicts are resolved.</p>
-      <p>Which PRs should I resolve?</p>
+      <p className="gandalf-speech">{copy[task].speech}</p>
+      <p>{copy[task].question}</p>
       <div className="gandalf-picks">
         {pulls.map((pull) => (
           <label key={pull.url}>
@@ -43,9 +61,11 @@ export function GandalfSelection({
           </label>
         ))}
       </div>
-      {!pulls.length && <p className="muted">No PRs with conflicts in this view.</p>}
+      {!pulls.length && <p className="muted">{copy[task].empty}</p>}
       <p className="gandalf-detail">
-        Stacked PRs are updated bottom-up, including the other open layers in each selected stack.
+        {task === 'ci'
+          ? 'Stacked PRs are fixed bottom-up, and each fix is merged into the layers above it.'
+          : 'Stacked PRs are updated bottom-up, including the other open layers in each selected stack.'}
       </p>
       {!ready && (
         <p>
@@ -53,7 +73,7 @@ export function GandalfSelection({
         </p>
       )}
       <Button size="sm" disabled={disabled || !ready || !selected.length} onClick={onStart}>
-        Resolve {selected.length || ''} {selected.length === 1 ? 'PR' : 'PRs'}
+        {copy[task].verb} {selected.length || ''} {selected.length === 1 ? 'PR' : 'PRs'}
       </Button>
     </>
   )

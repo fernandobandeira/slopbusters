@@ -230,6 +230,67 @@ describe('isolated conflict checkout and publication', () => {
   })
 })
 
+describe('CI fixes', () => {
+  async function openCi() {
+    workspace = await openConflictWorkspace({
+      dataDirectory: directory,
+      pull: {
+        ...fixturePull(),
+        headBranch: 'feature',
+        headSha: originalHead,
+        baseSha: originalBase,
+      },
+      github,
+      signal: new AbortController().signal,
+      task: 'ci',
+      remoteUrl: () => remote,
+    })
+    return workspace
+  }
+  beforeEach(async () => {
+    originalBase = originalHead
+    await git(['update-ref', 'refs/heads/main', originalBase])
+  })
+  it('commits fixes and new files directly on the PR head when the base needs no update', async () => {
+    const work = await openCi()
+    expect(work.needsUpdate).toBe(false)
+    await work.apply([
+      { path: 'code.ts', content: 'export const value = "fixed"\n' },
+      { path: 'test/fixtures/new.ts', content: 'export const fixture = true\n' },
+    ])
+    const fixed = await work.publish()
+    expect((await git(['rev-parse', 'feature'])).trim()).toBe(fixed)
+    expect((await git(['show', '-s', '--format=%P%n%s', fixed])).trim()).toBe(
+      `${originalHead}\nFix CI for PR #${String(fixturePull().number)}`,
+    )
+    expect(await git(['show', `${fixed}:test/fixtures/new.ts`])).toBe(
+      'export const fixture = true\n',
+    )
+  })
+  it('pushes nothing when the models leave the head unchanged', async () => {
+    const work = await openCi()
+    await work.apply([])
+    expect(await work.publish()).toBe(originalHead)
+    expect((await git(['rev-parse', 'feature'])).trim()).toBe(originalHead)
+  })
+  it('refuses CI configuration, Git metadata, deleting missing files and paths beneath files', async () => {
+    const work = await openCi()
+    await expect(
+      work.apply([{ path: '.github/workflows/ci.yml', content: 'on: push\n' }]),
+    ).rejects.toThrow('CI configuration')
+    await expect(work.apply([{ path: '.git/config', content: 'bad' }])).rejects.toThrow(
+      'unsupported file',
+    )
+    await expect(work.apply([{ path: 'code.ts/inner.ts', content: 'bad' }])).rejects.toThrow(
+      'unsupported file',
+    )
+    await expect(work.apply([{ path: 'missing.ts', content: null }])).rejects.toThrow(
+      'does not exist',
+    )
+    expect((await git(['rev-parse', 'feature'])).trim()).toBe(originalHead)
+  })
+})
+
 async function fileTypeConflict() {
   await git(['checkout', '-q', 'feature'])
   await writeFile(join(remote, 'CONTEXT.md'), 'Head documentation\n')

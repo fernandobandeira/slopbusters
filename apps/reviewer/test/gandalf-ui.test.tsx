@@ -41,6 +41,7 @@ const model = { provider: Provider.codex, model: 'gpt-6.1-sol' }
 const session: GandalfSession = {
   id: 'resolution',
   repository: 'example/project',
+  task: 'conflicts',
   urls: [url],
   primary: model,
   companion: model,
@@ -119,7 +120,7 @@ describe('Gandalf selection and session feedback', () => {
     expect(fetch).toHaveBeenCalledWith(
       '/api/gandalf',
       expect.objectContaining({
-        body: JSON.stringify({ repository: 'example/project', urls: [url] }),
+        body: JSON.stringify({ repository: 'example/project', urls: [url], task: 'conflicts' }),
       }),
     )
     await waitFor(() => {
@@ -130,6 +131,82 @@ describe('Gandalf selection and session feedback', () => {
       expect(screen.getByRole('img').getAttribute('src')).toBe('/gandalf/happy.png')
     })
     expect(onComplete).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Gandalf CI fixes', () => {
+  const failing: InboxPull = {
+    ...pull,
+    status: pull.status && {
+      ...pull.status,
+      mergeState: 'UNSTABLE',
+      mergeable: 'MERGEABLE',
+      checksState: 'FAILURE',
+      checks: [{ name: 'build', kind: 'check', status: 'completed', conclusion: 'FAILURE' }],
+    },
+  }
+  it('opens from the failing CI subgroup with only its failing PRs', () => {
+    const fix = vi.fn()
+    render(
+      <MemoryRouter>
+        <InboxPage
+          repository="example/project"
+          filter="mine"
+          inbox={{ viewer: 'alice', pulls: [failing] }}
+          inboxLoading={false}
+          statusLoading={false}
+          selectingForLinus={false}
+          selectedLinusUrls={[]}
+          onSelectionChange={vi.fn()}
+          onFilter={vi.fn()}
+          renderPullActions={() => null}
+          onResolveConflicts={vi.fn()}
+          onFixCi={fix}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole('button', { name: 'Resolve conflicts' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Fix CI' }))
+    expect(fix).toHaveBeenCalledWith([failing])
+  })
+  it('asks which failing PRs to fix and starts a CI session', async () => {
+    const fetch = vi.fn((path: string, options?: RequestInit) =>
+      Promise.resolve(
+        options?.method === 'POST'
+          ? Response.json({ ...session, task: 'ci' })
+          : path.startsWith('/api/gandalf/latest')
+            ? Response.json({ session: null })
+            : new Response(null, { status: 404 }),
+      ),
+    )
+    vi.stubGlobal('fetch', fetch)
+    render(
+      <MemoryRouter>
+        <GandalfCompanion
+          repository="example/project"
+          task="ci"
+          pulls={[failing]}
+          ready
+          onComplete={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('You shall not pass… until CI is green.')).toBeTruthy()
+    expect(screen.getByText('GANDALF · FIX CI')).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLInputElement>('checkbox').disabled).toBe(false)
+    })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select PR #1 for Gandalf' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fix 1 PR' }))
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/gandalf',
+        expect.objectContaining({
+          body: JSON.stringify({ repository: 'example/project', urls: [url], task: 'ci' }),
+        }),
+      )
+    })
   })
 })
 

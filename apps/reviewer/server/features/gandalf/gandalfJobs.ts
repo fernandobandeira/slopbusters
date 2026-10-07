@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
-import type { GandalfSession, GandalfTurn } from '../../../shared/domain/gandalf'
+import type { GandalfSession, GandalfTask, GandalfTurn } from '../../../shared/domain/gandalf'
 import { organizationDefaults } from '../../../shared/domain/preferences'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
 import type { ReviewerStore } from '../../adapters/store'
 import type { ConflictWorkspace } from '../../adapters/conflictWorkspace'
 import { BaseAdvancedError } from '../../adapters/conflictRevision'
+import type { CiFailure } from '../../adapters/ciFailures'
 import { CommandTimeoutError } from '../../adapters/process'
 import { NetworkError } from '../../adapters/network'
 import { UserError, publicError } from '../../errors'
@@ -17,12 +18,18 @@ import {
 } from '../../limits'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { resolveWithGandalf } from './gandalfResolution'
+import { completion, publishedResult, saveResult, unchangedResult } from './gandalfResults'
 
 interface Options {
   store: ReviewerStore
   sessions?: AgentSessions
   loadPull: (url: string) => Promise<PullRequest>
-  openWorkspace: (pull: PullRequest, signal: AbortSignal) => Promise<ConflictWorkspace>
+  openWorkspace: (
+    pull: PullRequest,
+    signal: AbortSignal,
+    task: GandalfTask,
+  ) => Promise<ConflictWorkspace>
+  loadFailures?: (pull: PullRequest, signal: AbortSignal) => Promise<CiFailure[]>
   plan?: (urls: string[], signal: AbortSignal) => Promise<string[]>
   resolve?: typeof resolveWithGandalf
   networkRetryDelaysMs?: readonly number[]
@@ -41,11 +48,12 @@ export class GandalfJobs {
   private suspended = false
   constructor(private options: Options) {}
 
-  start(repository: string, urls: string[]): GandalfSession {
+  start(repository: string, urls: string[], task: GandalfTask = 'conflicts'): GandalfSession {
     this.requireAwake()
     const previous = this.latest(repository)
     if (previous?.status === 'running') {
-      if (JSON.stringify(previous.urls) === JSON.stringify(urls)) return previous
+      if (previous.task === task && JSON.stringify(previous.urls) === JSON.stringify(urls))
+        return previous
       throw new UserError('Finish or cancel the current Gandalf session first.')
     }
     if ([...this.running.values()].some((job) => job.repository === repository))
@@ -53,6 +61,7 @@ export class GandalfJobs {
     const session: GandalfSession = {
       id: randomUUID(),
       repository,
+      task,
       urls,
       ...this.models(),
       status: 'running',
@@ -218,9 +227,10 @@ export class GandalfJobs {
     session.results = session.results.filter((result) => session.urls.includes(result.url))
     this.save(session)
     const verifications: (() => Promise<void>)[] = []
+    const stackBranches = new Set<string>()
     for (const url of session.urls) {
       signal.throwIfAborted()
-      verifications.push(await this.resolvePull(session, url, signal))
+      verifications.push(await this.resolvePull(session, url, stackBranches, signal))
     }
     signal.throwIfAborted()
     this.progress(session, 'Verifying all updated branches…')
@@ -230,69 +240,38 @@ export class GandalfJobs {
     }
     signal.throwIfAborted()
     session.status = 'complete'
-    this.progress(session, 'You may pass. All PRs and their stack layers are up to date.')
+    this.progress(session, completion(session))
   }
-  private async resolvePull(session: GandalfSession, url: string, signal: AbortSignal) {
-    this.progress(session, `Loading ${url}…`)
-    const loaded = await this.options.loadPull(url)
-    signal.throwIfAborted()
-    if (loaded.state !== 'open') throw new UserError('Select open PRs for conflict resolution.')
-    this.progress(session, `Preparing conflicts for PR #${loaded.number}…`)
-    const workspace = await this.options.openWorkspace(loaded, signal)
+  /** Stack branches processed earlier in this run; their children merge any update to them. */
+  private async resolvePull(
+    session: GandalfSession,
+    url: string,
+    stackBranches: Set<string>,
+    signal: AbortSignal,
+  ) {
+    const { workspace, failures } = await this.prepare(session, url, signal)
     const pull = workspace.pull
     let resolvedSha = pull.headSha
     try {
-      signal.throwIfAborted()
-      if (!workspace.needsUpdate) {
+      stackBranches.add(pull.headBranch)
+      // CI fixes only update a base for failing PRs and for stack layers above a processed parent.
+      const needsWork =
+        session.task === 'ci'
+          ? failures.length > 0 || (workspace.needsUpdate && stackBranches.has(pull.baseBranch))
+          : workspace.needsUpdate
+      if (!needsWork) {
         await workspace.verify()
-        const previous = session.results.find((result) => result.url === url)
-        this.saveResult(
-          session,
-          previous?.resolvedSha === pull.headSha && previous.baseSha === pull.baseSha
-            ? previous
-            : {
-                url,
-                number: pull.number,
-                title: pull.title,
-                headSha: pull.headSha,
-                baseSha: pull.baseSha,
-                resolvedSha: pull.headSha,
-                changedPaths: [],
-                rounds: 0,
-                published: false,
-              },
-        )
+        saveResult(session, unchangedResult(session, url, pull))
       } else {
         // Old attempts are not evidence for this freshly fetched revision.
         session.turns = session.turns.filter((turn) => turn.url !== url)
-        const rounds = await this.roundRobin({ session, pull, workspace, signal })
+        const rounds = await this.roundRobin({ session, pull, workspace, failures, signal })
         signal.throwIfAborted()
         this.progress(session, `Both models agree. Updating PR #${pull.number}…`)
         resolvedSha = await workspace.publish()
         // Published progress earns a fresh budget for later connection drops.
         session.networkRetries = 0
-        // A recheck after the base moved builds on this session's earlier update; keep its report.
-        const previous = session.results.find(
-          (result) => result.url === url && result.published && result.resolvedSha === pull.headSha,
-        )
-        this.saveResult(session, {
-          url,
-          number: pull.number,
-          title: pull.title,
-          headSha: previous?.headSha ?? pull.headSha,
-          baseSha: pull.baseSha,
-          resolvedSha,
-          changedPaths: [
-            ...new Set([
-              ...(previous?.changedPaths ?? []),
-              ...session.turns
-                .filter((turn) => turn.url === url)
-                .flatMap((turn) => turn.changedPaths),
-            ]),
-          ],
-          rounds: (previous?.rounds ?? 0) + rounds,
-          published: true,
-        })
+        saveResult(session, publishedResult(session, url, pull, { resolvedSha, rounds }))
       }
       this.save(session)
     } finally {
@@ -300,34 +279,58 @@ export class GandalfJobs {
     }
     return () => workspace.verify(resolvedSha)
   }
-  private saveResult(session: GandalfSession, result: GandalfSession['results'][number]) {
-    session.results = session.results.filter((previous) => previous.url !== result.url)
-    session.results.push(result)
+  private async prepare(session: GandalfSession, url: string, signal: AbortSignal) {
+    this.progress(session, `Loading ${url}…`)
+    const loaded = await this.options.loadPull(url)
+    signal.throwIfAborted()
+    if (loaded.state !== 'open') throw new UserError('Select open PRs for Gandalf.')
+    this.progress(
+      session,
+      session.task === 'ci'
+        ? `Preparing PR #${loaded.number} and its failing checks…`
+        : `Preparing conflicts for PR #${loaded.number}…`,
+    )
+    const workspace = await this.options.openWorkspace(loaded, signal, session.task)
+    try {
+      signal.throwIfAborted()
+      const failures =
+        session.task === 'ci'
+          ? ((await this.options.loadFailures?.(workspace.pull, signal)) ?? [])
+          : []
+      signal.throwIfAborted()
+      return { workspace, failures }
+    } catch (error) {
+      await workspace.close()
+      throw error
+    }
   }
   private async roundRobin(request: {
     session: GandalfSession
     pull: PullRequest
     workspace: ConflictWorkspace
+    failures: CiFailure[]
     signal: AbortSignal
   }) {
-    const { session, pull, workspace, signal } = request
+    const { session, pull, workspace, failures, signal } = request
     const approvals = new Set<string>()
     for (let index = 0; index < MAX_GANDALF_TURNS; index++) {
       signal.throwIfAborted()
       const role = index % 2 === 0 ? 'primary' : 'secondary'
       this.progress(
         session,
-        `${role === 'primary' ? 'Primary' : 'Secondary'} ${index ? 'reviewing and fixing' : 'resolving'} PR #${pull.number} · turn ${index + 1}…`,
+        `${role === 'primary' ? 'Primary' : 'Secondary'} ${index ? 'reviewing and fixing' : session.task === 'ci' ? 'fixing CI for' : 'resolving'} PR #${pull.number} · turn ${index + 1}…`,
       )
       const snapshot = await workspace.inspect()
       signal.throwIfAborted()
       const request: Parameters<typeof resolveWithGandalf>[0] = {
         pull,
+        task: session.task,
         role,
         initial: index === 0,
         model: session[role === 'primary' ? 'primary' : 'companion'],
         workspace,
         snapshot,
+        failures,
         history: session.turns,
         signal,
       }

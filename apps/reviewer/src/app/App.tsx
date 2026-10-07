@@ -2,6 +2,7 @@ import { AgentSessionCard } from '../features/agent-sessions/AgentSessionCard'
 import { SessionsPage } from '../features/agent-sessions/SessionsPage'
 import type { Repository } from '../../shared/domain/types'
 import { GandalfCompanion } from '../features/gandalf/GandalfCompanion'
+import type { GandalfTask } from '../../shared/domain/gandalf'
 import { inboxSections } from '../features/inbox/inboxSections'
 import { BobCompanion } from '../features/bob/BobCompanion'
 import { AppSidebar } from './AppSidebar'
@@ -75,12 +76,12 @@ export function App() {
   const repositoryQuery = useApiQuery(routes.getRepositories, {}, { refresh })
   const status = statusQuery.data
   const repositories = repositoryQuery.data?.repositories ?? emptyRepositories
-  const [gandalfRepository, setGandalfRepository] = useState<string>()
+  const [gandalf, setGandalf] = useState<{ repository: string; task: GandalfTask }>()
   const refreshAfterGandalf = useCallback(() => {
     setRefresh((value) => value + 1)
   }, [])
   const closeGandalf = useCallback(() => {
-    setGandalfRepository(undefined)
+    setGandalf(undefined)
   }, [])
   const [linusSelection, setLinusSelection] = useState<{ repository: string; urls: string[] }>()
   const [linusRefresh, setLinusRefresh] = useState(0)
@@ -111,6 +112,12 @@ export function App() {
       setLinusSelection(undefined)
     }
     void reviewLaunch.start(companion, url)
+  }
+  function openGandalf(task: GandalfTask) {
+    setGandalf({ repository, task })
+    setLinusSelection(undefined)
+    setLinusReplay(undefined)
+    reviewLaunch.closeLinus()
   }
   function closeBob() {
     const query = new URLSearchParams(location.search)
@@ -193,10 +200,10 @@ export function App() {
       }}
       onFilter={(next) => void navigate(inboxPath(repository, next))}
       onResolveConflicts={() => {
-        setGandalfRepository(repository)
-        setLinusSelection(undefined)
-        setLinusReplay(undefined)
-        reviewLaunch.closeLinus()
+        openGandalf('conflicts')
+      }}
+      onFixCi={() => {
+        openGandalf('ci')
       }}
       renderPullActions={(pr) => (
         <InboxPullActions
@@ -488,13 +495,16 @@ export function App() {
               }}
             />
           )}
-        {repository && gandalfRepository === repository && route.kind === 'inbox' && (
+        {repository && gandalf?.repository === repository && route.kind === 'inbox' && (
           <GandalfCompanion
             renderSessionCard={renderSessionCard}
-            key={repository}
+            key={`${repository}:${gandalf.task}`}
             repository={repository}
+            task={gandalf.task}
             pulls={
-              inboxSections(myPulls).find((section) => section.id === 'conflicts')?.pulls ?? []
+              inboxSections(myPulls).find(
+                (section) => section.id === (gandalf.task === 'ci' ? 'failing-ci' : 'conflicts'),
+              )?.pulls ?? []
             }
             ready={Boolean(preferences?.organization)}
             onClose={closeGandalf}

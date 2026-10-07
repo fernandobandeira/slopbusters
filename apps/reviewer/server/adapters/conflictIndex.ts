@@ -28,5 +28,5 @@ export function conflictIndex(output: string) {
       regular.delete(entry.path)
     if (!['100644', '100755', '120000'].includes(entry.mode)) structural.delete(entry.path)
   }
-  return { regular, structural }
+  return { regular, structural, tracked: new Set(entries.map((entry) => entry.path)) }
 }

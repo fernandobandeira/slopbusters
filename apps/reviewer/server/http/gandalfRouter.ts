@@ -19,7 +19,7 @@ export function gandalfRouter({ gandalfJobs }: Services) {
         throw new UserError('Select PRs from the current repository.')
     }
     response.status(202)
-    return gandalfJobs.start(body.repository, body.urls)
+    return gandalfJobs.start(body.repository, body.urls, body.task)
   })
   handle(router, routes.getGandalf, ({ params }) => gandalfJobs.get(params.id))
   handle(router, routes.retryGandalf, ({ params }, _request, response) => {
