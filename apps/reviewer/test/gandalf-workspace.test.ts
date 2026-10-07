@@ -328,6 +328,36 @@ describe('file versus symlink conflicts', () => {
       )
     },
   )
+  it('shows settled conflicts to the reviewer and accepts repeating their resolution', async () => {
+    const work = await fileTypeConflict()
+    const companions = work.conflicts.filter((path) => !['CONTEXT.md', 'code.ts'].includes(path))
+    expect(companions).not.toEqual([])
+    const states = async () =>
+      Object.fromEntries((await work.inspect()).conflicts.map((file) => [file.path, file.state]))
+    expect(Object.values(await states())).toEqual(work.conflicts.map(() => 'unresolved'))
+    await work.apply(
+      [
+        { path: 'code.ts', content: 'resolved\n' },
+        ...companions.map((path) => ({ path, content: null })),
+      ],
+      [{ path: 'CONTEXT.md', side: 'base' }],
+    )
+    expect(await states()).toEqual({
+      'code.ts': 'resolved',
+      'CONTEXT.md': 'resolved',
+      ...Object.fromEntries(companions.map((path) => [path, 'deleted'])),
+    })
+    // The secondary repeats the deletion as a selection, as Claude did for CONTEXT.md~HEAD.
+    await work.apply(
+      [],
+      [
+        { path: 'CONTEXT.md', side: 'base' },
+        ...companions.map((path) => ({ path, side: 'delete' as const })),
+      ],
+    )
+    const resolved = await work.publish()
+    expect(await git(['ls-tree', '--name-only', resolved])).toBe('CONTEXT.md\ncode.ts\n')
+  })
   it('rejects invented and traversing selections and permits reviewed deletion', async () => {
     const work = await fileTypeConflict()
     for (const path of ['../escape', '.git/config', 'code.ts'])
