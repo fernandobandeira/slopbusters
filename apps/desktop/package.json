@@ -33,6 +33,7 @@
       { "from": "dist/typescript", "to": "source-analysis/typescript", "filter": ["*.d.ts"] }
     ],
     "asar": true,
+    "afterPack": "scripts/update-config.cjs",
     "mac": {
       "icon": "dist/icon.png",
       "category": "public.app-category.developer-tools",

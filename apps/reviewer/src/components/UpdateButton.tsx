@@ -6,6 +6,7 @@ import { Button } from '~/components/ui/button'
 export function UpdateButton() {
   const [state, setState] = useState<UpdateState>()
   const [pending, setPending] = useState(false)
+  const [checking, setChecking] = useState(false)
 
   useEffect(() => {
     const bridge = window.reviewerDesktop
@@ -30,22 +31,18 @@ export function UpdateButton() {
     }
   }, [])
 
-  if (!state || ['disabled', 'idle', 'checking'].includes(state.status)) return null
+  // Background checks stay silent; a requested check shows its progress.
+  if (!state || (['disabled', 'idle', 'checking'].includes(state.status) && !checking)) return null
   const downloading = state.status === 'downloading'
   const downloaded = state.status === 'downloaded'
   const failed = state.status === 'error'
-  const label = downloaded
-    ? 'Restart to update'
-    : downloading
-      ? `Downloading ${Math.floor(state.percent ?? 0)}%`
-      : failed
-        ? 'Retry update check'
-        : `Update available · ${state.version}`
+  const label = checking ? 'Checking for updates…' : updateLabel(state)
 
   async function update() {
     const bridge = window.reviewerDesktop
     if (!bridge || pending || downloading) return
     setPending(true)
+    setChecking(failed)
     try {
       if (downloaded) await bridge.installUpdate()
       else if (failed) await bridge.checkForUpdates()
@@ -57,6 +54,7 @@ export function UpdateButton() {
       })
     } finally {
       setPending(false)
+      setChecking(false)
     }
   }
 
@@ -70,7 +68,7 @@ export function UpdateButton() {
         title={state.message ?? `Slopbusters Review ${state.version ?? ''}`}
         onClick={() => void update()}
       >
-        {downloading ? (
+        {downloading || checking ? (
           <LoaderCircle size={12} className="animate-spin" />
         ) : downloaded || failed ? (
           <RefreshCw size={12} />
@@ -81,4 +79,11 @@ export function UpdateButton() {
       </Button>
     </footer>
   )
+}
+
+function updateLabel(state: UpdateState) {
+  if (state.status === 'downloaded') return 'Restart to update'
+  if (state.status === 'downloading') return `Downloading ${Math.floor(state.percent ?? 0)}%`
+  if (state.status === 'error') return 'Update check failed · Retry'
+  return `Update available · ${state.version ?? ''}`
 }

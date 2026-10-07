@@ -6,6 +6,7 @@ const { basename, delimiter, isAbsolute, join } = require('node:path')
 const { promisify } = require('node:util')
 const { startReviewerServer } = require('../../reviewer/server/app.ts')
 const { createUpdates } = require('./updates.cjs')
+const { createUpdateLog } = require('./updateLog.cjs')
 
 // Declaration files are runtime inputs. electron-builder excludes .d.ts
 // from the application archive, so ship analysis assets as explicit resources.
@@ -334,6 +335,7 @@ async function start() {
   updates = createUpdates({
     updater: require('electron-updater').autoUpdater,
     enabled: app.isPackaged && process.platform === 'darwin' && !smoke,
+    log: createUpdateLog(join(app.getPath('logs'), 'updates.log')),
     publish: (state) => {
       if (state.status === 'error' && installing) {
         installing = false

@@ -1,6 +1,7 @@
-function createUpdates({ updater, enabled, publish }) {
+function createUpdates({ updater, enabled, publish, log }) {
   let state = { status: enabled ? 'idle' : 'disabled' }
   let busy = false
+  let lastFailure
   const listeners = []
   const setState = (next) => { state = next; publish(state) }
   const on = (event, listener) => {
@@ -11,18 +12,25 @@ function createUpdates({ updater, enabled, publish }) {
   updater.autoInstallOnAppQuit = false
   updater.allowPrerelease = false
   updater.allowDowngrade = false
+  if (log) updater.logger = log
+  // electron-updater both emits and rejects most failures; record each once.
+  const fail = (error) => {
+    if (error !== lastFailure) log?.error('Update failed:', error)
+    lastFailure = error
+    setState({ status: 'error', message: error?.message || 'Update failed.' })
+  }
   on('checking-for-update', () => setState({ status: 'checking' }))
   on('update-not-available', () => setState({ status: 'idle' }))
   on('update-available', (info) => setState({ status: 'available', version: info.version }))
   on('download-progress', (progress) => setState({ ...state, status: 'downloading', percent: progress.percent }))
   on('update-downloaded', (info) => setState({ status: 'downloaded', version: info.version }))
-  on('error', (error) => setState({ status: 'error', message: error.message }))
+  on('error', fail)
 
   async function perform(action) {
     if (!enabled || busy) return
     busy = true
     try { await action() }
-    catch (error) { setState({ status: 'error', message: error.message || 'Update failed.' }) }
+    catch (error) { fail(error) }
     finally { busy = false }
   }
   const check = () => ['available', 'downloading', 'downloaded'].includes(state.status)

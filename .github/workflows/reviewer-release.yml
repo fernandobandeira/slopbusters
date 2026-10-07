@@ -132,6 +132,8 @@ jobs:
           spctl --assess --type execute --verbose=2 "$app"
           node apps/desktop/scripts/smoke.mjs --executable="$PWD/$app/Contents/MacOS/Slopbusters"
           test -s apps/desktop/release/latest-mac.yml
+          # Without the feed config every installed copy fails its update checks.
+          grep -q '^provider: "github"$' "$app/Contents/Resources/app-update.yml"
       - name: Upload Apple rejection diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
