@@ -1,4 +1,4 @@
-import type { RefObject, Dispatch, SetStateAction } from 'react'
+import type { RefObject, Dispatch, SetStateAction, ReactNode } from 'react'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { StyledDiffCodeView } from '~/components/diffs/StyledDiffCodeView'
@@ -11,8 +11,8 @@ import {
 import type { NavigationRequest } from '../../../shared/domain/navigation'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { InlineDiscussion, ThreadDiscussion } from './discussions/InlineDiscussion'
-import { SectionBar } from './SectionBar'
 import type { SyntheticItemKind } from './reviewUpdates'
+import type { ViewedToggle } from './useReviewDiff'
 import { clickedSymbol } from './diff/codeSymbols'
 import type { SymbolMenuSelection } from '../source-navigation/SymbolContextMenu'
 import type { useFileContext } from './diff/useFileContext'
@@ -37,7 +37,8 @@ interface Props {
   fileSectionsViewed: (fileId: string) => boolean
   toggleFile: (fileId: string) => void
   syntheticItems: ReadonlyMap<string, SyntheticItemKind>
-  onToggleSection: (hunkId: string) => void
+  viewedToggles: ReadonlyMap<string, ViewedToggle>
+  toggleViewedShown: (fileId: string) => void
   body: string
   setBody: (body: string) => void
   saveComment: () => void
@@ -62,7 +63,8 @@ export function ReviewDiffViewer({
   fileSectionsViewed,
   toggleFile,
   syntheticItems,
-  onToggleSection,
+  viewedToggles,
+  toggleViewedShown,
   body,
   setBody,
   saveComment,
@@ -110,6 +112,10 @@ export function ReviewDiffViewer({
       )}
       renderHeaderMetadata={(item) => {
         const synthetic = syntheticItems.get(item.id)
+        const viewedToggle = viewedToggles.get(item.id)
+        const viewedSections = viewedToggle && (
+          <ViewedSectionsButton toggle={viewedToggle} onToggle={toggleViewedShown} />
+        )
         if (synthetic)
           return (
             <SyntheticItemHeader
@@ -118,11 +124,14 @@ export function ReviewDiffViewer({
               onToggle={() => {
                 toggleFile(item.id)
               }}
-            />
+            >
+              {viewedSections}
+            </SyntheticItemHeader>
           )
         const file = pull.files.find((file) => file.id === item.id)
         return file ? (
           <div className="file-context-actions">
+            {viewedSections}
             <button
               type="button"
               disabled={
@@ -175,28 +184,23 @@ export function ReviewDiffViewer({
           </div>
         ) : null
       }}
-      renderAnnotation={(annotation) => (
-        <>
-          {hasDiscussion(annotation.metadata) && (
-            <InlineDiscussion
-              discussion={annotation.metadata}
-              body={body}
-              onBodyChange={setBody}
-              onSave={saveComment}
-              onCancel={() => {
-                setEditor(null)
-              }}
-              onEdit={editComment}
-              onDelete={deleteComment}
-              onReply={postReply}
-              submitted={Boolean(submitted)}
-            />
-          )}
-          {annotation.metadata.sections.map((section) => (
-            <SectionBar key={section.hunkId} section={section} onToggle={onToggleSection} />
-          ))}
-        </>
-      )}
+      renderAnnotation={(annotation) =>
+        hasDiscussion(annotation.metadata) && (
+          <InlineDiscussion
+            discussion={annotation.metadata}
+            body={body}
+            onBodyChange={setBody}
+            onSave={saveComment}
+            onCancel={() => {
+              setEditor(null)
+            }}
+            onEdit={editComment}
+            onDelete={deleteComment}
+            onReply={postReply}
+            submitted={Boolean(submitted)}
+          />
+        )
+      }
       renderGutterUtility={(getHoveredLine, item) =>
         syntheticItems.has(item.id) ? null : (
           <button
@@ -312,14 +316,17 @@ function SyntheticItemHeader({
   kind,
   viewed,
   onToggle,
+  children,
 }: {
   kind: SyntheticItemKind
   viewed: boolean
   onToggle: () => void
+  children?: ReactNode
 }) {
   const { label, title } = syntheticLabels[kind]
   return (
     <div className="file-context-actions">
+      {children}
       <span className="section-update" title={title}>
         {label}
       </span>
@@ -335,5 +342,32 @@ function SyntheticItemHeader({
         </label>
       )}
     </div>
+  )
+}
+
+/** Sections viewed before new ones appeared in this file stay hidden until asked for. */
+function ViewedSectionsButton({
+  toggle,
+  onToggle,
+}: {
+  toggle: ViewedToggle
+  onToggle: (fileId: string) => void
+}) {
+  const sections = toggle.count === 1 ? 'section' : 'sections'
+  return (
+    <button
+      type="button"
+      aria-pressed={toggle.shown}
+      title={
+        toggle.shown
+          ? 'Hide the sections of this file you already viewed'
+          : 'Show the sections of this file you already viewed'
+      }
+      onClick={() => {
+        onToggle(toggle.fileId)
+      }}
+    >
+      {toggle.shown ? 'Hide' : 'Show'} {toggle.count} viewed {sections}
+    </button>
   )
 }

@@ -7,13 +7,8 @@ import {
   type ReviewThread,
   type ChangeGroup,
 } from '../../../../shared/domain/types'
-import type { SectionTarget } from '../reviewUpdates'
 
 export type CommentEditor = Omit<DraftComment, 'body'>
-export interface SectionMarker extends SectionTarget {
-  viewed: boolean
-  current: boolean
-}
 export interface LineDiscussion {
   path: string
   line: number
@@ -21,8 +16,6 @@ export interface LineDiscussion {
   threads: ReviewThread[]
   drafts: DraftComment[]
   editingId?: string
-  /** Review controls for sections whose last edit is on this line. */
-  sections: SectionMarker[]
 }
 export function hasDiscussion(discussion: LineDiscussion): boolean {
   return Boolean(
@@ -88,7 +81,6 @@ type AnnotationParams = {
   discussions?: PullDiscussions
   comments: DraftComment[]
   editor: CommentEditor | null
-  sections?: { targets: SectionTarget[]; viewed: ReadonlySet<string>; current?: string }
 }
 type Place = (line: number, side: DiffSide) => LineDiscussion | undefined
 
@@ -123,7 +115,6 @@ export function annotateDiscussions(params: AnnotationParams): {
         side,
         threads: [],
         drafts: [],
-        sections: [],
       }
       coordinates.set(key, value)
       return value
@@ -138,7 +129,6 @@ export function annotateDiscussions(params: AnnotationParams): {
       }
       placeDrafts(params, file.path, at)
     }
-    placeSections(params.sections, item.id, at)
     const annotations: DiffLineAnnotation<LineDiscussion>[] = [...coordinates.values()].map(
       (metadata) => ({
         lineNumber: metadata.line,
@@ -180,12 +170,4 @@ function placeDrafts(params: AnnotationParams, path: string, at: Place) {
   if (!editor || !current(editor)) return
   const target = at(editor.line, editor.side)
   if (target) target.editingId = editor.id
-}
-function placeSections(sections: AnnotationParams['sections'], itemId: string, at: Place) {
-  for (const target of sections?.targets.filter((target) => target.itemId === itemId) ?? [])
-    at(target.line, target.side)?.sections.push({
-      ...target,
-      viewed: sections?.viewed.has(target.hunkId) ?? false,
-      current: sections?.current === target.hunkId,
-    })
 }

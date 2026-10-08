@@ -12,12 +12,14 @@ interface EditorOptions {
   selected?: ChangeGroup
   changeView: (changes: Partial<ReviewView>) => void
   setFileCollapsed: (fileId: string, collapsed: boolean, groupId?: string) => void
+  showViewedSections: (fileId: string, shown: boolean, groupId?: string) => void
   setDraft: Dispatch<SetStateAction<ReviewDraft>>
   setNotice: (message: string) => void
   setSubmitted: (url: string | undefined) => void
 }
 export function useCommentEditor(pull: PullRequest, options: EditorOptions) {
-  const { selected, changeView, setFileCollapsed, setDraft, setNotice, setSubmitted } = options
+  const { selected, changeView, setFileCollapsed, showViewedSections } = options
+  const { setDraft, setNotice, setSubmitted } = options
   const [editor, setEditor] = useState<Omit<DraftComment, 'body'> | null>(null)
   const [body, setBody] = useState('')
   function editComment(comment: DraftComment) {
@@ -34,6 +36,7 @@ export function useCommentEditor(pull: PullRequest, options: EditorOptions) {
       return
     }
     setFileCollapsed(file.id, false, group.id)
+    showViewedSections(file.id, true, group.id)
     changeView({ groupId: group.id })
     setEditor(comment)
     setBody(comment.body)

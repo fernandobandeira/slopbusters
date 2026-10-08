@@ -252,48 +252,9 @@
   flex-shrink: 0;
 }
 
-.group-progress {
-  display: block;
-  font-size: 11px;
-  margin-top: 4px;
-}
 .section-update {
   color: var(--amber, #ca8a04);
   font-size: 11px;
-}
-/* A section's review control sits under its last edited line, inside the diff. */
-.section-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 3px 14px;
-  border-top: 1px dashed var(--border);
-  border-bottom: 1px dashed var(--border);
-  font: 11px/1.6 var(--font-sans);
-  color: var(--muted-foreground);
-  white-space: normal;
-}
-.section-bar label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-}
-.section-bar input {
-  accent-color: var(--primary);
-}
-.section-bar[data-current] {
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-  box-shadow: inset 3px 0 var(--primary);
-}
-.section-bar[data-viewed]:not([data-current]) {
-  opacity: 0.65;
-}
-.section-bar-hint kbd {
-  padding: 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  font: inherit;
 }
 .updates-group {
   position: relative;
