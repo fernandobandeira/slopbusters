@@ -28,6 +28,7 @@ import { GandalfJobs } from './features/gandalf/gandalfJobs'
 import { createGandalfPlanner } from './features/gandalf/gandalfPlan'
 import { openConflictWorkspace } from './adapters/conflictWorkspace'
 import { loadCiFailures } from './adapters/ciFailures'
+import { createGitIdentity } from './adapters/gitIdentity'
 import { logError } from './errors'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
 import type { PullRequest } from '../shared/domain/types'
@@ -84,6 +85,7 @@ export function createServices(options: ReviewerServerOptions) {
     loadPull: pulls.fetchPull,
   })
   const conflictRemote = options.sourceRemoteUrl
+  const gitIdentity = createGitIdentity(github)
   const gandalfJobs = new GandalfJobs({
     store,
     sessions: agentSessions,
@@ -97,6 +99,7 @@ export function createServices(options: ReviewerServerOptions) {
         github,
         signal,
         task,
+        identity: gitIdentity,
         remoteUrl: conflictRemote
           ? (name) => {
               const [owner, repo] = name.split('/')
