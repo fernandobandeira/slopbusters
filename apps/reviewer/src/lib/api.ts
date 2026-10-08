@@ -8,7 +8,8 @@ export async function call<C extends ApiContract>(
 ): Promise<z.output<C['response']>> {
   const body = contract.request.parse(input.body)
   const headers = new Headers(options?.headers)
-  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  if (body !== undefined && !headers.has('Content-Type'))
+    headers.set('Content-Type', 'application/json')
   const response = await fetch(routeUrl(contract, input), {
     ...options,
     method: contract.method,
