@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { parsePatch } from 'diff'
+import { splitChangeSections } from '../../shared/domain/changeSections'
 import {
   LineKind,
   Priority,
@@ -67,7 +68,7 @@ export function parseFile(input: FileInput): ChangedFile {
   let coverage: ChangedFile['coverage'] = 'complete'
   if (!parsed) coverage = 'unavailable'
   else if (added !== input.additions || removed !== input.deletions) coverage = 'partial'
-  return { ...input, id, hunks, coverage }
+  return { ...input, id, hunks: hunks.flatMap(splitChangeSections), coverage }
 }
 
 export function fileGroups(files: ChangedFile[]): ChangeGroup[] {

@@ -77,6 +77,14 @@ Repository inboxes have paths such as `/repos/owner/repo/pulls?inbox=others`; PR
 - Diff grouping runs in a temporary directory with read-only/no-tool settings; Linus audits use local checkouts with inspection tools. Provider calls have a five-minute timeout; Gandalf conflict-resolution passes allow fifteen minutes. This app explicitly passes the model saved in Settings. Opening an ungrouped PR starts a grouping call after first-run setup; reopening an already grouped revision reuses its saved result. Concurrent views share the same running job. Grouping is for arranging attention, not for declaring bugs.
 - The server binds to localhost. This is a personal local app, not a hosted multi-user service. Gandalf applies conflict fixes after both models agree; other review recommendations use copy/paste, and there is no direct T3 handoff yet.
 
+## Reviewing updates
+
+One Git hunk can contain several change sections. Separate edits and paragraphs in pure additions or deletions can belong to different behavior groups, including sections of the same file. Replacement pairs stay together. Each section has its own Viewed checkbox; group progress shows how many sections are viewed. File checkboxes mark only the sections displayed in the current group and filter.
+
+After loading a newer revision, **Changes since your last review** compares it with the previous revision where you saved review work. It labels new sections, edited sections, and changes to the three surrounding context lines. Unchanged sections retain viewed state through line shifts and regrouping. The comparison remains available while you review the updated revision and after restarting the app. **Changes since review** filters the diff to updated sections; **Next updated section** visits pending updates first. Removed edits can be inspected in the summary. **Unviewed only** also includes older sections you have never marked viewed.
+
+Only complete patches provide evidence that can carry across revisions. Repeated sections with indistinguishable content and context stay unviewed when their identity is ambiguous. The update summary identifies files whose incomplete patches cannot be fully compared. Saved drafts and viewed proof from earlier releases migrate automatically.
+
 ## Development
 
 ```sh

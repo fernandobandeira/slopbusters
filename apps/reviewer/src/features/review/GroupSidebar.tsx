@@ -2,11 +2,13 @@ import { Link } from 'react-router'
 import { ArrowLeft, Check, RotateCw } from 'lucide-react'
 import type { PullRequest, ReviewDraft } from '../../../shared/domain/types'
 import { groupChangeTotals } from '../../../shared/domain/review'
-import { groupIsViewed } from './reviewProgress'
+import type { ReviewChanges } from '../../../shared/domain/reviewChanges'
+import { groupIsViewed, reviewedHunkIds } from './reviewProgress'
 
 interface Props {
   pull: PullRequest
   draft: ReviewDraft
+  changes?: ReviewChanges
   selectedId?: string
   inboxUrl: string
   submitting: boolean
@@ -18,6 +20,7 @@ interface Props {
 export function GroupSidebar({
   pull,
   draft,
+  changes,
   selectedId,
   inboxUrl,
   submitting,
@@ -28,6 +31,7 @@ export function GroupSidebar({
 }: Props) {
   const groups = pull.groups
   const grouped = pull.groupingSource !== 'files'
+  const reviewed = reviewedHunkIds(pull, draft)
   const selected = groups.find((group) => group.id === selectedId)
   return (
     <aside className="group-sidebar" aria-label="Review navigation">
@@ -66,6 +70,10 @@ export function GroupSidebar({
       <div className="group-list">
         {groups.map((group) => {
           const done = groupIsViewed(group, draft, pull)
+          const viewed = group.hunkIds.filter((id) => reviewed.has(id)).length
+          const updated =
+            changes?.sections.filter((section) => group.hunkIds.includes(section.hunkId)).length ??
+            0
           const totals = groupChangeTotals(pull, group)
           return (
             <button
@@ -92,6 +100,10 @@ export function GroupSidebar({
                 </span>
                 <span className="green">+{totals.additions}</span>
                 <span className="red">−{totals.deletions}</span>
+              </span>
+              <span className="group-progress muted">
+                {viewed}/{group.hunkIds.length} sections viewed
+                {updated > 0 && <span className="section-update"> · {updated} updated</span>}
               </span>
             </button>
           )

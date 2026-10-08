@@ -9,6 +9,9 @@ import {
   reviewedFingerprints,
   hunkFingerprint,
 } from '../features/progress'
+import { sectionedPull, sectionedDraft } from '../../shared/domain/changeSections'
+import type { ReviewChanges } from '../../shared/domain/reviewChanges'
+import { migrateReviewProgress, readReviewChanges } from './reviewProgressStore'
 import type { PullRequest, ReviewDraft } from '../../shared/domain/types'
 import type { Preferences } from '../../shared/domain/preferences'
 import { gandalfSessionSchema, type GandalfSession } from '../../shared/domain/gandalf'
@@ -24,6 +27,7 @@ export class ReviewNotFoundError extends UserError {
 export interface StoredDraft {
   draft: ReviewDraft
   exists: boolean
+  changes?: ReviewChanges
 }
 
 /** Instances own connections; importing this module never creates local data. */
@@ -38,7 +42,7 @@ export class ReviewerStore {
       'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;',
     )
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
-    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5].includes(version)) {
+    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6].includes(version)) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
     }
@@ -74,6 +78,7 @@ export class ReviewerStore {
       CREATE TABLE IF NOT EXISTS gandalf_sessions (
         id TEXT PRIMARY KEY, repository TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL
       ); PRAGMA user_version = 5; COMMIT;`)
+    if (version < 6) migrateReviewProgress(this.database)
   }
   savePull(pull: PullRequest): void {
     this.database
@@ -93,7 +98,7 @@ export class ReviewerStore {
         warning !==
         'Copy matching is limited to available original content from the first 30 changed source files.',
     )
-    return pull
+    return sectionedPull(pull)
   }
   getDraft(id: string): StoredDraft {
     const pull = this.getPull(id)
@@ -104,10 +109,13 @@ export class ReviewerStore {
     return {
       draft: restoreProgress(
         pull,
-        stored ? JSON.parse(String(stored.draft)) : emptyDraft(),
+        stored
+          ? sectionedDraft(pull, JSON.parse(String(stored.draft)) as ReviewDraft)
+          : emptyDraft(),
         new Set(rows.map((row) => String(row.fingerprint))),
       ),
       exists: stored != null,
+      changes: readReviewChanges(this.database, pull),
     }
   }
   saveDraft(

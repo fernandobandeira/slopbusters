@@ -251,3 +251,73 @@
 .review-checkout-item button {
   flex-shrink: 0;
 }
+
+.review-update-summary {
+  flex-basis: 100%;
+  order: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 8px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+.review-update-summary p {
+  margin: 4px 0;
+}
+.review-update-actions {
+  display: flex;
+  gap: 4px;
+}
+.removed-sections {
+  flex-basis: 100%;
+}
+.removed-sections pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.group-progress {
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+}
+.section-update {
+  color: var(--amber, #ca8a04);
+  font-size: 11px;
+}
+.review-section-list {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.review-section-list > div {
+  max-height: 180px;
+  overflow: auto;
+}
+.review-section-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+.review-section-row label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.review-section-row button {
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.review-section-row button:hover {
+  text-decoration: underline;
+}

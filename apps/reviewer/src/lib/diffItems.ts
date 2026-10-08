@@ -1,5 +1,6 @@
 import { parsePatchFiles, type CodeViewItem } from '@pierre/diffs'
 import { LineKind, type ChangeGroup, type PullRequest } from '../../shared/domain/types'
+import { mergeSelectedSections } from './selectedSections'
 import type { PullFileContent } from '../../shared/domain/fileContent'
 
 export function diffItems(
@@ -10,7 +11,9 @@ export function diffItems(
   return pr.files
     .filter((file) => group.fileIds.includes(file.id))
     .flatMap((file) => {
-      const hunks = file.hunks.filter((hunk) => group.hunkIds.includes(hunk.id))
+      const hunks = mergeSelectedSections(
+        file.hunks.filter((hunk) => group.hunkIds.includes(hunk.id)),
+      )
       if (!hunks.length) return []
       const patch = [
         `diff --git ${JSON.stringify(`a/${file.previousPath ?? file.path}`)} ${JSON.stringify(`b/${file.path}`)}`,

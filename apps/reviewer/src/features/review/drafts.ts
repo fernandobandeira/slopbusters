@@ -1,3 +1,4 @@
+import { sectionedDraft } from '../../../shared/domain/changeSections'
 import { z } from 'zod'
 import { DiffSide, type PullRequest, type ReviewDraft } from '../../../shared/domain/types'
 const schema = z.object({
@@ -48,7 +49,12 @@ export function restoreDraft(pr: PullRequest, value: unknown): ReviewDraft {
         (file) => file.hunks.length > 0 && file.hunks.every((hunk) => viewedHunks.has(hunk.id)),
       )
       .map((file) => file.id)
-  return { comments, summary: summary.filter(Boolean).join('\n\n'), viewedFileIds }
+  return sectionedDraft(pr, {
+    comments,
+    summary: summary.filter(Boolean).join('\n\n'),
+    viewedFileIds,
+    viewedHunkIds: stored.viewedHunkIds,
+  })
 }
 export function loadDraft(pr: PullRequest): ReviewDraft {
   try {
