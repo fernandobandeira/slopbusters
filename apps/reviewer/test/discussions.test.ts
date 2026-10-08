@@ -3,6 +3,7 @@ import {
   DiffSide,
   LineKind,
   Provider,
+  type ChangeGroup,
   type PullDiscussions,
   type ReviewThread,
 } from '../shared/domain/types'
@@ -15,6 +16,7 @@ import {
 import { diffItems } from '../src/features/review/diff/diffItems'
 import { restoreDraft } from '../src/features/review/drafts'
 import { fixturePull } from './fixtures/pull'
+import { required } from './fixtures/bob'
 import { parseFile } from '../server/features/diff'
 
 function thread(params: { path: string; line: number; side: DiffSide; id: string }): ReviewThread {
@@ -289,6 +291,46 @@ describe('inline discussions', () => {
     })
     expect(mismatched.unplaced.map((thread) => thread.id)).toEqual(['current'])
     expect(mismatched.items.every((item) => !item.annotations?.length)).toBe(true)
+  })
+  it('lists threads it cannot place in only the group that owns them', () => {
+    const pull = fixturePull()
+    const file = parseFile({
+      path: 'shared.ts',
+      status: 'modified',
+      additions: 2,
+      deletions: 2,
+      patch: '@@ -10 +20 @@\n-old-first\n+new-first\n@@ -20 +30 @@\n-old-second\n+new-second',
+    })
+    const first = required(file.hunks[0])
+    const second = required(file.hunks[1])
+    const base = required(pull.groups[0])
+    const firstGroup = { ...base, id: 'first', fileIds: [file.id], hunkIds: [first.id] }
+    const secondGroup = { ...base, id: 'second', fileIds: [file.id], hunkIds: [second.id] }
+    pull.groupingSource = Provider.codex
+    pull.files = [file]
+    pull.groups = [firstGroup, secondGroup]
+    const other = thread({ id: 'other', path: file.path, line: 30, side: DiffSide.right })
+    const outside = { ...other, id: 'outside', line: 999 }
+    const outdated = { ...other, id: 'outdated', line: null, outdated: true }
+    const discussions = {
+      headSha: pull.headSha,
+      baseSha: pull.baseSha,
+      threads: [other, outside, outdated],
+    }
+    const annotate = (group: ChangeGroup) =>
+      annotateDiscussions({
+        items: diffItems(pull, group),
+        pull,
+        discussions,
+        comments: [],
+        editor: null,
+        groupId: group.id,
+      })
+    expect(annotate(firstGroup).unplaced.map((thread) => thread.id)).toEqual([
+      'outside',
+      'outdated',
+    ])
+    expect(annotate(secondGroup).unplaced).toEqual([])
   })
   it('marks a group viewed only when every file is viewed, including files shared by groups', () => {
     const pull = fixturePull()
