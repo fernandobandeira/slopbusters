@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { hardenedGit } from '../server/adapters/git'
 import { openConflictWorkspace, type ConflictWorkspace } from '../server/adapters/conflictWorkspace'
 import { BaseAdvancedError } from '../server/adapters/conflictRevision'
+import type { GitIdentity } from '../server/adapters/gitIdentity'
 import type { GitHub } from '../server/adapters/github'
 import { fixturePull } from './fixtures/pull'
 
@@ -231,7 +232,7 @@ describe('isolated conflict checkout and publication', () => {
 })
 
 describe('CI fixes', () => {
-  async function openCi() {
+  async function openCi(identity?: GitIdentity) {
     workspace = await openConflictWorkspace({
       dataDirectory: directory,
       pull: {
@@ -243,6 +244,7 @@ describe('CI fixes', () => {
       github,
       signal: new AbortController().signal,
       task: 'ci',
+      identity: identity && (() => Promise.resolve(identity)),
       remoteUrl: () => remote,
     })
     return workspace
@@ -265,6 +267,14 @@ describe('CI fixes', () => {
     )
     expect(await git(['show', `${fixed}:test/fixtures/new.ts`])).toBe(
       'export const fixture = true\n',
+    )
+  })
+  it("authors the published commit with the user's identity", async () => {
+    const work = await openCi({ name: 'Fernando Bandeira', email: 'fernando@example.com' })
+    await work.apply([{ path: 'code.ts', content: 'export const value = "fixed"\n' }])
+    const fixed = await work.publish()
+    expect((await git(['show', '-s', '--format=%an <%ae>%n%cn <%ce>', fixed])).trim()).toBe(
+      'Fernando Bandeira <fernando@example.com>\nFernando Bandeira <fernando@example.com>',
     )
   })
   it('pushes nothing when the models leave the head unchanged', async () => {

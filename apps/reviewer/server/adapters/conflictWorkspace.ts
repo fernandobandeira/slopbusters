@@ -10,6 +10,7 @@ import { hardenedGit } from './git'
 import { workspacePath } from './workspacePath'
 import { BaseAdvancedError, readConflictRevision, verifyConflictRevision } from './conflictRevision'
 import { conflictIndex } from './conflictIndex'
+import { GANDALF_IDENTITY, type GitIdentity } from './gitIdentity'
 import { createConflictChoices } from './conflictChoices'
 
 export interface ConflictSnapshot {
@@ -40,6 +41,8 @@ interface Options {
   github: GitHub
   signal: AbortSignal
   task?: GandalfTask
+  /** The author of published commits; defaults to Gandalf. */
+  identity?: (signal: AbortSignal) => Promise<GitIdentity>
   remoteUrl?: (repository: string) => string
 }
 
@@ -99,12 +102,13 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
         if (!needsUpdate && tree === (await git(['rev-parse', `${pull.headSha}^{tree}`])).trim())
           return pull.headSha
         const parents = needsUpdate ? [pull.headSha, pull.baseSha] : [pull.headSha]
+        const author = (await options.identity?.(signal)) ?? GANDALF_IDENTITY
         const sha = (
           await git([
             '-c',
-            'user.name=Gandalf',
+            `user.name=${author.name}`,
             '-c',
-            'user.email=gandalf@slopbusters.local',
+            `user.email=${author.email}`,
             'commit-tree',
             tree,
             ...parents.flatMap((parent) => ['-p', parent]),
@@ -174,9 +178,9 @@ async function mergeBase(git: (args: string[]) => Promise<string>, sha: string) 
   try {
     await git([
       '-c',
-      'user.name=Gandalf',
+      `user.name=${GANDALF_IDENTITY.name}`,
       '-c',
-      'user.email=gandalf@slopbusters.local',
+      `user.email=${GANDALF_IDENTITY.email}`,
       'merge',
       '--no-commit',
       '--no-ff',
