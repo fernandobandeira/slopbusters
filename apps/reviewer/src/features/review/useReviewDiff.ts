@@ -26,13 +26,13 @@ export function useReviewDiff(
   const { groupId, split, fullSections } = readReviewView(searchParams)
   const updates = useMemo(() => updatesGroup(pull, changes), [pull, changes])
   const viewedHunks = useMemo(() => reviewedHunkIds(pull, draft), [pull, draft])
-  const progress = groupProgress(pull, draft, viewedHunks, { groupId, updates })
+  const progress = groupProgress(pull, draft, { groupId, updates })
   const { selected } = progress
   const { collapseOverrides, setFileCollapsed } = useCollapseOverrides(selected?.id)
   const { shownViewed, toggleViewedShown, showViewedSections } = useShownViewedSections(
     selected?.id,
   )
-  const filters = useVisibleGroup({ pull, selected, viewedHunks, searchParams, shownViewed })
+  const filters = useVisibleGroup({ pull, selected, viewedHunks, shownViewed })
   const { visibleGroup } = filters
   function changeView(changes: Partial<ReviewView>) {
     const next = updateReviewView(searchParams, changes)
@@ -97,23 +97,20 @@ function useVisibleGroup(options: {
   pull: PullRequest
   selected?: ChangeGroup
   viewedHunks: Set<string>
-  searchParams: URLSearchParams
   shownViewed: Set<string>
 }) {
-  const { pull, selected, viewedHunks, searchParams, shownViewed } = options
-  const unviewedOnly = searchParams.get('unviewed') === '1'
+  const { pull, selected, viewedHunks, shownViewed } = options
   const visible = useMemo(
     () =>
       selected &&
       visibleSections(pull, selected, viewedHunks, (fileId) =>
-        unviewedOnly ? 'hidden' : shownViewed.has(`${selected.id}/${fileId}`) ? 'shown' : 'auto',
+        shownViewed.has(`${selected.id}/${fileId}`),
       ),
-    [pull, selected, unviewedOnly, viewedHunks, shownViewed],
+    [pull, selected, viewedHunks, shownViewed],
   )
   return {
     visibleGroup: visible?.group,
     partlyViewed: visible?.partlyViewed ?? new Map<string, number>(),
-    unviewedOnly,
   }
 }
 
@@ -123,18 +120,16 @@ function visibleSections(
   pull: PullRequest,
   group: ChangeGroup,
   viewed: Set<string>,
-  viewedMode: (fileId: string) => 'auto' | 'shown' | 'hidden',
+  viewedShown: (fileId: string) => boolean,
 ) {
   const partlyViewed = new Map<string, number>()
   const hidden = new Set<string>()
   for (const file of pull.files.filter((file) => group.fileIds.includes(file.id))) {
     const ids = file.hunks.filter((hunk) => group.hunkIds.includes(hunk.id)).map((hunk) => hunk.id)
     const seen = ids.filter((id) => viewed.has(id))
-    const mode = viewedMode(file.id)
-    if (mode === 'hidden') seen.forEach((id) => hidden.add(id))
-    if (mode === 'hidden' || !seen.length || seen.length === ids.length) continue
+    if (!seen.length || seen.length === ids.length) continue
     partlyViewed.set(file.id, seen.length)
-    if (mode === 'auto') seen.forEach((id) => hidden.add(id))
+    if (!viewedShown(file.id)) seen.forEach((id) => hidden.add(id))
   }
   return {
     group: { ...group, hunkIds: group.hunkIds.filter((id) => !hidden.has(id)) },
@@ -235,7 +230,6 @@ function fileReviewActions(options: {
 function groupProgress(
   pull: PullRequest,
   draft: ReviewDraft,
-  viewedHunks: Set<string>,
   { groupId, updates }: { groupId?: string; updates?: ChangeGroup },
 ) {
   const groups =
@@ -244,11 +238,7 @@ function groupProgress(
     groups.find((group) => group.id === groupId) ??
     groups.find((group) => !groupIsViewed(group, draft, pull)) ??
     groups[0]
-  const selectedHunks = pull.files
-    .flatMap((file) => file.hunks)
-    .filter((hunk) => selected?.hunkIds.includes(hunk.id))
-  const viewedCount = selectedHunks.filter((hunk) => viewedHunks.has(hunk.id)).length
-  return { groups, selected, viewedHunks, selectedHunks, viewedCount }
+  return { groups, selected }
 }
 
 function useReviewItems(options: {

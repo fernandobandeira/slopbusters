@@ -52,7 +52,7 @@ function setup(side = DiffSide.right) {
     {
       wrapper: ({ children }) =>
         createElement(MemoryRouter, {
-          initialEntries: [`/?group=${initialGroup.id}&unviewed=1&diff=split&filter=requested`],
+          initialEntries: [`/?group=${initialGroup.id}&diff=split&filter=requested`],
           children,
         }),
     },
@@ -76,7 +76,6 @@ describe('review companion navigation in the existing diff', () => {
       })
 
       expect(hook.result.current.diff.selected?.id).toBe(hook.targetGroup.id)
-      expect(hook.result.current.diff.unviewedOnly).toBe(false)
       expect(hook.result.current.diff.split).toBe(true)
       expect(hook.result.current.diff.searchParams.get('filter')).toBe('requested')
       expect(

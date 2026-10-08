@@ -95,15 +95,12 @@ export function ReviewWorkspace({
     groups,
     grouped,
     split,
-    unviewedOnly,
     updates: updatesGroup,
     fullSections,
     searchParams,
     setSearchParams,
     changeView,
     selected,
-    selectedHunks,
-    viewedCount,
     fileContext,
     contextLines,
     setContextLines,
@@ -416,19 +413,6 @@ export function ReviewWorkspace({
                   Full sections
                 </Button>
               )}
-              <Button
-                size="xs"
-                variant={unviewedOnly ? 'secondary' : 'ghost'}
-                aria-pressed={unviewedOnly}
-                onClick={() => {
-                  const next = new URLSearchParams(searchParams)
-                  if (unviewedOnly) next.delete('unviewed')
-                  else next.set('unviewed', '1')
-                  setSearchParams(next)
-                }}
-              >
-                {unviewedOnly ? 'Show all diffs' : 'Unviewed only'}
-              </Button>
             </div>
           )}
         </div>
@@ -565,13 +549,7 @@ export function ReviewWorkspace({
                     />
                   ) : (
                     <div className="empty-state">
-                      <strong>
-                        {unviewedOnly &&
-                        viewedCount === selectedHunks.length &&
-                        selectedHunks.length > 0
-                          ? 'All diff sections in this group are viewed'
-                          : 'No text patch in this group'}
-                      </strong>
+                      <strong>No text patch in this group</strong>
                       <span className="muted">
                         Binary files and pure renames may have no line changes.
                       </span>
