@@ -2,7 +2,12 @@ import { useEffect, useEffectEvent, useState, type RefObject } from 'react'
 import type { CodeViewItem } from '@pierre/diffs'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import type { SetURLSearchParams } from 'react-router'
-import { DiffSide, type ChangeGroup, type PullRequest } from '../../../shared/domain/types'
+import {
+  DiffSide,
+  type ChangeGroup,
+  type ChangedFile,
+  type PullRequest,
+} from '../../../shared/domain/types'
 import type { ReviewLocation } from '../../../shared/domain/review'
 import { updateReviewView } from '../../lib/routes'
 import { discussionGroup, type LineDiscussion } from './discussions/discussions'
@@ -27,15 +32,18 @@ export function useReviewFocus(pull: PullRequest, options: FocusOptions) {
     setLocation(next)
   }
   const file = location && pull.files.find((file) => file.path === location.path)
-  const group = location && discussionGroup({ pull, ...location })
+  // The updates group repeats sections from regular groups; stay in it when it shows the line.
+  const shown =
+    location != null &&
+    file != null &&
+    options.items.some((item) => item.id === file.id) &&
+    groupShowsLine(file, options.selected, location)
+  const group = location && (shown ? options.selected : discussionGroup({ pull, ...location }))
   const reveal = useEffectEvent(() => {
     if (!file || !group) return
     options.setFileCollapsed(file.id, false, group.id)
     const next = updateReviewView(options.searchParams, { groupId: group.id })
-    if (!preserveFilters) {
-      next.delete('unviewed')
-      next.delete('changes')
-    }
+    if (!preserveFilters) next.delete('unviewed')
     if (next.toString() !== options.searchParams.toString()) options.setSearchParams(next)
   })
   useEffect(() => {
@@ -65,4 +73,18 @@ export function useReviewFocus(pull: PullRequest, options: FocusOptions) {
     return () => viewer?.clearSelectedLines()
   }, [location, file, group, options.selected?.id, options.items, options.viewerRef])
   return { focusLine, location, active: Boolean(location) }
+}
+
+function groupShowsLine(
+  file: ChangedFile,
+  group: ChangeGroup | undefined,
+  location: ReviewLocation,
+) {
+  return file.hunks.some(
+    (hunk) =>
+      group?.hunkIds.includes(hunk.id) &&
+      hunk.lines.some(
+        (line) => (location.side === DiffSide.left ? line.oldLine : line.newLine) === location.line,
+      ),
+  )
 }

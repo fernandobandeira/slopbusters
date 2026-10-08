@@ -73,6 +73,7 @@ export function pullsRouter(services: Services) {
 function registerReviewRoutes(router: Router, services: Services) {
   const { store, pulls, organizationJobs, github } = services
   handle(router, routes.getDraft, ({ params }) => store.getDraft(params.id))
+  handle(router, routes.dismissReviewChanges, ({ params }) => store.dismissChanges(params.id))
   handle(router, routes.saveDraft, ({ params, body }, request) => {
     const writerId = request.get('X-Review-Writer')
     const sequence = request.get('X-Review-Sequence')

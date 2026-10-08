@@ -89,3 +89,13 @@ export function readReviewChanges(
     ? compareReviewSections(sectionedPull(JSON.parse(String(row.snapshot)) as PullRequest), pull)
     : undefined
 }
+
+/** Dismissing updates clears this snapshot's baseline; later revisions compare with it again. */
+export function dismissReviewChanges(database: DatabaseSync, snapshotId: string): void {
+  database
+    .prepare(
+      `INSERT INTO review_baselines (snapshot_id, baseline_id) VALUES (?, NULL)
+      ON CONFLICT(snapshot_id) DO UPDATE SET baseline_id = NULL`,
+    )
+    .run(snapshotId)
+}

@@ -1,5 +1,7 @@
-import { ArrowRight, ArrowUpRight, GitBranch, RotateCw } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, GitBranch, History, RotateCw } from 'lucide-react'
 import type { PullRequest } from '../../../shared/domain/types'
+import type { ReviewChanges } from '../../../shared/domain/reviewChanges'
+import { updateCount } from './reviewUpdates'
 import type { PullStackSummary } from '../../../shared/domain/stacks'
 import { StackBadge } from '../stacks/StackBadge'
 import type { PullStatus } from '../../../shared/domain/pullStatus'
@@ -20,6 +22,8 @@ interface Props {
   status?: PullStatus
   statusError?: string
   onStatus: (section?: PullStatusSection) => void
+  changes?: ReviewChanges
+  onChanges?: () => void
 }
 
 export function CompactReviewHeader({ pull }: { pull: PullRequest }) {
@@ -43,6 +47,8 @@ export function ReviewPullDetails({
   status,
   statusError,
   onStatus,
+  changes,
+  onChanges,
 }: Props) {
   const additions = pull.files.reduce((total, file) => total + file.additions, 0)
   const deletions = pull.files.reduce((total, file) => total + file.deletions, 0)
@@ -85,27 +91,85 @@ export function ReviewPullDetails({
             {statusError ? 'Status unavailable' : 'Checks and reviews'}
           </Button>
         )}
+        <ReviewUpdatesButton changes={changes} onClick={onChanges} />
         <Button size="xs" variant="ghost" onClick={onDescription}>
           PR description
         </Button>
-        <Button
-          size={hasUpdates ? 'sm' : 'xs'}
-          variant={hasUpdates ? 'default' : 'ghost'}
-          onClick={onReload}
+        <ReloadButton
+          onReload={onReload}
+          reloading={reloading}
           disabled={organizing || reloading}
-          title={
-            hasUpdates
-              ? 'The PR has changed. Load the latest revision; unchanged diffs retain viewed status.'
-              : updateCheckError
-                ? `Update check failed: ${updateCheckError}. Reload to try again.`
-                : 'Check for and load the latest revision'
-          }
-          aria-live="polite"
-        >
-          <RotateCw size={12} className={reloading ? 'animate-spin' : undefined} />
-          {reloading ? 'Loading…' : hasUpdates ? 'Updates available' : 'Reload'}
-        </Button>
+          hasUpdates={hasUpdates}
+          updateCheckError={updateCheckError}
+        />
       </div>
     </div>
+  )
+}
+
+/** The one place review updates surface outside their group. */
+function ReviewUpdatesButton({
+  changes,
+  onClick,
+}: {
+  changes?: ReviewChanges
+  onClick?: () => void
+}) {
+  const count = updateCount(changes)
+  if (!changes || !count) return null
+  const baseline = changes.baselineHeadSha.slice(0, 7)
+  const incomplete = changes.incompletePaths?.length ?? 0
+  return (
+    <Button
+      className="review-updates-button"
+      size="xs"
+      variant="outline"
+      onClick={onClick}
+      title={[
+        `Compared with your review of ${baseline}.`,
+        incomplete
+          ? `${incomplete} ${incomplete === 1 ? 'file has' : 'files have'} incomplete patches and could not be fully compared.`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <History size={12} aria-hidden="true" />
+      {count} updated since {baseline}
+    </Button>
+  )
+}
+
+function ReloadButton({
+  onReload,
+  reloading,
+  disabled,
+  hasUpdates,
+  updateCheckError,
+}: {
+  onReload: () => void
+  reloading: boolean
+  disabled: boolean
+  hasUpdates: boolean
+  updateCheckError?: string
+}) {
+  return (
+    <Button
+      size={hasUpdates ? 'sm' : 'xs'}
+      variant={hasUpdates ? 'default' : 'ghost'}
+      onClick={onReload}
+      disabled={disabled}
+      title={
+        hasUpdates
+          ? 'The PR has changed. Load the latest revision; unchanged diffs retain viewed status.'
+          : updateCheckError
+            ? `Update check failed: ${updateCheckError}. Reload to try again.`
+            : 'Check for and load the latest revision'
+      }
+      aria-live="polite"
+    >
+      <RotateCw size={12} className={reloading ? 'animate-spin' : undefined} />
+      {reloading ? 'Loading…' : hasUpdates ? 'Updates available' : 'Reload'}
+    </Button>
   )
 }

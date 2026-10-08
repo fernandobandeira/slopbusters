@@ -72,6 +72,11 @@ export const getDraft = defineRoute('GET', '/pulls/:id/draft', {
     changes: reviewChangesSchema.optional(),
   }),
 })
+/** Forget the previous review baseline, so this revision no longer reports updates. */
+export const dismissReviewChanges = defineRoute('DELETE', '/pulls/:id/changes', {
+  params: idParams,
+  response: okSchema,
+})
 export const saveDraft = defineRoute('PUT', '/pulls/:id/draft', {
   params: idParams,
   request: draftSchema,

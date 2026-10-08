@@ -10,6 +10,8 @@ export function reviewedHunkIds(pull: PullRequest, draft: ReviewDraft): Set<stri
 }
 
 export function groupIsViewed(group: ChangeGroup, draft: ReviewDraft, pull?: PullRequest): boolean {
+  // A group of only dropped edits has no PR section left to view.
+  if (!group.hunkIds.length && !group.fileIds.length) return true
   if (
     pull &&
     group.fileIds.some((id) => {

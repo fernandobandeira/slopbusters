@@ -11,7 +11,11 @@ import {
 } from '../features/progress'
 import { sectionedPull, sectionedDraft } from '../../shared/domain/changeSections'
 import type { ReviewChanges } from '../../shared/domain/reviewChanges'
-import { migrateReviewProgress, readReviewChanges } from './reviewProgressStore'
+import {
+  dismissReviewChanges,
+  migrateReviewProgress,
+  readReviewChanges,
+} from './reviewProgressStore'
 import type { PullRequest, ReviewDraft } from '../../shared/domain/types'
 import type { Preferences } from '../../shared/domain/preferences'
 import { gandalfSessionSchema, type GandalfSession } from '../../shared/domain/gandalf'
@@ -117,6 +121,11 @@ export class ReviewerStore {
       exists: stored != null,
       changes: readReviewChanges(this.database, pull),
     }
+  }
+  dismissChanges(id: string): { ok: true } {
+    this.getPull(id)
+    dismissReviewChanges(this.database, id)
+    return { ok: true }
   }
   saveDraft(
     id: string,

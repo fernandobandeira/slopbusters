@@ -10,8 +10,8 @@ import {
   reviewedHunkIds,
   toggleViewedSections,
 } from './reviewProgress'
-import { diffItems } from './diff/diffItems'
 import { displayPullWithContext } from './diff/displayContext'
+import { reviewItems, updatesGroup, type ReviewItems } from './reviewUpdates'
 
 export function useReviewDiff(
   pull: PullRequest,
@@ -23,11 +23,13 @@ export function useReviewDiff(
   const loadFileContext = fileContext.load
   const [contextLines, setContextLines] = useState(() => new Map<string, number>())
   const [searchParams, setSearchParams] = useSearchParams()
-  const view = readReviewView(searchParams)
-  const progress = groupProgress(pull, draft, view.groupId)
-  const { selected, viewedHunks } = progress
-  const filters = useVisibleGroup({ selected, viewedHunks, searchParams, changes })
-  const { visibleGroup, changesOnly } = filters
+  const { groupId, split, fullSections } = readReviewView(searchParams)
+  const updates = useMemo(() => updatesGroup(pull, changes), [pull, changes])
+  const viewedHunks = useMemo(() => reviewedHunkIds(pull, draft), [pull, draft])
+  const progress = groupProgress(pull, draft, viewedHunks, { groupId, updates })
+  const { selected } = progress
+  const filters = useVisibleGroup({ selected, viewedHunks, searchParams })
+  const { visibleGroup } = filters
   const { collapseOverrides, setFileCollapsed } = useCollapseOverrides(selected?.id)
   function changeView(changes: Partial<ReviewView>) {
     const next = updateReviewView(searchParams, changes)
@@ -40,31 +42,36 @@ export function useReviewDiff(
   useEffect(() => {
     for (const fileId of visibleGroup?.fileIds ?? []) void loadFileContext(fileId).catch(() => {})
   }, [visibleGroup, loadFileContext])
-  const items = useCollapsedItems({
+  const { display, items } = useReviewItems({
     pull,
     displayPull,
     visibleGroup,
-    selected,
     contents: fileContext.contents,
-    viewedHunkIds: changesOnly ? [] : [...viewedHunks],
+    changes,
+    fullSections,
+    viewedHunks,
     collapseOverrides,
+    selectedId: selected?.id,
   })
   const actions = sectionReviewActions({
     pull,
     draft,
     setDraft,
+    groups: progress.groups,
     selected,
     visibleGroup,
+    itemSections: display?.sections,
     changeView,
     setFileCollapsed,
-    changes: changesOnly ? changes : undefined,
   })
   return {
     ...progress,
     ...filters,
     ...actions,
+    updates,
     grouped: pull.groupingSource !== 'files',
-    split: view.split,
+    split,
+    fullSections,
     searchParams,
     setSearchParams,
     changeView,
@@ -72,6 +79,8 @@ export function useReviewDiff(
     contextLines,
     setContextLines,
     items,
+    sectionTargets: display?.targets ?? [],
+    syntheticItems: display?.synthetic ?? new Map<string, never>(),
     setFileCollapsed,
   }
 }
@@ -80,23 +89,18 @@ function useVisibleGroup(options: {
   selected?: ChangeGroup
   viewedHunks: Set<string>
   searchParams: URLSearchParams
-  changes?: ReviewChanges
 }) {
-  const { selected, viewedHunks, searchParams, changes } = options
+  const { selected, viewedHunks, searchParams } = options
   const unviewedOnly = searchParams.get('unviewed') === '1'
-  const changesOnly = searchParams.get('changes') === '1'
-  const visibleGroup = useMemo(() => {
-    const updated = new Set(changes?.sections.map((section) => section.hunkId))
-    return (
+  const visibleGroup = useMemo(
+    () =>
       selected && {
         ...selected,
-        hunkIds: selected.hunkIds.filter(
-          (id) => (!unviewedOnly || !viewedHunks.has(id)) && (!changesOnly || updated.has(id)),
-        ),
-      }
-    )
-  }, [selected, unviewedOnly, changesOnly, viewedHunks, changes])
-  return { visibleGroup, unviewedOnly, changesOnly }
+        hunkIds: selected.hunkIds.filter((id) => !unviewedOnly || !viewedHunks.has(id)),
+      },
+    [selected, unviewedOnly, viewedHunks],
+  )
+  return { visibleGroup, unviewedOnly }
 }
 
 function useCollapseOverrides(selectedId?: string) {
@@ -111,64 +115,66 @@ function sectionReviewActions(options: {
   pull: PullRequest
   draft: ReviewDraft
   setDraft: Dispatch<SetStateAction<ReviewDraft>>
+  groups: ChangeGroup[]
   selected?: ChangeGroup
   visibleGroup?: ChangeGroup
+  itemSections?: Map<string, string[]>
   changeView: (changes: Partial<ReviewView>) => void
   setFileCollapsed: (fileId: string, collapsed: boolean) => void
-  changes?: ReviewChanges
 }) {
-  const { pull, draft, setDraft, selected, visibleGroup, changeView, setFileCollapsed } = options
+  const { pull, draft, setDraft, groups, selected, visibleGroup, changeView } = options
   const viewed = reviewedHunkIds(pull, draft)
-  const eligibleGroups = updatedReviewGroups(pull.groups, options.changes)
-  function visibleSectionIds(fileId: string) {
-    return (
-      pull.files
-        .find((file) => file.id === fileId)
-        ?.hunks.filter((hunk) => visibleGroup?.hunkIds.includes(hunk.id))
-        .map((hunk) => hunk.id) ?? []
-    )
+  function itemSectionIds(itemId: string) {
+    return options.itemSections?.get(itemId) ?? []
+  }
+  /** Moving on after the last section keeps a reviewer in flow across groups. */
+  function advanceIfComplete(nextDraft: ReviewDraft) {
+    if (!selected || !groupIsViewed(selected, nextDraft, pull)) return false
+    const next = nextUnreviewedGroup(groups, selected.id, nextDraft, pull)
+    if (next) changeView({ groupId: next.id })
+    return Boolean(next)
   }
   function toggleSections(ids: string[]) {
     const visible = ids.filter((id) => visibleGroup?.hunkIds.includes(id))
     if (!visible.length) return
     setDraft((previous) => toggleViewedSections(pull, previous, visible))
   }
-  function toggleFile(fileId: string) {
+  /** Marks one section viewed; returns whether the review moved to another group. */
+  function markSectionViewed(id: string) {
+    if (!visibleGroup?.hunkIds.includes(id) || viewed.has(id)) return false
+    const nextDraft = toggleViewedSections(pull, draft, [id])
+    setDraft(nextDraft)
+    return advanceIfComplete(nextDraft)
+  }
+  function toggleFile(itemId: string) {
     if (!selected) return
-    const ids = visibleSectionIds(fileId)
+    const ids = itemSectionIds(itemId)
     if (!ids.length) return
     const nextDraft = toggleViewedSections(pull, draft, ids)
     const markingViewed = ids.every((id) => nextDraft.viewedHunkIds?.includes(id))
-    setFileCollapsed(fileId, markingViewed)
+    options.setFileCollapsed(itemId, markingViewed)
     setDraft(nextDraft)
-    const completionGroup = eligibleGroups.find((group) => group.id === selected.id)
-    if (markingViewed && completionGroup && groupIsViewed(completionGroup, nextDraft, pull)) {
-      const next = nextUnreviewedGroup(eligibleGroups, selected.id, nextDraft, pull)
-      if (next) changeView({ groupId: next.id })
-    }
+    if (markingViewed) advanceIfComplete(nextDraft)
   }
-  function fileSectionsViewed(fileId: string) {
-    const ids = visibleSectionIds(fileId)
+  function fileSectionsViewed(itemId: string) {
+    const ids = itemSectionIds(itemId)
     return ids.length > 0 && ids.every((id) => viewed.has(id))
   }
-  return { toggleSections, toggleFile, fileSectionsViewed }
+  return { toggleSections, toggleFile, fileSectionsViewed, markSectionViewed }
 }
 
-function updatedReviewGroups(groups: ChangeGroup[], changes?: ReviewChanges): ChangeGroup[] {
-  if (!changes) return groups
-  const ids = new Set(changes.sections.map((section) => section.hunkId))
-  return groups
-    .map((group) => ({ ...group, hunkIds: group.hunkIds.filter((id) => ids.has(id)) }))
-    .filter((group) => group.hunkIds.length > 0)
-}
-
-function groupProgress(pull: PullRequest, draft: ReviewDraft, groupId?: string) {
-  const groups = pull.groupingSource !== 'files' ? pull.groups : []
+function groupProgress(
+  pull: PullRequest,
+  draft: ReviewDraft,
+  viewedHunks: Set<string>,
+  { groupId, updates }: { groupId?: string; updates?: ChangeGroup },
+) {
+  const groups =
+    pull.groupingSource !== 'files' ? [...(updates ? [updates] : []), ...pull.groups] : []
   const selected =
     groups.find((group) => group.id === groupId) ??
     groups.find((group) => !groupIsViewed(group, draft, pull)) ??
     groups[0]
-  const viewedHunks = reviewedHunkIds(pull, draft)
   const selectedHunks = pull.files
     .flatMap((file) => file.hunks)
     .filter((hunk) => selected?.hunkIds.includes(hunk.id))
@@ -176,48 +182,51 @@ function groupProgress(pull: PullRequest, draft: ReviewDraft, groupId?: string) 
   return { groups, selected, viewedHunks, selectedHunks, viewedCount }
 }
 
-function collapsedDiffItems(options: {
+function useReviewItems(options: {
   pull: PullRequest
   displayPull: PullRequest
-  visibleGroup: ChangeGroup
-  selected?: ChangeGroup
+  visibleGroup?: ChangeGroup
   contents: ReturnType<typeof useFileContext>['contents']
-  viewedHunkIds: string[]
+  changes?: ReviewChanges
+  fullSections: boolean
+  viewedHunks: Set<string>
   collapseOverrides: Map<string, boolean>
+  selectedId?: string
 }) {
-  const { pull, displayPull, visibleGroup, selected, contents, viewedHunkIds, collapseOverrides } =
-    options
-  return diffItems(displayPull, visibleGroup, contents).map((item) => {
-    const ids =
-      pull.files
-        .find((file) => file.id === item.id)
-        ?.hunks.filter((hunk) => visibleGroup.hunkIds.includes(hunk.id))
-        .map((hunk) => hunk.id) ?? []
-    const viewed = ids.length > 0 && ids.every((id) => viewedHunkIds.includes(id))
-    return { ...item, collapsed: collapseOverrides.get(`${selected?.id}/${item.id}`) ?? viewed }
-  })
-}
-
-function useCollapsedItems(
-  options: Omit<Parameters<typeof collapsedDiffItems>[0], 'visibleGroup'> & {
-    visibleGroup?: ChangeGroup
-  },
-) {
-  const { pull, displayPull, visibleGroup, selected, contents, viewedHunkIds, collapseOverrides } =
-    options
-  return useMemo(
+  const { pull, displayPull, visibleGroup, contents, changes, fullSections } = options
+  const { viewedHunks, collapseOverrides, selectedId } = options
+  const display = useMemo(
     () =>
       visibleGroup
-        ? collapsedDiffItems({
+        ? reviewItems({
             pull,
             displayPull,
-            visibleGroup,
-            selected,
-            contents: contents,
-            viewedHunkIds: viewedHunkIds,
-            collapseOverrides,
+            group: visibleGroup,
+            contents,
+            changes,
+            full: fullSections,
           })
-        : [],
-    [pull, displayPull, visibleGroup, selected, contents, viewedHunkIds, collapseOverrides],
+        : undefined,
+    [pull, displayPull, visibleGroup, contents, changes, fullSections],
+  )
+  const items = useMemo(
+    () => collapsedItems(display, viewedHunks, collapseOverrides, selectedId),
+    [display, viewedHunks, collapseOverrides, selectedId],
+  )
+  return { display, items }
+}
+
+function collapsedItems(
+  display: ReviewItems | undefined,
+  viewedHunks: Set<string>,
+  collapseOverrides: Map<string, boolean>,
+  groupId?: string,
+) {
+  return (
+    display?.items.map((item) => {
+      const ids = display.sections.get(item.id) ?? []
+      const viewed = ids.length > 0 && ids.every((id) => viewedHunks.has(id))
+      return { ...item, collapsed: collapseOverrides.get(`${groupId}/${item.id}`) ?? viewed }
+    }) ?? []
   )
 }

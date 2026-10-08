@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
-import { ArrowLeft, Check, RotateCw } from 'lucide-react'
-import type { PullRequest, ReviewDraft } from '../../../shared/domain/types'
+import { ArrowLeft, Check, History, RotateCw, X } from 'lucide-react'
+import type { ChangeGroup, PullRequest, ReviewDraft } from '../../../shared/domain/types'
 import { groupChangeTotals } from '../../../shared/domain/review'
 import type { ReviewChanges } from '../../../shared/domain/reviewChanges'
 import { groupIsViewed, reviewedHunkIds } from './reviewProgress'
@@ -9,6 +9,7 @@ interface Props {
   pull: PullRequest
   draft: ReviewDraft
   changes?: ReviewChanges
+  updates?: ChangeGroup
   selectedId?: string
   inboxUrl: string
   submitting: boolean
@@ -16,11 +17,13 @@ interface Props {
   onSelect: (id?: string) => void
   onRegenerate: () => void
   onNotice: (message: string) => void
+  onDismissUpdates?: () => void
 }
 export function GroupSidebar({
   pull,
   draft,
   changes,
+  updates,
   selectedId,
   inboxUrl,
   submitting,
@@ -28,6 +31,7 @@ export function GroupSidebar({
   onSelect,
   onRegenerate,
   onNotice,
+  onDismissUpdates,
 }: Props) {
   const groups = pull.groups
   const grouped = pull.groupingSource !== 'files'
@@ -68,6 +72,19 @@ export function GroupSidebar({
         )}
       </div>
       <div className="group-list">
+        {updates && (
+          <UpdatesGroupRow
+            group={updates}
+            removed={changes?.removed.length ?? 0}
+            viewed={updates.hunkIds.filter((id) => reviewed.has(id)).length}
+            done={groupIsViewed(updates, draft, pull)}
+            selected={selectedId === updates.id}
+            onSelect={() => {
+              onSelect(updates.id)
+            }}
+            onDismiss={onDismissUpdates}
+          />
+        )}
         {groups.map((group) => {
           const done = groupIsViewed(group, draft, pull)
           const viewed = group.hunkIds.filter((id) => reviewed.has(id)).length
@@ -111,5 +128,55 @@ export function GroupSidebar({
         {grouped && !groups.length && <p className="empty-small muted">No changes to review.</p>}
       </div>
     </aside>
+  )
+}
+
+/** Pinned above the regular groups until dismissed; a finished one shrinks to its title. */
+function UpdatesGroupRow({
+  group,
+  removed,
+  viewed,
+  done,
+  selected,
+  onSelect,
+  onDismiss,
+}: {
+  group: ChangeGroup
+  removed: number
+  viewed: number
+  done: boolean
+  selected: boolean
+  onSelect: () => void
+  onDismiss?: () => void
+}) {
+  return (
+    <div className="updates-group" data-reviewed={done || undefined}>
+      <button className={`group-row ${selected ? 'selected' : ''}`} onClick={onSelect}>
+        <div className="group-row-top">
+          {done ? (
+            <Check size={13} className="green group-viewed" aria-label="Viewed" />
+          ) : (
+            <History size={13} className="section-update" aria-hidden="true" />
+          )}
+          <strong>{group.title}</strong>
+        </div>
+        {!done && (
+          <span className="group-progress muted">
+            {viewed}/{group.hunkIds.length} sections viewed
+            {removed > 0 && <> · {removed} no longer in PR</>}
+          </span>
+        )}
+      </button>
+      {onDismiss && (
+        <button
+          className="updates-dismiss"
+          aria-label="Dismiss review updates"
+          title="Dismiss review updates"
+          onClick={onDismiss}
+        >
+          <X size={13} />
+        </button>
+      )}
+    </div>
   )
 }

@@ -5,9 +5,8 @@ import { useCommentEditor } from './useCommentEditor'
 import { useReviewDiff } from './useReviewDiff'
 import { useReviewFocus } from './useReviewFocus'
 import { ReviewDiffViewer } from './ReviewDiffViewer'
-import { ReviewChangesSummary } from './ReviewChangesSummary'
-import { ReviewSectionList } from './ReviewSectionList'
-import { nextUpdatedLocation } from './reviewUpdates'
+import { UPDATES_GROUP_ID } from './reviewUpdates'
+import { useSectionCursor } from './useSectionCursor'
 import { GroupSidebar } from './GroupSidebar'
 import { SubmitReviewDialog } from './SubmitReviewDialog'
 import { ReviewSubmitButton } from './ReviewSubmitButton'
@@ -91,14 +90,15 @@ export function ReviewWorkspace({
     error: storageError,
     flush,
     changes,
+    dismissChanges,
   } = useReviewDraft(pull)
   const {
     groups,
     grouped,
     split,
     unviewedOnly,
-    changesOnly,
-    visibleGroup,
+    updates: updatesGroup,
+    fullSections,
     toggleSections,
     searchParams,
     setSearchParams,
@@ -113,6 +113,10 @@ export function ReviewWorkspace({
     setFileCollapsed,
     toggleFile,
     fileSectionsViewed,
+    markSectionViewed,
+    sectionTargets,
+    syntheticItems,
+    viewedHunks,
   } = useReviewDiff(pull, draft, setDraft, changes)
   const updates = usePullUpdates(pull)
   const { stack, summary: stackSummary } = usePullStack(pull)
@@ -152,6 +156,15 @@ export function ReviewWorkspace({
     selected,
     items,
     viewerRef,
+  })
+  const { section: currentSection, setSection } = useSectionCursor({
+    targets: sectionTargets,
+    viewed: viewedHunks,
+    items,
+    markSectionViewed,
+    setFileCollapsed,
+    viewerRef,
+    enabled: grouped && draftReady,
   })
   const { discussions, discussionError, refreshDiscussions, postReply, setDiscussionError } =
     useDiscussions(pull.id, setNotice)
@@ -209,8 +222,9 @@ export function ReviewWorkspace({
         discussions,
         comments: draft.comments,
         editor,
+        sections: { targets: sectionTargets, viewed: viewedHunks, current: currentSection },
       }),
-    [items, pull, discussions, draft.comments, editor],
+    [items, pull, discussions, draft.comments, editor, sectionTargets, viewedHunks, currentSection],
   )
   useEffect(() => {
     if (!editor) return
@@ -339,6 +353,7 @@ export function ReviewWorkspace({
         <GroupSidebar
           pull={pull}
           draft={draft}
+          updates={updatesGroup}
           changes={changes}
           selectedId={selected?.id}
           inboxUrl={inboxUrl}
@@ -348,6 +363,11 @@ export function ReviewWorkspace({
             changeView({ groupId })
           }}
           onRegenerate={() => void organize(true)}
+          onDismissUpdates={() => {
+            void dismissChanges().catch((cause: unknown) => {
+              setError(`Could not dismiss review updates: ${message(cause)}`)
+            })
+          }}
           onNotice={setNotice}
         />
       )}
@@ -377,29 +397,11 @@ export function ReviewWorkspace({
             }}
             reloading={reloading}
             organizing={organizing || submitting}
+            changes={grouped ? changes : undefined}
+            onChanges={() => {
+              changeView({ groupId: UPDATES_GROUP_ID })
+            }}
           />
-          {grouped && (
-            <ReviewChangesSummary
-              changes={changes}
-              changesOnly={changesOnly}
-              onToggle={() => {
-                const next = new URLSearchParams(searchParams)
-                if (changesOnly) next.delete('changes')
-                else {
-                  next.set('changes', '1')
-                  next.delete('unviewed')
-                }
-                setSearchParams(next)
-              }}
-              onNext={() => {
-                const location = nextUpdatedLocation(pull, changes, draft, {
-                  groupId: selected?.id,
-                  location: focus.location,
-                })
-                if (location) focus.focusLine(location, true)
-              }}
-            />
-          )}
           {grouped && groups.length > 0 && (
             <div className="review-view-controls">
               <Button
@@ -411,6 +413,19 @@ export function ReviewWorkspace({
               >
                 {split ? 'Unified' : 'Split'}
               </Button>
+              {selected?.id === UPDATES_GROUP_ID && (
+                <Button
+                  size="xs"
+                  variant={fullSections ? 'secondary' : 'ghost'}
+                  aria-pressed={fullSections}
+                  title="Show whole sections instead of what changed since your review"
+                  onClick={() => {
+                    changeView({ fullSections: !fullSections })
+                  }}
+                >
+                  Full sections
+                </Button>
+              )}
               <Button
                 size="xs"
                 variant={unviewedOnly ? 'secondary' : 'ghost'}
@@ -530,16 +545,6 @@ export function ReviewWorkspace({
                       ))}
                     </div>
                   )}
-                  <ReviewSectionList
-                    pull={pull}
-                    group={visibleGroup}
-                    draft={draft}
-                    changes={changes}
-                    onView={toggleSections}
-                    onFocus={(location) => {
-                      focus.focusLine(location, true)
-                    }}
-                  />
                   {items.length ? (
                     <ReviewDiffViewer
                       key={selected.id}
@@ -554,6 +559,11 @@ export function ReviewWorkspace({
                       setFileCollapsed={setFileCollapsed}
                       fileSectionsViewed={fileSectionsViewed}
                       toggleFile={toggleFile}
+                      syntheticItems={syntheticItems}
+                      onToggleSection={(hunkId) => {
+                        setSection(hunkId)
+                        toggleSections([hunkId])
+                      }}
                       body={body}
                       setBody={setBody}
                       saveComment={saveComment}
@@ -572,14 +582,10 @@ export function ReviewWorkspace({
                         viewedCount === selectedHunks.length &&
                         selectedHunks.length > 0
                           ? 'All diff sections in this group are viewed'
-                          : changesOnly
-                            ? 'No updated sections in this group'
-                            : 'No text patch in this group'}
+                          : 'No text patch in this group'}
                       </strong>
                       <span className="muted">
-                        {changesOnly
-                          ? 'Choose a group with updated sections, or show all changes.'
-                          : 'Binary files and pure renames may have no line changes.'}
+                        Binary files and pure renames may have no line changes.
                       </span>
                       <a href={`${pull.url}/files`} target="_blank" rel="noreferrer">
                         Inspect files on GitHub
