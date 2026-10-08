@@ -7,22 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useReviewDiff } from '../src/features/review/useReviewDiff'
 import { GroupSidebar } from '../src/features/review/GroupSidebar'
 import { ReviewPullDetails } from '../src/features/review/CompactReviewHeader'
-import {
-  UPDATES_GROUP_ID,
-  reviewItems,
-  updatesGroup,
-  type SectionTarget,
-} from '../src/features/review/reviewUpdates'
-import { useSectionCursor } from '../src/features/review/useSectionCursor'
-import { annotateDiscussions } from '../src/features/review/discussions/discussions'
+import { UPDATES_GROUP_ID, reviewItems, updatesGroup } from '../src/features/review/reviewUpdates'
 import { sectionPull } from './fixtures/sections'
-import {
-  Provider,
-  DiffSide,
-  LineKind,
-  type PullRequest,
-  type ReviewDraft,
-} from '../shared/domain/types'
+import { Provider, LineKind, type PullRequest, type ReviewDraft } from '../shared/domain/types'
 import type { ReviewChanges } from '../shared/domain/reviewChanges'
 import { compareReviewSections } from '../server/features/sectionComparison'
 import { emptyDraft } from '../server/features/progress'
@@ -43,8 +30,14 @@ const changes = compareReviewSections(sectionPull(base, both), pull)
 const [firstHunk, secondHunk] = required(pull.files[0]).hunks
 const fileId = required(pull.files[0]).id
 
-function Harness({ initialChanges = changes }: { initialChanges?: ReviewChanges }) {
-  const [draft, setDraft] = useState<ReviewDraft>(emptyDraft())
+function Harness({
+  initialChanges = changes,
+  initialDraft = emptyDraft(),
+}: {
+  initialChanges?: ReviewChanges
+  initialDraft?: ReviewDraft
+}) {
+  const [draft, setDraft] = useState<ReviewDraft>(initialDraft)
   const diff = useReviewDiff(pull, draft, setDraft, initialChanges)
   return (
     <>
@@ -65,12 +58,15 @@ function Harness({ initialChanges = changes }: { initialChanges?: ReviewChanges 
       />
       <p data-testid="selected">{diff.selected?.id}</p>
       <p data-testid="items">{diff.items.map((item) => item.id).join(',')}</p>
+      <p data-testid="collapsed">{diff.items.map((item) => String(item.collapsed)).join(',')}</p>
+      <p data-testid="sections">{diff.visibleGroup?.hunkIds.join(',')}</p>
+      <p data-testid="viewed-toggles">{JSON.stringify([...diff.viewedToggles])}</p>
       <button
         onClick={() => {
-          diff.markSectionViewed(required(secondHunk).id)
+          diff.toggleViewedShown(fileId)
         }}
       >
-        Mark updated section
+        Toggle viewed sections
       </button>
       <button
         onClick={() => {
@@ -104,20 +100,11 @@ describe('review updates group', () => {
     const since = reviewItems({ pull, displayPull: pull, group, changes, full: false })
     expect(since.items.map((item) => item.id)).toEqual([`${fileId}:since-review:0`])
     expect(since.synthetic.get(`${fileId}:since-review:0`)).toBe('interdiff')
-    expect(since.targets).toEqual([
-      {
-        hunkId: required(secondHunk).id,
-        itemId: `${fileId}:since-review:0`,
-        path: 'shared.ts',
-        line: 6,
-        side: DiffSide.right,
-        state: 'changed',
-      },
-    ])
+    expect(since.sections.get(`${fileId}:since-review:0`)).toEqual([required(secondHunk).id])
     const full = reviewItems({ pull, displayPull: pull, group, changes, full: true })
     expect(full.items.map((item) => item.id)).toEqual([fileId])
     expect(full.synthetic.size).toBe(0)
-    expect(full.targets[0]).toMatchObject({ itemId: fileId, line: 6, side: DiffSide.right })
+    expect(full.sections.get(fileId)).toEqual([required(secondHunk).id])
   })
 })
 
@@ -163,9 +150,9 @@ describe('review updates display items', () => {
       full: false,
     })
     expect(display.items.map((item) => item.id)).toEqual([`${fileId}:since-review:0`])
-    expect(display.targets.map(({ line, side }) => ({ line, side }))).toEqual([
-      { line: 1, side: DiffSide.right },
-      { line: 5, side: DiffSide.right },
+    expect(display.sections.get(`${fileId}:since-review:0`)).toEqual([
+      required(firstHunk).id,
+      required(secondHunk).id,
     ])
   })
 
@@ -182,7 +169,7 @@ describe('review updates display items', () => {
     })
     expect(display.items.map((item) => item.id)).toEqual(['removed:shared.ts:0'])
     expect(display.synthetic.get('removed:shared.ts:0')).toBe('removed')
-    expect(display.targets).toEqual([])
+    expect(display.sections.get('removed:shared.ts:0')).toEqual([])
   })
 })
 
@@ -195,11 +182,10 @@ describe('review updates workflow', () => {
     )
     expect(screen.getByTestId('selected').textContent).toBe(UPDATES_GROUP_ID)
     expect(screen.getByText('Updated since your review')).toBeTruthy()
-    expect(screen.getByText('0/1 sections viewed')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Mark updated section' }))
+    expect(screen.queryByText(/sections viewed/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Mark first item' }))
     expect(screen.getByRole('status').textContent).toBe(JSON.stringify([required(secondHunk).id]))
     expect(screen.getByTestId('selected').textContent).toBe('one')
-    expect(screen.queryByText('0/1 sections viewed')).toBeNull()
   })
 
   it('marks the sections behind a display-only item through its viewed toggle', () => {
@@ -234,75 +220,54 @@ describe('review updates workflow', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss review updates' }))
     expect(onDismiss).toHaveBeenCalledOnce()
-    expect(screen.getByText(/· 1 updated/)).toBeTruthy()
+    expect(screen.getByText('1 updated')).toBeTruthy()
+    expect(screen.queryByText(/sections viewed/)).toBeNull()
   })
 })
 
-describe('section controls in the diff', () => {
-  it('places each section control after its last edited line and keeps discussions off display-only items', () => {
-    const group = required(updatesGroup(pull, changes))
-    const display = reviewItems({ pull, displayPull: pull, group, changes, full: false })
-    const annotated = annotateDiscussions({
-      items: display.items,
-      pull,
-      comments: [],
-      editor: null,
-      sections: {
-        targets: display.targets,
-        viewed: new Set(),
-        current: required(secondHunk).id,
-      },
-    })
-    const annotations = required(annotated.items[0]).annotations ?? []
-    expect(annotations).toHaveLength(1)
-    expect(required(annotations[0]).metadata).toMatchObject({
-      line: 6,
-      side: DiffSide.right,
-      threads: [],
-      sections: [{ hunkId: required(secondHunk).id, viewed: false, current: true }],
-    })
+describe('viewed sections within a file', () => {
+  const viewedFirst = { ...emptyDraft(), viewedHunkIds: [required(firstHunk).id] }
+  function renderFile() {
+    render(
+      <MemoryRouter>
+        <Harness
+          initialChanges={{ ...changes, sections: [], removed: [] }}
+          initialDraft={viewedFirst}
+        />
+      </MemoryRouter>,
+    )
+  }
+
+  it('hides sections viewed before new ones appeared until the reviewer asks for them', () => {
+    renderFile()
+    expect(screen.getByTestId('selected').textContent).toBe('one')
+    expect(screen.getByTestId('sections').textContent).toBe(required(secondHunk).id)
+    expect(screen.getByTestId('viewed-toggles').textContent).toBe(
+      JSON.stringify([[fileId, { fileId, count: 1, shown: false }]]),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle viewed sections' }))
+    expect(screen.getByTestId('sections').textContent).toBe(
+      `${required(firstHunk).id},${required(secondHunk).id}`,
+    )
+    expect(screen.getByTestId('viewed-toggles').textContent).toBe(
+      JSON.stringify([[fileId, { fileId, count: 1, shown: true }]]),
+    )
   })
 
-  it('marks the current section with V and moves to the next unviewed one', () => {
-    const targets: SectionTarget[] = [firstHunk, secondHunk].map((hunk, index) => ({
-      hunkId: required(hunk).id,
-      itemId: fileId,
-      path: 'shared.ts',
-      line: index ? 6 : 2,
-      side: DiffSide.right,
-    }))
-    const scrollTo = vi.fn()
-    function Cursor() {
-      const [viewed, setViewed] = useState(() => new Set<string>())
-      const cursor = useSectionCursor({
-        targets,
-        viewed,
-        items: [],
-        markSectionViewed: (id) => {
-          setViewed((previous) => new Set(previous).add(id))
-          return false
-        },
-        setFileCollapsed: () => {},
-        viewerRef: { current: { scrollTo } },
-        enabled: true,
-      })
-      return (
-        <>
-          <p data-testid="current">{cursor.section ?? 'none'}</p>
-          <p data-testid="viewed">{[...viewed].join(',')}</p>
-          <textarea aria-label="Comment" />
-        </>
-      )
-    }
-    render(<Cursor />)
-    fireEvent.keyDown(window, { key: 'v' })
-    expect(screen.getByTestId('viewed').textContent).toBe(required(firstHunk).id)
-    expect(screen.getByTestId('current').textContent).toBe(required(secondHunk).id)
-    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ id: fileId, lineNumber: 6 }))
-    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Comment' }), { key: 'v' })
-    expect(screen.getByTestId('viewed').textContent).toBe(required(firstHunk).id)
-    fireEvent.keyDown(window, { key: 'v', metaKey: true })
-    expect(screen.getByTestId('viewed').textContent).toBe(required(firstHunk).id)
+  it('marks only the new sections through the file toggle, then keeps the whole file together', () => {
+    renderFile()
+    fireEvent.click(screen.getByRole('button', { name: 'Mark first item' }))
+    expect(screen.getByRole('status').textContent).toBe(
+      JSON.stringify([required(firstHunk).id, required(secondHunk).id]),
+    )
+    expect(screen.getByTestId('sections').textContent).toBe(
+      `${required(firstHunk).id},${required(secondHunk).id}`,
+    )
+    expect(screen.getByTestId('collapsed').textContent).toBe('true')
+    expect(screen.getByTestId('viewed-toggles').textContent).toBe('[]')
+    fireEvent.click(screen.getByRole('button', { name: 'Mark first item' }))
+    expect(screen.getByRole('status').textContent).toBe('[]')
+    expect(screen.getByTestId('collapsed').textContent).toBe('false')
   })
 })
 

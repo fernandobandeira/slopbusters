@@ -26,8 +26,3 @@ export interface ReviewChanges {
   incompletePaths?: string[]
   removed: RemovedSection[]
 }
-export const sectionUpdateLabels: Record<SectionUpdate, string> = {
-  new: 'New since review',
-  changed: 'Changed since review',
-  'context-changed': 'Context changed',
-}

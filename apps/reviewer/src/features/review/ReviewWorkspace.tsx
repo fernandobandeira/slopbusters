@@ -6,7 +6,6 @@ import { useReviewDiff } from './useReviewDiff'
 import { useReviewFocus } from './useReviewFocus'
 import { ReviewDiffViewer } from './ReviewDiffViewer'
 import { UPDATES_GROUP_ID } from './reviewUpdates'
-import { useSectionCursor } from './useSectionCursor'
 import { GroupSidebar } from './GroupSidebar'
 import { SubmitReviewDialog } from './SubmitReviewDialog'
 import { ReviewSubmitButton } from './ReviewSubmitButton'
@@ -99,7 +98,6 @@ export function ReviewWorkspace({
     unviewedOnly,
     updates: updatesGroup,
     fullSections,
-    toggleSections,
     searchParams,
     setSearchParams,
     changeView,
@@ -113,10 +111,10 @@ export function ReviewWorkspace({
     setFileCollapsed,
     toggleFile,
     fileSectionsViewed,
-    markSectionViewed,
-    sectionTargets,
     syntheticItems,
-    viewedHunks,
+    viewedToggles,
+    toggleViewedShown,
+    showViewedSections,
   } = useReviewDiff(pull, draft, setDraft, changes)
   const updates = usePullUpdates(pull)
   const { stack, summary: stackSummary } = usePullStack(pull)
@@ -153,18 +151,10 @@ export function ReviewWorkspace({
     searchParams,
     setSearchParams,
     setFileCollapsed,
+    showViewedSections,
     selected,
     items,
     viewerRef,
-  })
-  const { section: currentSection, setSection } = useSectionCursor({
-    targets: sectionTargets,
-    viewed: viewedHunks,
-    items,
-    markSectionViewed,
-    setFileCollapsed,
-    viewerRef,
-    enabled: grouped && draftReady,
   })
   const { discussions, discussionError, refreshDiscussions, postReply, setDiscussionError } =
     useDiscussions(pull.id, setNotice)
@@ -205,6 +195,7 @@ export function ReviewWorkspace({
     selected,
     changeView,
     setFileCollapsed,
+    showViewedSections,
     setDraft,
     setNotice,
     setSubmitted,
@@ -222,9 +213,8 @@ export function ReviewWorkspace({
         discussions,
         comments: draft.comments,
         editor,
-        sections: { targets: sectionTargets, viewed: viewedHunks, current: currentSection },
       }),
-    [items, pull, discussions, draft.comments, editor, sectionTargets, viewedHunks, currentSection],
+    [items, pull, discussions, draft.comments, editor],
   )
   useEffect(() => {
     if (!editor) return
@@ -560,10 +550,8 @@ export function ReviewWorkspace({
                       fileSectionsViewed={fileSectionsViewed}
                       toggleFile={toggleFile}
                       syntheticItems={syntheticItems}
-                      onToggleSection={(hunkId) => {
-                        setSection(hunkId)
-                        toggleSections([hunkId])
-                      }}
+                      viewedToggles={viewedToggles}
+                      toggleViewedShown={toggleViewedShown}
                       body={body}
                       setBody={setBody}
                       saveComment={saveComment}

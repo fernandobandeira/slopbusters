@@ -1,6 +1,5 @@
 import type { CodeViewItem } from '@pierre/diffs'
 import {
-  DiffSide,
   LineKind,
   Priority,
   type ChangeGroup,
@@ -8,27 +7,17 @@ import {
   type Hunk,
   type PullRequest,
 } from '../../../shared/domain/types'
-import type { PatchHunk, ReviewChanges, SectionUpdate } from '../../../shared/domain/reviewChanges'
+import type { PatchHunk, ReviewChanges } from '../../../shared/domain/reviewChanges'
 import type { PullFileContent } from '../../../shared/domain/fileContent'
 import { diffItems, patchItems } from '../../lib/diffItems'
 
 export const UPDATES_GROUP_ID = 'updated-since-review'
 
-/** Where a section's review control sits: after its last edited line. */
-export interface SectionTarget {
-  hunkId: string
-  itemId: string
-  path: string
-  line: number
-  side: DiffSide
-  state?: SectionUpdate
-}
 export type SyntheticItemKind = 'interdiff' | 'removed'
 export interface ReviewItems {
   items: CodeViewItem<undefined>[]
   /** The review sections each displayed item stands for, in display order. */
   sections: Map<string, string[]>
-  targets: SectionTarget[]
   synthetic: Map<string, SyntheticItemKind>
 }
 
@@ -71,17 +60,14 @@ type ItemOptions = {
  * edited sections as what changed since the review unless `full` is set, then dropped edits. */
 export function reviewItems(options: ItemOptions): ReviewItems {
   const updates = options.group.id === UPDATES_GROUP_ID ? options.changes : undefined
-  const result: ReviewItems = { items: [], sections: new Map(), targets: [], synthetic: new Map() }
+  const result: ReviewItems = { items: [], sections: new Map(), synthetic: new Map() }
   const interdiffs = new Map(
     (options.full ? [] : (updates?.sections ?? [])).flatMap((section) =>
       section.interdiff ? [[section.hunkId, section.interdiff] as const] : [],
     ),
   )
-  const states = new Map(
-    options.changes?.sections.map((section) => [section.hunkId, section.state]),
-  )
   for (const file of options.pull.files.filter((file) => options.group.fileIds.includes(file.id)))
-    addFileItems(result, options, file, { interdiffs, states })
+    addFileItems(result, options, file, interdiffs)
   for (const [path, removed] of removedByPath(updates))
     for (const [index, run] of nonOverlapping(removed).entries())
       addPatchItems(result, {
@@ -98,11 +84,11 @@ function addFileItems(
   result: ReviewItems,
   options: ItemOptions,
   file: ChangedFile,
-  updates: { interdiffs: Map<string, PatchHunk>; states: Map<string, SectionUpdate> },
+  interdiffs: Map<string, PatchHunk>,
 ) {
   const { group } = options
   const hunks = file.hunks.filter((hunk) => group.hunkIds.includes(hunk.id))
-  const regular = hunks.filter((hunk) => !updates.interdiffs.has(hunk.id))
+  const regular = hunks.filter((hunk) => !interdiffs.has(hunk.id))
   const ids = regular.map((hunk) => hunk.id)
   const items = ids.length
     ? diffItems(
@@ -114,12 +100,10 @@ function addFileItems(
   for (const item of items) {
     result.items.push(item)
     result.sections.set(item.id, ids)
-    for (const hunk of regular)
-      result.targets.push(hunkTarget(file, hunk, updates.states.get(hunk.id)))
   }
   const edited = hunks.flatMap((hunk) => {
-    const patch = updates.interdiffs.get(hunk.id)
-    return patch ? [{ hunk, patch, state: updates.states.get(hunk.id) }] : []
+    const patch = interdiffs.get(hunk.id)
+    return patch ? [{ hunk, patch }] : []
   })
   for (const [index, run] of nonOverlapping(edited).entries())
     addPatchItems(result, {
@@ -138,7 +122,7 @@ function addPatchItems(
     id: string
     path: string
     kind: SyntheticItemKind
-    run: { patch: PatchHunk; hunk?: Hunk; state?: SectionUpdate }[]
+    run: { patch: PatchHunk; hunk?: Hunk }[]
   },
 ) {
   const { id, path, run } = source
@@ -155,15 +139,6 @@ function addPatchItems(
       item.id,
       run.flatMap(({ hunk }) => (hunk ? [hunk.id] : [])),
     )
-    for (const { hunk, patch, state } of run)
-      if (hunk)
-        result.targets.push({
-          ...patchTarget(patch),
-          hunkId: hunk.id,
-          itemId: item.id,
-          path,
-          ...(state ? { state } : {}),
-        })
   }
 }
 
@@ -214,30 +189,4 @@ function patchRanges(patch: PatchHunk) {
     oldEnd: oldStart + Number(match?.[2] ?? 1),
     newEnd: newStart + Number(match?.[4] ?? 1),
   }
-}
-
-function hunkTarget(file: ChangedFile, hunk: Hunk, state?: SectionUpdate): SectionTarget {
-  const line = hunk.lines.findLast((line) => line.kind !== LineKind.context)
-  const left = line?.kind === LineKind.removed
-  return {
-    hunkId: hunk.id,
-    itemId: file.id,
-    path: file.path,
-    line: (left ? line.oldLine : line?.newLine) ?? 1,
-    side: left ? DiffSide.left : DiffSide.right,
-    ...(state ? { state } : {}),
-  }
-}
-function patchTarget(patch: PatchHunk): { line: number; side: DiffSide } {
-  const match = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(patch.header)
-  let oldLine = Number(match?.[1] ?? 1)
-  let newLine = Number(match?.[2] ?? 1)
-  let target = { line: newLine, side: DiffSide.right }
-  for (const line of patch.lines) {
-    if (line.kind === LineKind.removed) target = { line: oldLine, side: DiffSide.left }
-    if (line.kind === LineKind.added) target = { line: newLine, side: DiffSide.right }
-    if (line.kind !== LineKind.added) oldLine++
-    if (line.kind !== LineKind.removed) newLine++
-  }
-  return target
 }

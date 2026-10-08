@@ -3,7 +3,7 @@ import { ArrowLeft, Check, History, RotateCw, X } from 'lucide-react'
 import type { ChangeGroup, PullRequest, ReviewDraft } from '../../../shared/domain/types'
 import { groupChangeTotals } from '../../../shared/domain/review'
 import type { ReviewChanges } from '../../../shared/domain/reviewChanges'
-import { groupIsViewed, reviewedHunkIds } from './reviewProgress'
+import { groupIsViewed } from './reviewProgress'
 
 interface Props {
   pull: PullRequest
@@ -35,7 +35,6 @@ export function GroupSidebar({
 }: Props) {
   const groups = pull.groups
   const grouped = pull.groupingSource !== 'files'
-  const reviewed = reviewedHunkIds(pull, draft)
   const selected = groups.find((group) => group.id === selectedId)
   return (
     <aside className="group-sidebar" aria-label="Review navigation">
@@ -76,7 +75,7 @@ export function GroupSidebar({
           <UpdatesGroupRow
             group={updates}
             removed={changes?.removed.length ?? 0}
-            viewed={updates.hunkIds.filter((id) => reviewed.has(id)).length}
+            totals={groupChangeTotals(pull, updates)}
             done={groupIsViewed(updates, draft, pull)}
             selected={selectedId === updates.id}
             onSelect={() => {
@@ -87,7 +86,6 @@ export function GroupSidebar({
         )}
         {groups.map((group) => {
           const done = groupIsViewed(group, draft, pull)
-          const viewed = group.hunkIds.filter((id) => reviewed.has(id)).length
           const updated =
             changes?.sections.filter((section) => group.hunkIds.includes(section.hunkId)).length ??
             0
@@ -117,10 +115,7 @@ export function GroupSidebar({
                 </span>
                 <span className="green">+{totals.additions}</span>
                 <span className="red">−{totals.deletions}</span>
-              </span>
-              <span className="group-progress muted">
-                {viewed}/{group.hunkIds.length} sections viewed
-                {updated > 0 && <span className="section-update"> · {updated} updated</span>}
+                {updated > 0 && <span className="section-update">{updated} updated</span>}
               </span>
             </button>
           )
@@ -135,7 +130,7 @@ export function GroupSidebar({
 function UpdatesGroupRow({
   group,
   removed,
-  viewed,
+  totals,
   done,
   selected,
   onSelect,
@@ -143,7 +138,7 @@ function UpdatesGroupRow({
 }: {
   group: ChangeGroup
   removed: number
-  viewed: number
+  totals: { additions: number; deletions: number }
   done: boolean
   selected: boolean
   onSelect: () => void
@@ -161,9 +156,10 @@ function UpdatesGroupRow({
           <strong>{group.title}</strong>
         </div>
         {!done && (
-          <span className="group-progress muted">
-            {viewed}/{group.hunkIds.length} sections viewed
-            {removed > 0 && <> · {removed} no longer in PR</>}
+          <span className="group-change-stats muted">
+            <span className="green">+{totals.additions}</span>
+            <span className="red">−{totals.deletions}</span>
+            {removed > 0 && <span>{removed} no longer in PR</span>}
           </span>
         )}
       </button>
