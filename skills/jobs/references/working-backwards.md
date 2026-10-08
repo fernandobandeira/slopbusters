@@ -40,7 +40,7 @@ Each collapse is one question and its answer. The label is the question. A reade
 ## What not to carry over
 
 - Fictional customer quotes and leadership quotes. They read as filler in an engineering tracker.
-- Press-release tone. The visible layer is plain and specific, not promotional. Joel's voice applies: funny where it fits, simple everywhere.
+- Press-release tone. The visible layer is plain and specific, not promotional. The skill's voice applies: direct, plain, simple everywhere.
 
 ## In the skill
 

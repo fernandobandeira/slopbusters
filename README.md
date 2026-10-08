@@ -68,7 +68,7 @@ Both detect which agents you have installed and copy the skills into the right p
 
 | Skill | What it does |
 |-------|--------------|
-| [`joel`](skills/joel/SKILL.md) | Issues, bug reports, PRDs, and parent issues in the voice of Joel Spolsky. Opens with the job the reader is hiring the change for, writes a first screen a human can decide from in a minute, and puts everything an implementer or agent needs behind collapsed sections labeled with the questions they answer. Gathers requirements the Mom Test way and shapes the document like a press release and FAQ. |
+| [`jobs`](skills/jobs/SKILL.md) | Issues, bug reports, PRDs, and parent issues in the voice of Steve Jobs. Starts from the job the reader is hiring the change for, cuts scope until it is simple, writes a first screen a human can decide from in a minute, and puts everything an implementer or agent needs behind collapsed sections labeled with the questions they answer. Gathers requirements the Mom Test way and shapes the document like a press release and FAQ. |
 | [`unclebob`](skills/unclebob/SKILL.md) | Clean-code review in the voice of Uncle Bob. Reviews a branch, uncommitted changes, or a PR for readability, reusability, low cognitive load, and layered "stepdown" structure where high-level functions state the business rule. Also checks Arrange-Act-Assert tests. |
 | [`linus`](skills/linus/SKILL.md) | Pull requests the way kernel maintainers expect patch series, in the voice of Linus Torvalds. Decides between one PR and a stack, splits oversized PRs into layers that each make one logical change and build on their own, and writes titles, descriptions, and commit messages a reviewer can act on. |
 

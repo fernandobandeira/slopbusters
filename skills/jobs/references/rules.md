@@ -1,10 +1,22 @@
-# Joel's rules, their sources, and how they map to a tracker
+# The rules, their sources, and how they map to a tracker
 
-The persona is Joel Spolsky. The rules come from "Painless Functional Specifications" parts 1 through 4 (October 2000) and "Painless Bug Tracking" (November 2000), all on joelonsoftware.com. Where this skill extends him, the extension is marked; he wrote for Word documents printed at milestones, and we write for Linear, Jira, and GitHub read by people and agents.
+The persona is Steve Jobs; his principles set what the document is for and what it refuses to carry. The mechanics of a spec come from Joel Spolsky's "Painless Functional Specifications" parts 1 through 4 (October 2000) and "Painless Bug Tracking" (November 2000), both on joelonsoftware.com. Where this skill extends them, the extension is marked: neither wrote for Linear, Jira, and GitHub read by people and agents.
 
-## From "Painless Functional Specifications"
+## From Steve Jobs
 
-| Rule | Joel's reasoning | In a tracker |
+| Principle | Where he said it | In a tracker |
+|---|---|---|
+| Start with the customer and work backwards | WWDC, 1997: "You've got to start with the customer experience and work backwards to the technology." | The job sentence comes first. A ticket that opens with the solution gets sent back. |
+| Focus means saying no | WWDC, 1997, and his 1997 cut of Apple's line to four products. | "Not in scope" is written for the reader who would assume otherwise, and it is never empty on a feature. |
+| Simple is harder than complex | BusinessWeek, 1998: "You have to work hard to get your thinking clean to make it simple." | The visible layer fits one screen. A bullet carrying field names is a collapse that hasn't been filed yet. |
+| Design is how it works | The New York Times, 2003. | "Done means" describes behavior someone can observe, not the shape of the code. |
+| Real artists ship | The Macintosh team, 1983. | Open questions name who answers them, so the ticket can move. A spec that never reaches "ready" is a hobby. |
+| People don't know what they want until you show them | BusinessWeek, 1998. | This is the Mom Test, not an exception to it: hypotheticals are worthless, past behavior is data. Gather what people did; decide what to build yourself. |
+
+## From Spolsky's "Painless Functional Specifications"
+
+
+| Rule | Spolsky's reasoning | In a tracker |
 |---|---|---|
 | Write the spec before the code | Designing in prose takes minutes to revise; designing in code takes weeks, and the author gets attached to the code. | The issue is written before implementation starts, and the implementer reads it rather than the Slack thread. |
 | One author owns it | "Your specs should be owned and written by one person." A committee spec has no one who knows what it says. | One owner on the issue, named. Others comment; the owner folds. |
@@ -19,9 +31,9 @@ The persona is Joel Spolsky. The rules come from "Painless Functional Specificat
 | Review and reread | Rewrite every sentence you stumble on. | Step 7's checklist, read as someone who wasn't there. |
 | Avoid templates | "Have you ever read two good essays that could fit into a template?" | The visible layer has a fixed shape because it is read the same way every time; the collapses are free-form. That is the compromise, and it is marked as ours. |
 
-## From "Painless Bug Tracking"
+## From Spolsky's "Painless Bug Tracking"
 
-| Rule | Joel's reasoning | In a tracker |
+| Rule | Spolsky's reasoning | In a tracker |
 |---|---|---|
 | Steps to reproduce, expected, observed | "Every good bug report needs exactly three things." Without the steps, "I probably will have no idea what you are talking about." | The fixed middle of a bug report. Numbered steps, then expected, then observed with evidence. |
 | One owner at a time | A bug assigned to two people is assigned to nobody. | One assignee. Reassign explicitly. |
@@ -31,14 +43,25 @@ The persona is Joel Spolsky. The rules come from "Painless Functional Specificat
 
 ## Extensions this skill adds, marked as ours
 
-- **Two layers with collapsible sections.** Joel printed the whole spec. We have readers with one minute and readers with an afternoon, plus agents that read everything. The visible layer and the FAQ collapses are our answer. The press-release-and-FAQ framing comes from Working Backwards; see [working-backwards.md](working-backwards.md).
-- **The job sentence first.** Joel opened with an overview. We open with the job the reader is hiring the change for, from Jobs to be Done; see [jobs-to-be-done.md](jobs-to-be-done.md).
-- **Gathering rules.** Joel assumed the author already knew what to build. We often don't, and the requester's first sentence is a proposed solution. The Mom Test owns the interview; see [mom-test.md](mom-test.md).
-- **Agents as readers.** A collapsed section is still binding. Joel never had to say so.
+- **Two layers with collapsible sections.** Spolsky printed the whole spec. We have readers with one minute and readers with an afternoon, plus agents that read everything. The visible layer and the FAQ collapses are our answer. The press-release-and-FAQ framing comes from Working Backwards; see [working-backwards.md](working-backwards.md).
+- **The job sentence first.** Spolsky opened with an overview. We open with the job the reader is hiring the change for, from Jobs to be Done; see [jobs-to-be-done.md](jobs-to-be-done.md).
+- **Gathering rules.** Spolsky assumed the author already knew what to build. We often don't, and the requester's first sentence is a proposed solution. The Mom Test owns the interview; see [mom-test.md](mom-test.md).
+- **Agents as readers.** A collapsed section is still binding. Nobody in 2000 had to say so.
 
 ## Quotations you may use
 
-These are verbatim from the essays and may be quoted. Paraphrase everything else.
+These are verbatim and may be quoted. Paraphrase everything else.
+
+From Steve Jobs:
+
+- "You've got to start with the customer experience and work backwards to the technology."
+- "Deciding what not to do is as important as deciding what to do."
+- "Simple can be harder than complex: You have to work hard to get your thinking clean to make it simple."
+- "Design is not just what it looks like and feels like. Design is how it works."
+- "Real artists ship."
+- "People think focus means saying yes to the thing you've got to focus on. But that's not what it means at all. It means saying no to the hundred other good ideas that there are."
+
+From Joel Spolsky:
 
 - "Failing to write a spec is the single biggest unnecessary risk you take in a software project."
 - "Your specs should be owned and written by one person."
