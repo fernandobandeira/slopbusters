@@ -2,6 +2,11 @@ import { matchPath } from 'react-router'
 import type { PullRequest } from '../../shared/domain/types'
 import { parsePullUrl } from '../../shared/domain/pullUrl'
 import type { InboxFilter } from '../features/inbox/inbox'
+import {
+  ticketIdentifierSchema,
+  ticketViewSchema,
+  type TicketView,
+} from '../../shared/domain/tickets'
 
 type InboxRoute = { kind: 'inbox'; repository?: string; filter: InboxFilter }
 type PullRoute = {
@@ -16,6 +21,8 @@ export type AppRoute =
   | PullRoute
   | { kind: 'sessions'; id?: string; repository?: string; filter: InboxFilter }
   | { kind: 'settings'; repository?: undefined; filter: InboxFilter }
+  | { kind: 'issues'; view: TicketView; repository?: undefined; filter: InboxFilter }
+  | { kind: 'issue'; identifier: string; repository?: undefined; filter: InboxFilter }
   | { kind: 'not-found' }
 export interface ReviewView {
   groupId?: string
@@ -26,9 +33,8 @@ export interface ReviewView {
 export function readRoute(params: { pathname: string; search: string }): AppRoute {
   const query = new URLSearchParams(params.search)
   const filter = inboxFilter(query.get('inbox'))
-  const sessionRoute = readSessionRoute(params.pathname, query, filter)
-  if (sessionRoute) return sessionRoute
-  if (params.pathname === '/settings') return { kind: 'settings', filter }
+  const page = readAppPage(params.pathname, query, filter)
+  if (page) return page
   if (params.pathname === '/') return { kind: 'inbox', filter }
   const pull = matchPath('/repos/:owner/:repo/pulls/:number', params.pathname)
   const inbox = matchPath('/repos/:owner/:repo/pulls', params.pathname)
@@ -101,6 +107,40 @@ function inboxFilter(value: string | null): InboxFilter {
 }
 function validRepository(value: string | null): string | undefined {
   return value && /^[\w.-]+\/[\w.-]+$/.test(value) ? value : undefined
+}
+
+export function issuesPath(view: TicketView = 'assigned'): string {
+  return `/issues?${new URLSearchParams({ view })}`
+}
+export function issuePath(identifier: string): string {
+  return `/issues/${encodeURIComponent(identifier)}`
+}
+
+/** Pages outside a repository: sessions, settings, and Linear issues. */
+function readAppPage(
+  pathname: string,
+  query: URLSearchParams,
+  filter: InboxFilter,
+): AppRoute | undefined {
+  if (pathname === '/settings') return { kind: 'settings', filter }
+  return readSessionRoute(pathname, query, filter) ?? readIssueRoute(pathname, query, filter)
+}
+
+function readIssueRoute(
+  pathname: string,
+  query: URLSearchParams,
+  filter: InboxFilter,
+): AppRoute | undefined {
+  if (pathname === '/issues') {
+    const view = ticketViewSchema.safeParse(query.get('view'))
+    return { kind: 'issues', view: view.success ? view.data : 'assigned', filter }
+  }
+  const issue = matchPath('/issues/:identifier', pathname)
+  if (!issue) return undefined
+  const identifier = ticketIdentifierSchema.safeParse(issue.params.identifier?.toUpperCase())
+  return identifier.success
+    ? { kind: 'issue', identifier: identifier.data, filter }
+    : { kind: 'not-found' }
 }
 
 function readSessionRoute(

@@ -53,6 +53,7 @@ export interface LinusResult {
 export interface LinusPending {
   pull: PullRequest
   fingerprint: string
+  context?: string
   reviews: { model: OrganizationPreferences; advice?: LinusAdvice; error?: string }[]
 }
 export interface LinusSession {

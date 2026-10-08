@@ -18,6 +18,8 @@ interface ReviewStrategy<Advice extends { limitations: string[] }> {
   latest: (repository: string) => ReviewSession<Advice> | undefined
   loadPull: (url: string) => Promise<PullRequest>
   openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<RepositoryContext>
+  /** Evidence about what the PR is meant to do, such as its linked ticket. */
+  context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
   review: (request: {
     pull: PullRequest
     model: OrganizationPreferences
@@ -26,6 +28,7 @@ interface ReviewStrategy<Advice extends { limitations: string[] }> {
     companion: boolean
     repository?: RepositoryContext
     observer?: ProviderObserver
+    context?: string
   }) => Promise<Advice>
   reconcile: (request: {
     pending: PendingReview<Advice>
@@ -187,7 +190,9 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
         signal.throwIfAborted()
         const source = await this.prepareSource(pull, signal)
         repository = source.repository
-        const pending = await this.reviewPair({ session, pull, skill, signal, repository })
+        const context = await this.strategy.context?.(pull, signal)
+        signal.throwIfAborted()
+        const pending = await this.reviewPair({ session, pull, skill, signal, repository, context })
         this.addSourceLimitation(pending, source.limitation)
         session.pending = pending
         if (!this.canReconcile(session)) return false
@@ -247,8 +252,9 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     skill: string
     signal: AbortSignal
     repository?: RepositoryContext
+    context?: string
   }): Promise<PendingReview<Advice>> {
-    const { session, pull, skill, signal, repository } = request
+    const { session, pull, skill, signal, repository, context } = request
     this.progress(session, `Two reviewers are looking at PR #${String(pull.number)}…`)
     const models = [session.primary, session.companion] as const
     const outcomes = await Promise.allSettled(
@@ -262,6 +268,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
             companion: reviewer === 1,
             repository,
             observer,
+            context,
           })
         return this.strategy.sessions
           ? this.strategy.sessions.run(
@@ -280,6 +287,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     return {
       pull,
       fingerprint: pullFingerprint(pull),
+      ...(context ? { context } : {}),
       reviews: outcomes.map((outcome, reviewer) => ({
         model: models[reviewer === 0 ? 0 : 1],
         ...(outcome.status === 'fulfilled'

@@ -10,6 +10,8 @@ export interface ReviewResult<Advice> {
 export interface PendingReview<Advice> {
   pull: PullRequest
   fingerprint: string
+  /** The linked ticket, as JSON evidence, when the PR has one and Linear is connected. */
+  context?: string
   reviews: { model: OrganizationPreferences; advice?: Advice; error?: string }[]
 }
 export interface ReviewSession<Advice> {

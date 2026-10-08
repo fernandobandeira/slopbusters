@@ -21,6 +21,7 @@ import type { Preferences } from '../../shared/domain/preferences'
 import { gandalfSessionSchema, type GandalfSession } from '../../shared/domain/gandalf'
 import type { BobSession } from '../../shared/domain/bob'
 import { readSavedBobReviews } from './savedBobReviews'
+import { migrateTicketStore, TicketStore } from './ticketStore'
 import type { LinusRecommendation, LinusSession } from '../../shared/domain/linus'
 
 export class ReviewNotFoundError extends UserError {
@@ -37,6 +38,7 @@ export interface StoredDraft {
 /** Instances own connections; importing this module never creates local data. */
 export class ReviewerStore {
   private readonly database: DatabaseSync
+  readonly tickets: TicketStore
   constructor({ dataDirectory }: { dataDirectory: string }) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 })
     const filename = join(dataDirectory, 'reviewer.sqlite')
@@ -46,7 +48,7 @@ export class ReviewerStore {
       'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;',
     )
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
-    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6].includes(version)) {
+    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6, 7].includes(version)) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
     }
@@ -83,6 +85,8 @@ export class ReviewerStore {
         id TEXT PRIMARY KEY, repository TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL
       ); PRAGMA user_version = 5; COMMIT;`)
     if (version < 6) migrateReviewProgress(this.database)
+    if (version < 7) migrateTicketStore(this.database)
+    this.tickets = new TicketStore(this.database)
   }
   savePull(pull: PullRequest): void {
     this.database

@@ -18,9 +18,10 @@ export class LinusJobs extends DualReviewJobs<LinusAdvice> {
       openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<RepositoryContext>,
       loadPull?: typeof fetchPull,
       sessions?: AgentSessions,
+      context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>,
     ]
   ) {
-    const [openRepository, loadPull = fetchPull, sessions] = dependencies
+    const [openRepository, loadPull = fetchPull, sessions, context] = dependencies
     super({
       name: 'Linus',
       sessions,
@@ -43,9 +44,14 @@ export class LinusJobs extends DualReviewJobs<LinusAdvice> {
       latest: (repository) => store.latestLinusSession(repository),
       loadPull,
       openRepository,
-      review: ({ pull, model, skill, signal, companion, repository, observer }) =>
-        repository || observer
-          ? reviewWithLinus(pull, model, skill, signal, companion, { repository, observer })
+      context,
+      review: ({ pull, model, skill, signal, companion, repository, observer, context }) =>
+        repository || observer || context
+          ? reviewWithLinus(pull, model, skill, signal, companion, {
+              repository,
+              observer,
+              context,
+            })
           : reviewWithLinus(pull, model, skill, signal, companion),
       reconcile: ({ pending, model, skill, signal, repository, observer }) =>
         repository || observer

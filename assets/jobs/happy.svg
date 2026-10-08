@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Steve Jobs, happy">
+  <title>Steve Jobs, happy (placeholder portrait)</title>
+  <path d="M28 256c4-48 40-74 100-74s96 26 100 74z" fill="#141414" stroke="#000" stroke-width="4"/>
+  <path d="M92 186c6 14 20 22 36 22s30-8 36-22v-14H92z" fill="#1d1d1d" stroke="#000" stroke-width="4"/>
+  <path d="M104 160h48v26c-6 8-14 12-24 12s-18-4-24-12z" fill="#e8b48f" stroke="#000" stroke-width="4"/>
+  <ellipse cx="128" cy="104" rx="58" ry="70" fill="#f1c7a1" stroke="#000" stroke-width="4"/>
+  <path d="M72 96c-2-22 4-38 14-46-4 12-4 26 0 40zM184 96c2-22-4-38-14-46 4 12 4 26 0 40z" fill="#8f8a85" stroke="#000" stroke-width="3"/>
+  <ellipse cx="68" cy="110" rx="9" ry="15" fill="#e8b48f" stroke="#000" stroke-width="4"/>
+  <ellipse cx="188" cy="110" rx="9" ry="15" fill="#e8b48f" stroke="#000" stroke-width="4"/>
+  <path d="M78 126c4 34 24 48 50 48s46-14 50-48c-10 14-26 20-50 20s-40-6-50-20z" fill="#7d7873" opacity=".55"/>
+  <path d="M90 84q14-10 28-2M138 82q14-8 28 2" stroke="#5b5650" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <circle cx="104" cy="106" r="17" fill="#fff" fill-opacity=".18" stroke="#2b2b2b" stroke-width="3"/>
+  <circle cx="152" cy="106" r="17" fill="#fff" fill-opacity=".18" stroke="#2b2b2b" stroke-width="3"/>
+  <path d="M121 104h14M87 102l-14-4M169 102l14-4" stroke="#2b2b2b" stroke-width="3" fill="none"/>
+  <path d="M98 108q6-6 12 0M146 108q6-6 12 0" stroke="#000" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M128 112c-4 10-6 16-2 20" stroke="#000" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M108 142q20 18 40 0z" fill="#fff" stroke="#000" stroke-width="4" stroke-linejoin="round"/>
+  
+</svg>

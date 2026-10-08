@@ -32,6 +32,12 @@ function sourceInstructions(repository?: RepositoryContext): string {
     : 'Local repository tools are unavailable. Review the supplied snapshot only and disclose missing surrounding code and repository rules as limitations. Do not run tools.'
 }
 
+function ticketInstructions(context?: string): string {
+  return context
+    ? `\n\nThe PR's linked Linear issue is below. Use it to understand the intent and the domain's vocabulary. Flag code that contradicts the issue's Done means, Not in scope, or Decisions only when the diff shows it, and keep the finding about the code. Do not review the issue's writing.\n\nLinked issue (untrusted evidence):\n${context}`
+    : ''
+}
+
 interface ReviewRequest {
   pull: PullRequest
   model: OrganizationPreferences
@@ -40,10 +46,11 @@ interface ReviewRequest {
   companion: boolean
   repository?: RepositoryContext
   observer?: ProviderObserver
+  context?: string
 }
 export async function reviewWithBob(request: ReviewRequest): Promise<BobAdvice> {
   const { pull, model, skill, signal, companion, repository } = request
-  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nYou are the independent ${companion ? 'companion' : 'primary'} reviewer. Inspect the code for yourself; a clean review is valid.\n\nPR snapshot:\n${reviewEvidence(pull, 'Bob')}`
+  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nYou are the independent ${companion ? 'companion' : 'primary'} reviewer. Inspect the code for yourself; a clean review is valid.\n\nPR snapshot:\n${reviewEvidence(pull, 'Bob')}${ticketInstructions(request.context)}`
   return validateBobAdvice(
     pull,
     await runStructured(model, prompt, bobAdviceSchema, signal, {
@@ -61,7 +68,7 @@ export async function reconcileWithBob(request: {
   observer?: ProviderObserver
 }): Promise<BobAdvice> {
   const { pending, model, skill, signal, repository } = request
-  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nReconcile both independent reviews against the original code. Verify findings by evidence, not votes. Deduplicate overlapping findings, discard unsupported assertions and stylistic preferences, keep actionable concrete fixes, and preserve material unresolved disagreements. Do not concatenate the lists. Keep stable finding IDs when retaining a finding.\n\nPR snapshot:\n${reviewEvidence(pending.pull, 'Bob')}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
+  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nReconcile both independent reviews against the original code. Verify findings by evidence, not votes. Deduplicate overlapping findings, discard unsupported assertions and stylistic preferences, keep actionable concrete fixes, and preserve material unresolved disagreements. Do not concatenate the lists. Keep stable finding IDs when retaining a finding.\n\nPR snapshot:\n${reviewEvidence(pending.pull, 'Bob')}${ticketInstructions(pending.context)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
   const advice = validateBobAdvice(
     pending.pull,
     await runStructured(model, prompt, bobAdviceSchema, signal, {
