@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import * as routes from '../../shared/api/pulls'
 import { fetchDiscussions, replyToThread } from '../features/pulls/discussions'
+import { markPullReady } from '../features/pulls/ready'
 import { getAppStatus } from '../adapters/toolStatus'
 import { ReviewNotFoundError } from '../adapters/store'
 import { UserError, logError } from '../errors'
@@ -59,6 +60,12 @@ export function pullsRouter(services: Services) {
     stacks.getStackForPull(query.url, { refresh: query.refresh === '1' }),
   )
   handle(router, routes.getPullRevision, ({ params }) => checkRevision(store.getPull(params.id)))
+  handle(router, routes.markPullReady, async ({ params }) => {
+    await markPullReady(store.getPull(params.id), github)
+    const pull = { ...store.getPull(params.id), isDraft: false }
+    store.savePull(pull)
+    return pull
+  })
   registerReviewRoutes(router, services)
   return router
 }

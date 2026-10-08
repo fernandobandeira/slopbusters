@@ -7,6 +7,7 @@ import { useReviewFocus } from './useReviewFocus'
 import { ReviewDiffViewer } from './ReviewDiffViewer'
 import { GroupSidebar } from './GroupSidebar'
 import { SubmitReviewDialog } from './SubmitReviewDialog'
+import { ReviewSubmitButton } from './ReviewSubmitButton'
 import { useDiscussions } from './discussions/useDiscussions'
 import { useOrganizeJob } from './useOrganizeJob'
 import { useReviewSubmission } from './useReviewSubmission'
@@ -281,16 +282,22 @@ export function ReviewWorkspace({
                 {copied ? 'Copied' : 'Copy feedback'}
               </Button>
             )}
-            <Button
-              size="sm"
-              disabled={Boolean(submitted)}
-              onClick={() => {
+            <ReviewSubmitButton
+              pull={pull}
+              isDraft={pullStatus.status?.isDraft ?? pull.isDraft ?? false}
+              submitting={submitting}
+              submitted={submitted}
+              onSubmit={() => {
                 setError('')
                 setSubmitOpen(true)
               }}
-            >
-              {submitted ? 'Submitted' : 'Submit review'}
-            </Button>
+              onReady={(updated) => {
+                onUpdate(updated)
+                pullStatus.refresh()
+              }}
+              onError={setError}
+              onNotice={setNotice}
+            />
           </>
         )}
       </div>
