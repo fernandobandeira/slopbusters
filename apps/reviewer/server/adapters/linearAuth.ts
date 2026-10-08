@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { createServer, type Server } from 'node:http'
+import { createServer, type RequestListener, type Server } from 'node:http'
 import { z } from 'zod'
 import { logError, UserError } from '../errors'
 import { LINEAR_OAUTH_TIMEOUT_MS, LINEAR_TIMEOUT_MS } from '../limits'
@@ -41,7 +41,7 @@ export class LinearAuth {
   private readonly send: typeof fetch
   private readonly now: () => number
   private refreshing?: Promise<string | undefined>
-  private flow?: { server: Server; timer: NodeJS.Timeout }
+  private flow?: { servers: Server[]; timer: NodeJS.Timeout }
   constructor(
     private readonly store: TicketStore,
     private readonly options: LinearAuthOptions = {},
@@ -101,7 +101,7 @@ export class LinearAuth {
     const verifier = randomBytes(48).toString('base64url')
     const state = randomBytes(24).toString('base64url')
     const port = this.options.callbackPort ?? linearOAuth.callbackPort
-    const server = createServer((request, response) => {
+    const servers = await listenOnLoopback(port, (request, response) => {
       void this.callback(new URL(request.url ?? '/', 'http://localhost'), {
         state,
         verifier,
@@ -111,25 +111,14 @@ export class LinearAuth {
         const finished = page.finished ? this.detachFlow() : undefined
         response.writeHead(page.status, { 'Content-Type': 'text/html; charset=utf-8' })
         response.end(page.body, () => {
-          if (finished) closeListener(finished.server)
+          finished?.servers.forEach(closeListener)
         })
       })
-    })
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', (error) => {
-        reject(
-          new UserError(
-            `Another program is using port ${String(port)}, which Linear sign-in needs. Close it and retry, or use an API key.`,
-          ),
-        )
-        logError('Starting the Linear sign-in listener', error)
-      })
-      server.listen(port, '127.0.0.1', resolve)
     })
     const timer = setTimeout(() => {
       this.cancelFlow()
     }, LINEAR_OAUTH_TIMEOUT_MS)
-    this.flow = { server, timer }
+    this.flow = { servers, timer }
     const url = new URL(linearOAuth.authorize)
     url.search = new URLSearchParams({
       client_id: clientId,
@@ -228,12 +217,39 @@ export class LinearAuth {
     return flow
   }
   private cancelFlow() {
-    const flow = this.detachFlow()
-    if (flow) closeListener(flow.server)
+    this.detachFlow()?.servers.forEach(closeListener)
   }
   close() {
     this.cancelFlow()
   }
+}
+
+/**
+ * The callback says "localhost", which a browser may resolve to IPv4 or IPv6 first. Listen on
+ * both loopback addresses; IPv4 is required, IPv6 only where the machine has it.
+ */
+async function listenOnLoopback(port: number, handler: RequestListener): Promise<Server[]> {
+  const ipv4 = await listen(createServer(handler), port, '127.0.0.1').catch((error: unknown) => {
+    logError('Starting the Linear sign-in listener', error)
+    throw new UserError(
+      `Another program is using port ${String(port)}, which Linear sign-in needs. Close it and retry, or use an API key.`,
+    )
+  })
+  const ipv6 = await listen(createServer(handler), port, '::1').catch((error: unknown) => {
+    logError('Linear sign-in is listening on IPv4 only', error)
+    return undefined
+  })
+  return ipv6 ? [ipv4, ipv6] : [ipv4]
+}
+
+function listen(server: Server, port: number, host: string): Promise<Server> {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(port, host, () => {
+      server.off('error', reject)
+      resolve(server)
+    })
+  })
 }
 
 function closeListener(server: Server) {
