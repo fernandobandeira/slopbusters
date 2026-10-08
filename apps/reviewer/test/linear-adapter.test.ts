@@ -139,6 +139,8 @@ describe('Linear sign-in', () => {
       `http://127.0.0.1:${String(port)}/linear/callback?code=c&state=x`,
     )
     expect(wrongState.status).toBe(400)
+    const overIpv6 = await fetch(`http://[::1]:${String(port)}/linear/callback?code=c&state=x`)
+    expect(overIpv6.status).toBe(400)
     const state = authorize.searchParams.get('state') ?? ''
     const page = await fetch(
       `http://127.0.0.1:${String(port)}/linear/callback?code=granted&state=${state}`,

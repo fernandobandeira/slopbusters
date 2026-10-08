@@ -77,7 +77,7 @@ describe('ticket API', () => {
         expect.objectContaining({ repository: 'acme/app', state: 'open' }),
       ])
       const status = (await (await fetch(`${app.url}/api/linear/status`)).json()) as unknown
-      expect(status).toMatchObject({ connected: true, oauthAvailable: false, method: 'none' })
+      expect(status).toMatchObject({ connected: true, oauthAvailable: true, method: 'none' })
 
       const saved = await fetch(`${app.url}/api/linear/key`, {
         method: 'PUT',
