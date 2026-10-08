@@ -210,8 +210,9 @@ export function ReviewWorkspace({
         discussions,
         comments: draft.comments,
         editor,
+        groupId: selected?.id,
       }),
-    [items, pull, discussions, draft.comments, editor],
+    [items, pull, discussions, draft.comments, editor, selected?.id],
   )
   useEffect(() => {
     if (!editor) return

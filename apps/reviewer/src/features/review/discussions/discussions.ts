@@ -81,6 +81,9 @@ type AnnotationParams = {
   discussions?: PullDiscussions
   comments: DraftComment[]
   editor: CommentEditor | null
+  /** The group on screen. Threads it cannot place appear in only one group: the one whose
+   * section holds their line, otherwise the first group with their file. */
+  groupId?: string
 }
 type Place = (line: number, side: DiffSide) => LineDiscussion | undefined
 
@@ -140,8 +143,21 @@ export function annotateDiscussions(params: AnnotationParams): {
   })
   return {
     items: items.map((item) => ({ ...item, version: controlledItemVersion(item) })),
-    unplaced: threads.filter((thread) => !placed.has(thread.id)),
+    unplaced: threads.filter(
+      (thread) => !placed.has(thread.id) && ownsThread(params, thread, canMap),
+    ),
   }
+}
+
+function ownsThread(params: AnnotationParams, thread: ReviewThread, canMap: boolean) {
+  if (!params.groupId) return true
+  const current = canMap && !thread.outdated && thread.line != null
+  const owner = discussionGroup({
+    pull: params.pull,
+    path: thread.path,
+    ...(current ? { line: thread.line ?? undefined, side: thread.side } : {}),
+  })
+  return owner?.id === params.groupId
 }
 
 function availableLines(
