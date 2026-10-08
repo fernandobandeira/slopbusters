@@ -40,7 +40,7 @@ export function JobsPanel({
       <header className="jobs-header">
         <img
           className="jobs-portrait"
-          src={`/jobs/${jobsExpression(session)}.svg`}
+          src={`/jobs/${jobsExpression(session)}.png`}
           alt={`Steve Jobs, ${jobsExpression(session)}`}
         />
         <div>

@@ -188,11 +188,11 @@ export function jobsSnapshotMatches(
   )
 }
 
-export type JobsExpression = 'neutral' | 'thinking' | 'happy' | 'resigned' | 'angry'
+/** Jobs has four portraits: no resigned face, so a failed run keeps his neutral one. */
+export type JobsExpression = 'neutral' | 'thinking' | 'happy' | 'angry'
 export function jobsExpression(session: JobsSession | undefined): JobsExpression {
-  if (!session || session.status === 'cancelled') return 'neutral'
+  if (!session || session.status === 'cancelled' || session.status === 'failed') return 'neutral'
   if (session.status === 'running' || session.status === 'partial') return 'thinking'
-  if (session.status === 'failed') return 'resigned'
   const advice = latestJobsAdvice(session)?.advice
   if (!advice) return 'neutral'
   if (advice.verdict === 'ready') return 'happy'
