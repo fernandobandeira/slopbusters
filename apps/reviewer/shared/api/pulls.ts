@@ -107,3 +107,7 @@ export const submitReview = defineRoute('POST', '/pulls/:id/reviews', {
   request: z.object({ draft: draftSchema, event: z.enum(ReviewEvent) }),
   response: z.object({ url: z.string(), id: z.number() }),
 })
+export const markPullReady = defineRoute('POST', '/pulls/:id/ready', {
+  params: idParams,
+  response: pullSchema,
+})

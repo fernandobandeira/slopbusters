@@ -18,10 +18,10 @@ function fixture(config: Record<string, string>, user?: unknown) {
 describe('commit identity for Gandalf updates', () => {
   it("uses the user's global Git identity", async () => {
     const { identity, run, rest } = fixture({
-      'user.name': 'Fernando Bandeira',
-      'user.email': 'fernando@example.com',
+      'user.name': 'Ada Lovelace',
+      'user.email': 'ada@example.com',
     })
-    expect(await identity()).toEqual({ name: 'Fernando Bandeira', email: 'fernando@example.com' })
+    expect(await identity()).toEqual({ name: 'Ada Lovelace', email: 'ada@example.com' })
     expect(run).toHaveBeenCalledWith({
       command: 'git',
       args: ['config', '--global', '--get', 'user.email'],
@@ -29,10 +29,10 @@ describe('commit identity for Gandalf updates', () => {
     expect(rest).not.toHaveBeenCalled()
   })
   it('falls back to the GitHub account and its noreply address', async () => {
-    const { identity } = fixture({}, { id: 8373980, login: 'octo', name: null })
+    const { identity } = fixture({}, { id: 583231, login: 'octo', name: null })
     expect(await identity()).toEqual({
       name: 'octo',
-      email: '8373980+octo@users.noreply.github.com',
+      email: '583231+octo@users.noreply.github.com',
     })
   })
   it('keeps a configured name when only the email is missing', async () => {

@@ -90,6 +90,7 @@ export interface PullRequest {
   mergeBaseSha?: string
   headSha: string
   state: 'open' | 'closed' | 'merged'
+  isDraft?: boolean
   files: ChangedFile[]
   groups: ChangeGroup[]
   transfers: CodeTransfer[]

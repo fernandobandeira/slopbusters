@@ -70,6 +70,7 @@ export const pullSchema = z.object({
   mergeBaseSha: z.string().optional(),
   headSha: z.string(),
   state: z.enum(['open', 'closed', 'merged']),
+  isDraft: z.boolean().optional(),
   files: z.array(file),
   groups: z.array(group),
   transfers: z.array(transfer),

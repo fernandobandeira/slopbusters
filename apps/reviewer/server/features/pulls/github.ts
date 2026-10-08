@@ -157,6 +157,7 @@ export function createPullService(
       baseBranch: pr.base.ref,
       headBranch: pr.head.ref,
       state: pr.merged ? 'merged' : pr.state,
+      isDraft: pr.draft ?? false,
     }
   }
 
@@ -221,6 +222,7 @@ export function createPullService(
       mergeBaseSha,
       headSha: pr.head.sha,
       state: pr.merged ? 'merged' : pr.state,
+      isDraft: pr.draft ?? false,
       files,
       groups: fileGroups(files),
       transfers: detectTransfers(files),

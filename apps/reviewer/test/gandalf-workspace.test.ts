@@ -270,11 +270,11 @@ describe('CI fixes', () => {
     )
   })
   it("authors the published commit with the user's identity", async () => {
-    const work = await openCi({ name: 'Fernando Bandeira', email: 'fernando@example.com' })
+    const work = await openCi({ name: 'Ada Lovelace', email: 'ada@example.com' })
     await work.apply([{ path: 'code.ts', content: 'export const value = "fixed"\n' }])
     const fixed = await work.publish()
     expect((await git(['show', '-s', '--format=%an <%ae>%n%cn <%ce>', fixed])).trim()).toBe(
-      'Fernando Bandeira <fernando@example.com>\nFernando Bandeira <fernando@example.com>',
+      'Ada Lovelace <ada@example.com>\nAda Lovelace <ada@example.com>',
     )
   })
   it('pushes nothing when the models leave the head unchanged', async () => {

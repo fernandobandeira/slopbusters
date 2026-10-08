@@ -1,12 +1,16 @@
 import { onBrowserWake } from '../../lib/browserWake'
 import * as routes from '../../../shared/api'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { PullStatus } from '../../../shared/domain/pullStatus'
 import { call, message } from '../../lib/api'
 import { watchPullUpdates } from './pullUpdates'
 
 export function usePullStatus(url: string | undefined, snapshotId?: string) {
-  const key = `${url ?? ''}@${snapshotId ?? ''}`
+  const [refreshCount, setRefreshCount] = useState(0)
+  const refresh = useCallback(() => {
+    setRefreshCount((previous) => previous + 1)
+  }, [])
+  const key = `${url ?? ''}@${snapshotId ?? ''}@${refreshCount}`
   const [result, setResult] = useState<{ key: string; status?: PullStatus; error?: string }>()
   useEffect(() => {
     if (!url) return
@@ -36,5 +40,10 @@ export function usePullStatus(url: string | undefined, snapshotId?: string) {
     }
   }, [url, snapshotId, key])
   const current = result?.key === key ? result : undefined
-  return { status: current?.status, error: current?.error, loading: Boolean(url && !current) }
+  return {
+    status: current?.status,
+    error: current?.error,
+    loading: Boolean(url && !current),
+    refresh,
+  }
 }
