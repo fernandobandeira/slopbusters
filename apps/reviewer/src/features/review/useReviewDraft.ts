@@ -172,5 +172,10 @@ export function useReviewDraft(pull: PullRequest) {
     [flush],
   )
 
-  return { draft, setDraft, ready, error, flush, changes }
+  const dismissChanges = useCallback(async () => {
+    await call(routes.dismissReviewChanges, { params: { id: pull.id } })
+    if (active.current) setChanges(undefined)
+  }, [pull.id])
+
+  return { draft, setDraft, ready, error, flush, changes, dismissChanges }
 }

@@ -83,13 +83,18 @@ describe('review view URLs', () => {
     expect(readReviewView(restored)).toEqual({
       groupId: 'authorization + contracts',
       split: true,
+      fullSections: false,
     })
     expect(initial.get('group')).toBe('permissions')
   })
 
   it('ignores legacy file views and clears them when diff preferences change', () => {
     const initial = new URLSearchParams('view=files&file=src/a.ts&diff=split&priority=P1')
-    expect(readReviewView(initial)).toEqual({ groupId: undefined, split: true })
+    expect(readReviewView(initial)).toEqual({
+      groupId: undefined,
+      split: true,
+      fullSections: false,
+    })
     const query = updateReviewView(initial, {
       groupId: 'authorization',
       split: false,
@@ -104,7 +109,7 @@ describe('review view URLs', () => {
     })
     expect(
       readReviewView(new URLSearchParams('view=unknown&priority=unknown&diff=unknown')),
-    ).toEqual({ groupId: undefined, split: false })
+    ).toEqual({ groupId: undefined, split: false, fullSections: false })
   })
 
   it('ignores legacy priority filters and clears them when review preferences change', () => {
@@ -114,6 +119,7 @@ describe('review view URLs', () => {
     expect(readReviewView(initial)).toEqual({
       groupId: 'authorization',
       split: true,
+      fullSections: false,
     })
     const query = updateReviewView(initial, { groupId: 'contracts' })
     expect(query.has('priority')).toBe(false)
@@ -133,18 +139,34 @@ describe('review view URLs', () => {
     expect(readReviewView(new URLSearchParams(first.toString()))).toEqual({
       groupId: 'authorization',
       split: false,
+      fullSections: false,
     })
     expect(readReviewView(new URLSearchParams(second.toString()))).toEqual({
       groupId: 'contracts',
       split: true,
+      fullSections: false,
     })
-    expect(readReviewView(third)).toEqual({ groupId: 'contracts', split: false })
+    expect(readReviewView(third)).toEqual({
+      groupId: 'contracts',
+      split: false,
+      fullSections: false,
+    })
     expect(third.get('inbox')).toBe('requested')
     expect(third.get('revision')).toBe('abc123')
     expect(readReviewView(updateReviewView(second, { groupId: undefined }))).toEqual({
       groupId: undefined,
       split: true,
+      fullSections: false,
     })
+  })
+
+  it('round-trips whole sections in the updates group', () => {
+    const query = updateReviewView(new URLSearchParams('group=updated-since-review'), {
+      fullSections: true,
+    })
+    expect(query.get('sections')).toBe('full')
+    expect(readReviewView(query).fullSections).toBe(true)
+    expect(updateReviewView(query, { fullSections: false }).has('sections')).toBe(false)
   })
 
   it('clears legacy selection queries even when the selected group stays unchanged', () => {

@@ -453,9 +453,6 @@
   "src/features/review/discussions/discussions.ts": {
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 1
-    },
-    "complexity": {
-      "count": 1
     }
   },
   "src/features/review/useReviewDraft.ts": {

@@ -7,8 +7,13 @@ import {
   type ReviewThread,
   type ChangeGroup,
 } from '../../../../shared/domain/types'
+import type { SectionTarget } from '../reviewUpdates'
 
 export type CommentEditor = Omit<DraftComment, 'body'>
+export interface SectionMarker extends SectionTarget {
+  viewed: boolean
+  current: boolean
+}
 export interface LineDiscussion {
   path: string
   line: number
@@ -16,6 +21,13 @@ export interface LineDiscussion {
   threads: ReviewThread[]
   drafts: DraftComment[]
   editingId?: string
+  /** Review controls for sections whose last edit is on this line. */
+  sections: SectionMarker[]
+}
+export function hasDiscussion(discussion: LineDiscussion): boolean {
+  return Boolean(
+    discussion.threads.length || discussion.drafts.length || discussion.editingId != null,
+  )
 }
 export function groupViewed(group: ChangeGroup, viewedFileIds: readonly string[]): boolean {
   return group.fileIds.length > 0 && group.fileIds.every((id) => viewedFileIds.includes(id))
@@ -70,13 +82,20 @@ function controlledItemVersion(item: CodeViewItem<LineDiscussion>): number {
   }
   return (high & 0x1fffff) * 0x100000000 + (low >>> 0)
 }
-export function annotateDiscussions(params: {
+type AnnotationParams = {
   items: CodeViewItem<undefined>[]
   pull: PullRequest
   discussions?: PullDiscussions
   comments: DraftComment[]
   editor: CommentEditor | null
-}): { items: CodeViewItem<LineDiscussion>[]; unplaced: ReviewThread[] } {
+  sections?: { targets: SectionTarget[]; viewed: ReadonlySet<string>; current?: string }
+}
+type Place = (line: number, side: DiffSide) => LineDiscussion | undefined
+
+export function annotateDiscussions(params: AnnotationParams): {
+  items: CodeViewItem<LineDiscussion>[]
+  unplaced: ReviewThread[]
+} {
   const selectedFiles = params.items.map((item) =>
     params.pull.files.find((file) => file.id === item.id),
   )
@@ -91,52 +110,35 @@ export function annotateDiscussions(params: {
   const items = params.items.map((item): CodeViewItem<LineDiscussion> => {
     if (item.type !== 'diff') return { ...item, annotations: [] }
     const file = params.pull.files.find((file) => file.id === item.id)
-    if (!file) return { ...item, annotations: [] }
+    const path = file?.path ?? item.fileDiff.name
+    const available = availableLines(item.fileDiff.hunks)
     const coordinates = new Map<string, LineDiscussion>()
-    function at(line: number, side: DiffSide) {
+    // Only attach to lines in this group's partial patch, with the original/updated side intact.
+    const at: Place = (line, side) => {
       const key = `${side}:${line}`
-      let value = coordinates.get(key)
-      if (!value) {
-        value = { path: file?.path ?? '', line, side, threads: [], drafts: [] }
-        coordinates.set(key, value)
+      if (!available.has(key)) return undefined
+      const value = coordinates.get(key) ?? {
+        path,
+        line,
+        side,
+        threads: [],
+        drafts: [],
+        sections: [],
       }
+      coordinates.set(key, value)
       return value
     }
-    // Only attach to lines in this group's partial patch, with the original/updated side intact.
-    const available = new Set<string>()
-    for (const hunk of item.fileDiff.hunks) {
-      for (let offset = 0; offset < hunk.deletionCount; offset++)
-        available.add(`${DiffSide.left}:${hunk.deletionStart + offset}`)
-      for (let offset = 0; offset < hunk.additionCount; offset++)
-        available.add(`${DiffSide.right}:${hunk.additionStart + offset}`)
-    }
-    for (const thread of threads) {
-      if (
-        canMap &&
-        thread.path === file.path &&
-        !thread.outdated &&
-        thread.line != null &&
-        available.has(`${thread.side}:${thread.line}`)
-      ) {
-        at(thread.line, thread.side).threads.push(thread)
-        placed.add(thread.id)
+    // Display-only items have no PR file, so discussions never attach to them.
+    if (file) {
+      for (const thread of canMap ? threads : []) {
+        if (thread.path !== file.path || thread.outdated || thread.line == null) continue
+        const target = at(thread.line, thread.side)
+        target?.threads.push(thread)
+        if (target) placed.add(thread.id)
       }
+      placeDrafts(params, file.path, at)
     }
-    for (const comment of params.comments) {
-      if (
-        comment.headSha === params.pull.headSha &&
-        comment.path === file.path &&
-        available.has(`${comment.side}:${comment.line}`)
-      )
-        at(comment.line, comment.side).drafts.push(comment)
-    }
-    const editor = params.editor
-    if (
-      editor?.headSha === params.pull.headSha &&
-      editor.path === file.path &&
-      available.has(`${editor.side}:${editor.line}`)
-    )
-      at(editor.line, editor.side).editingId = editor.id
+    placeSections(params.sections, item.id, at)
     const annotations: DiffLineAnnotation<LineDiscussion>[] = [...coordinates.values()].map(
       (metadata) => ({
         lineNumber: metadata.line,
@@ -150,4 +152,40 @@ export function annotateDiscussions(params: {
     items: items.map((item) => ({ ...item, version: controlledItemVersion(item) })),
     unplaced: threads.filter((thread) => !placed.has(thread.id)),
   }
+}
+
+function availableLines(
+  hunks: {
+    deletionStart: number
+    deletionCount: number
+    additionStart: number
+    additionCount: number
+  }[],
+) {
+  const available = new Set<string>()
+  for (const hunk of hunks) {
+    for (let offset = 0; offset < hunk.deletionCount; offset++)
+      available.add(`${DiffSide.left}:${hunk.deletionStart + offset}`)
+    for (let offset = 0; offset < hunk.additionCount; offset++)
+      available.add(`${DiffSide.right}:${hunk.additionStart + offset}`)
+  }
+  return available
+}
+function placeDrafts(params: AnnotationParams, path: string, at: Place) {
+  const current = (value: { headSha: string; path: string }) =>
+    value.headSha === params.pull.headSha && value.path === path
+  for (const comment of params.comments.filter(current))
+    at(comment.line, comment.side)?.drafts.push(comment)
+  const editor = params.editor
+  if (!editor || !current(editor)) return
+  const target = at(editor.line, editor.side)
+  if (target) target.editingId = editor.id
+}
+function placeSections(sections: AnnotationParams['sections'], itemId: string, at: Place) {
+  for (const target of sections?.targets.filter((target) => target.itemId === itemId) ?? [])
+    at(target.line, target.side)?.sections.push({
+      ...target,
+      viewed: sections?.viewed.has(target.hunkId) ?? false,
+      current: sections?.current === target.hunkId,
+    })
 }

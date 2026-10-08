@@ -120,12 +120,20 @@ export const discussionsSchema = z.object({
   ),
 }) satisfies z.ZodType<PullDiscussions>
 
+const patchHunkSchema = z.object({
+  header: z.string(),
+  lines: z.array(z.object({ kind: z.enum(LineKind), text: z.string() })),
+})
 export const reviewChangesSchema = z.object({
   baselineHeadSha: z.string(),
   baselineBaseSha: z.string(),
   incompletePaths: z.array(z.string()).optional(),
   sections: z.array(
-    z.object({ hunkId: z.string(), state: z.enum(['new', 'changed', 'context-changed']) }),
+    z.object({
+      hunkId: z.string(),
+      state: z.enum(['new', 'changed', 'context-changed']),
+      interdiff: patchHunkSchema.optional(),
+    }),
   ),
-  removed: z.array(z.object({ path: z.string(), line: z.number(), code: z.string() })),
+  removed: z.array(z.object({ path: z.string(), line: z.number(), hunk: patchHunkSchema })),
 })

@@ -77,7 +77,21 @@ describe('reviewed section comparison', () => {
     const previous = sectionPull(base, both)
     const edited = sectionPull(base, both.replace('return 20', 'return 30'))
     expect(compareReviewSections(previous, edited).sections).toEqual([
-      { hunkId: required(required(edited.files[0]).hunks[1]).id, state: 'changed' },
+      {
+        hunkId: required(required(edited.files[0]).hunks[1]).id,
+        state: 'changed',
+        interdiff: {
+          header: '@@ -3,5 +3,5 @@',
+          lines: [
+            { kind: LineKind.context, text: '}' },
+            { kind: LineKind.context, text: '' },
+            { kind: LineKind.context, text: 'function second() {' },
+            { kind: LineKind.removed, text: '  return 20' },
+            { kind: LineKind.added, text: '  return 30' },
+            { kind: LineKind.context, text: '}' },
+          ],
+        },
+      },
     ])
     const shifted = {
       ...previous,
@@ -103,8 +117,65 @@ describe('reviewed section comparison', () => {
     const removed = compareReviewSections(previous, sectionPull(base, first))
     expect(removed.sections).toEqual([])
     expect(removed.removed).toMatchObject([
-      { path: 'shared.ts', code: '-  return 2\n+  return 20' },
+      {
+        path: 'shared.ts',
+        hunk: {
+          header: '@@ -3,5 +3,5 @@',
+          lines: [
+            { kind: LineKind.context, text: '}' },
+            { kind: LineKind.context, text: '' },
+            { kind: LineKind.context, text: 'function second() {' },
+            { kind: LineKind.removed, text: '  return 20' },
+            { kind: LineKind.added, text: '  return 2' },
+            { kind: LineKind.context, text: '}' },
+          ],
+        },
+      },
     ])
+  })
+})
+
+describe('reworded section comparison', () => {
+  it('pairs moved and reworded sections instead of reporting them as new and removed', () => {
+    const body = (value: string) =>
+      `function handler() {\n  const total = computeInvoiceTotal(items, discounts)\n  return ${value}\n}\n`
+    const previous = sectionPull('', body('total'))
+    // A rebase moves the base, so positions no longer prove that two sections correspond.
+    const current = {
+      ...sectionPull('', `// note\n\n${body('total + 1')}`),
+      baseSha: 'rebased',
+      mergeBaseSha: 'rebased',
+    }
+    const changes = compareReviewSections(previous, current)
+    expect(changes.removed).toEqual([])
+    expect(changes.sections.map((section) => section.state)).toEqual(['new', 'changed'])
+    expect(
+      changes.sections[1]?.interdiff?.lines.filter((line) => line.kind !== LineKind.context),
+    ).toEqual([
+      { kind: LineKind.removed, text: '  return total' },
+      { kind: LineKind.added, text: '  return total + 1' },
+    ])
+  })
+
+  it('does not report repeated identical edits that a rebase moved', () => {
+    const block = 'expect(result).toEqual(expected)\n\n'
+    const previous = sectionPull('', `${block}${block}`)
+    const current = {
+      ...sectionPull('', `// setup\n\n${block}${block}`),
+      baseSha: 'rebased',
+      mergeBaseSha: 'rebased',
+    }
+    const changes = compareReviewSections(previous, current)
+    expect(changes.sections.map((section) => section.state)).toEqual(['new'])
+    expect(changes.removed).toEqual([])
+  })
+
+  it('leaves unrelated edits as new and removed', () => {
+    const previous = sectionPull(base, base.replace('return 2', 'return logger.flush()'))
+    const current = sectionPull(base, base.replace('return 1', 'return cache.size'))
+    const changes = compareReviewSections(previous, current)
+    expect(changes.sections.map((section) => section.state)).toEqual(['new'])
+    expect(changes.removed).toHaveLength(1)
   })
 })
 

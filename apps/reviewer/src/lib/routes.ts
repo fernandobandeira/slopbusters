@@ -20,6 +20,8 @@ export type AppRoute =
 export interface ReviewView {
   groupId?: string
   split: boolean
+  /** Show whole sections instead of what changed since the previous review. */
+  fullSections: boolean
 }
 export function readRoute(params: { pathname: string; search: string }): AppRoute {
   const query = new URLSearchParams(params.search)
@@ -66,6 +68,7 @@ export function readReviewView(query: URLSearchParams): ReviewView {
   return {
     groupId: query.get('group') ?? undefined,
     split: query.get('diff') === 'split',
+    fullSections: query.get('sections') === 'full',
   }
 }
 
@@ -84,6 +87,10 @@ export function updateReviewView(
   if (changes.split !== undefined) {
     if (changes.split) next.set('diff', 'split')
     else next.delete('diff')
+  }
+  if (changes.fullSections !== undefined) {
+    if (changes.fullSections) next.set('sections', 'full')
+    else next.delete('sections')
   }
   return next
 }

@@ -96,6 +96,30 @@ describe('durable review updates', () => {
       removed: [],
     })
   })
+
+  it('forgets dismissed updates for this revision only', () => {
+    const path = directory()
+    let store = open(path)
+    const previous = sectionPull(base, base.replace('return 1', 'return 10'))
+    store.savePull(previous)
+    store.saveDraft(previous.id, emptyDraft())
+    const current = {
+      ...sectionPull(base, base.replace('return 2', 'return 20')),
+      id: 'current',
+      headSha: 'current-head',
+    }
+    store.savePull(current)
+    expect(store.getDraft(current.id).changes).toBeDefined()
+    expect(store.dismissChanges(current.id)).toEqual({ ok: true })
+    expect(store.getDraft(current.id).changes).toBeUndefined()
+    close(store)
+    store = open(path)
+    expect(store.getDraft(current.id).changes).toBeUndefined()
+    store.saveDraft(current.id, emptyDraft())
+    const next = { ...current, id: 'next', headSha: 'next-head' }
+    store.savePull(next)
+    expect(store.getDraft(next.id).changes).toMatchObject({ baselineHeadSha: current.headSha })
+  })
 })
 
 describe('review progress upgrade', () => {

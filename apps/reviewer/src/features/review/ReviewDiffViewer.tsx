@@ -11,10 +11,16 @@ import {
 import type { NavigationRequest } from '../../../shared/domain/navigation'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { InlineDiscussion, ThreadDiscussion } from './discussions/InlineDiscussion'
+import { SectionBar } from './SectionBar'
+import type { SyntheticItemKind } from './reviewUpdates'
 import { clickedSymbol } from './diff/codeSymbols'
 import type { SymbolMenuSelection } from '../source-navigation/SymbolContextMenu'
 import type { useFileContext } from './diff/useFileContext'
-import type { annotateDiscussions, LineDiscussion } from './discussions/discussions'
+import {
+  hasDiscussion,
+  type annotateDiscussions,
+  type LineDiscussion,
+} from './discussions/discussions'
 import { CONTEXT_STEP, MAX_CONTEXT } from './diff/displayContext'
 
 type Selection = SymbolMenuSelection & { fileId: string; side: DiffSide; path: string }
@@ -30,6 +36,8 @@ interface Props {
   setFileCollapsed: (fileId: string, collapsed: boolean) => void
   fileSectionsViewed: (fileId: string) => boolean
   toggleFile: (fileId: string) => void
+  syntheticItems: ReadonlyMap<string, SyntheticItemKind>
+  onToggleSection: (hunkId: string) => void
   body: string
   setBody: (body: string) => void
   saveComment: () => void
@@ -53,6 +61,8 @@ export function ReviewDiffViewer({
   setFileCollapsed,
   fileSectionsViewed,
   toggleFile,
+  syntheticItems,
+  onToggleSection,
   body,
   setBody,
   saveComment,
@@ -99,6 +109,17 @@ export function ReviewDiffViewer({
         </button>
       )}
       renderHeaderMetadata={(item) => {
+        const synthetic = syntheticItems.get(item.id)
+        if (synthetic)
+          return (
+            <SyntheticItemHeader
+              kind={synthetic}
+              viewed={fileSectionsViewed(item.id)}
+              onToggle={() => {
+                toggleFile(item.id)
+              }}
+            />
+          )
         const file = pull.files.find((file) => file.id === item.id)
         return file ? (
           <div className="file-context-actions">
@@ -155,37 +176,46 @@ export function ReviewDiffViewer({
         ) : null
       }}
       renderAnnotation={(annotation) => (
-        <InlineDiscussion
-          discussion={annotation.metadata}
-          body={body}
-          onBodyChange={setBody}
-          onSave={saveComment}
-          onCancel={() => {
-            setEditor(null)
-          }}
-          onEdit={editComment}
-          onDelete={deleteComment}
-          onReply={postReply}
-          submitted={Boolean(submitted)}
-        />
+        <>
+          {hasDiscussion(annotation.metadata) && (
+            <InlineDiscussion
+              discussion={annotation.metadata}
+              body={body}
+              onBodyChange={setBody}
+              onSave={saveComment}
+              onCancel={() => {
+                setEditor(null)
+              }}
+              onEdit={editComment}
+              onDelete={deleteComment}
+              onReply={postReply}
+              submitted={Boolean(submitted)}
+            />
+          )}
+          {annotation.metadata.sections.map((section) => (
+            <SectionBar key={section.hunkId} section={section} onToggle={onToggleSection} />
+          ))}
+        </>
       )}
-      renderGutterUtility={(getHoveredLine, item) => (
-        <button
-          className="line-comment-add"
-          aria-label="Comment on hovered line"
-          onClick={() => {
-            const hovered = getHoveredLine()
-            if (!hovered || !('side' in hovered)) return
-            commentOnLine({
-              fileId: item.id,
-              line: hovered.lineNumber,
-              side: hovered.side === 'deletions' ? DiffSide.left : DiffSide.right,
-            })
-          }}
-        >
-          <Plus size={13} />
-        </button>
-      )}
+      renderGutterUtility={(getHoveredLine, item) =>
+        syntheticItems.has(item.id) ? null : (
+          <button
+            className="line-comment-add"
+            aria-label="Comment on hovered line"
+            onClick={() => {
+              const hovered = getHoveredLine()
+              if (!hovered || !('side' in hovered)) return
+              commentOnLine({
+                fileId: item.id,
+                line: hovered.lineNumber,
+                side: hovered.side === 'deletions' ? DiffSide.left : DiffSide.right,
+              })
+            }}
+          >
+            <Plus size={13} />
+          </button>
+        )
+      }
       renderCodeViewFooter={
         annotated.unplaced.length
           ? () => (
@@ -265,5 +295,45 @@ export function ReviewDiffViewer({
         },
       }}
     />
+  )
+}
+
+const syntheticLabels: Record<SyntheticItemKind, { label: string; title: string }> = {
+  interdiff: {
+    label: 'Changed since your review',
+    title: 'What changed in these sections since your last review. Show full sections to comment.',
+  },
+  removed: {
+    label: 'No longer in this PR',
+    title: 'Edits you reviewed that the PR no longer makes, shown reversed against your review.',
+  },
+}
+function SyntheticItemHeader({
+  kind,
+  viewed,
+  onToggle,
+}: {
+  kind: SyntheticItemKind
+  viewed: boolean
+  onToggle: () => void
+}) {
+  const { label, title } = syntheticLabels[kind]
+  return (
+    <div className="file-context-actions">
+      <span className="section-update" title={title}>
+        {label}
+      </span>
+      {kind === 'interdiff' && (
+        <label className="file-viewed">
+          <input
+            type="checkbox"
+            aria-label={`Viewed: ${label}`}
+            checked={viewed}
+            onChange={onToggle}
+          />
+          Viewed
+        </label>
+      )}
+    </div>
   )
 }
