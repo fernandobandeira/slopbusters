@@ -8,7 +8,7 @@ import {
   urlQuery,
   pullUrlSchema,
 } from './contract'
-import { draftSchema, pullSchema, discussionsSchema } from './reviewSchemas'
+import { draftSchema, pullSchema, discussionsSchema, reviewChangesSchema } from './reviewSchemas'
 import {
   appStatusSchema,
   inboxSchema,
@@ -66,7 +66,11 @@ export const getPullRevision = defineRoute('GET', '/pulls/:id/revision', {
 })
 export const getDraft = defineRoute('GET', '/pulls/:id/draft', {
   params: idParams,
-  response: z.object({ draft: draftSchema, exists: z.boolean() }),
+  response: z.object({
+    draft: draftSchema,
+    exists: z.boolean(),
+    changes: reviewChangesSchema.optional(),
+  }),
 })
 export const saveDraft = defineRoute('PUT', '/pulls/:id/draft', {
   params: idParams,

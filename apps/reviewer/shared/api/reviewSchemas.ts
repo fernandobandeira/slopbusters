@@ -18,6 +18,7 @@ const line = z.object({
   newLine: z.number().nullable(),
 })
 const hunk = z.object({
+  sourceHunkId: z.string().optional(),
   id: z.string(),
   fileId: z.string(),
   header: z.string(),
@@ -118,3 +119,13 @@ export const discussionsSchema = z.object({
     }),
   ),
 }) satisfies z.ZodType<PullDiscussions>
+
+export const reviewChangesSchema = z.object({
+  baselineHeadSha: z.string(),
+  baselineBaseSha: z.string(),
+  incompletePaths: z.array(z.string()).optional(),
+  sections: z.array(
+    z.object({ hunkId: z.string(), state: z.enum(['new', 'changed', 'context-changed']) }),
+  ),
+  removed: z.array(z.object({ path: z.string(), line: z.number(), code: z.string() })),
+})

@@ -5,6 +5,7 @@ import {
   restoreProgress,
   emptyDraft,
 } from '../server/features/progress'
+import { LineKind } from '../shared/domain/types'
 import { parseFile } from '../server/features/diff'
 import { fixturePull } from './fixtures/pull'
 
@@ -40,7 +41,9 @@ describe('reviewed content fingerprints', () => {
       hunkFingerprint(file, {
         ...hunk,
         lines: hunk.lines.map((line, index) =>
-          index === 0 ? { ...line, text: line.text + 'changed' } : line,
+          index === hunk.lines.findIndex((line) => line.kind !== LineKind.context) - 1
+            ? { ...line, text: line.text + 'changed' }
+            : line,
         ),
       }),
     ).not.toBe(original)

@@ -1,8 +1,16 @@
 import { createHash } from 'node:crypto'
+import { sectionContent, sectionContext } from './sectionComparison'
 import type { ChangedFile, Hunk, PullRequest, ReviewDraft } from '../../shared/domain/types'
 
-/** Line positions and generated IDs are absent: only reviewed content matters. */
+/** Exact section edits and immediate context, independent of positions and group IDs. */
 export function hunkFingerprint(file: ChangedFile, hunk: Hunk): string {
+  return createHash('sha256')
+    .update(sectionContent(file, hunk) + sectionContext(hunk))
+    .digest('hex')
+}
+
+/** Retained solely to migrate reviewed evidence from earlier releases. */
+export function legacyHunkFingerprint(file: ChangedFile, hunk: Hunk): string {
   return createHash('sha256')
     .update(
       JSON.stringify([

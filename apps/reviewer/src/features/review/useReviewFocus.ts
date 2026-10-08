@@ -20,14 +20,22 @@ interface FocusOptions {
 }
 
 export function useReviewFocus(pull: PullRequest, options: FocusOptions) {
-  const [location, focusLine] = useState<ReviewLocation>()
+  const [location, setLocation] = useState<ReviewLocation>()
+  const [preserveFilters, setPreserveFilters] = useState(false)
+  function focusLine(next?: ReviewLocation, keepFilters = false) {
+    setPreserveFilters(keepFilters)
+    setLocation(next)
+  }
   const file = location && pull.files.find((file) => file.path === location.path)
   const group = location && discussionGroup({ pull, ...location })
   const reveal = useEffectEvent(() => {
     if (!file || !group) return
     options.setFileCollapsed(file.id, false, group.id)
     const next = updateReviewView(options.searchParams, { groupId: group.id })
-    next.delete('unviewed')
+    if (!preserveFilters) {
+      next.delete('unviewed')
+      next.delete('changes')
+    }
     if (next.toString() !== options.searchParams.toString()) options.setSearchParams(next)
   })
   useEffect(() => {
@@ -56,5 +64,5 @@ export function useReviewFocus(pull: PullRequest, options: FocusOptions) {
     })
     return () => viewer?.clearSelectedLines()
   }, [location, file, group, options.selected?.id, options.items, options.viewerRef])
-  return { focusLine, active: Boolean(location) }
+  return { focusLine, location, active: Boolean(location) }
 }

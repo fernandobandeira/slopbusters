@@ -5,6 +5,9 @@ import { useCommentEditor } from './useCommentEditor'
 import { useReviewDiff } from './useReviewDiff'
 import { useReviewFocus } from './useReviewFocus'
 import { ReviewDiffViewer } from './ReviewDiffViewer'
+import { ReviewChangesSummary } from './ReviewChangesSummary'
+import { ReviewSectionList } from './ReviewSectionList'
+import { nextUpdatedLocation } from './reviewUpdates'
 import { GroupSidebar } from './GroupSidebar'
 import { SubmitReviewDialog } from './SubmitReviewDialog'
 import { ReviewSubmitButton } from './ReviewSubmitButton'
@@ -81,12 +84,22 @@ export function ReviewWorkspace({
   renderCompanion,
   reviewActions,
 }: Props) {
-  const { draft, setDraft, ready: draftReady, error: storageError, flush } = useReviewDraft(pull)
+  const {
+    draft,
+    setDraft,
+    ready: draftReady,
+    error: storageError,
+    flush,
+    changes,
+  } = useReviewDraft(pull)
   const {
     groups,
     grouped,
     split,
     unviewedOnly,
+    changesOnly,
+    visibleGroup,
+    toggleSections,
     searchParams,
     setSearchParams,
     changeView,
@@ -100,7 +113,7 @@ export function ReviewWorkspace({
     setFileCollapsed,
     toggleFile,
     fileSectionsViewed,
-  } = useReviewDiff(pull, draft, setDraft)
+  } = useReviewDiff(pull, draft, setDraft, changes)
   const updates = usePullUpdates(pull)
   const { stack, summary: stackSummary } = usePullStack(pull)
   const [stackOpen, setStackOpen] = useState(false)
@@ -326,6 +339,7 @@ export function ReviewWorkspace({
         <GroupSidebar
           pull={pull}
           draft={draft}
+          changes={changes}
           selectedId={selected?.id}
           inboxUrl={inboxUrl}
           submitting={submitting}
@@ -364,6 +378,28 @@ export function ReviewWorkspace({
             reloading={reloading}
             organizing={organizing || submitting}
           />
+          {grouped && (
+            <ReviewChangesSummary
+              changes={changes}
+              changesOnly={changesOnly}
+              onToggle={() => {
+                const next = new URLSearchParams(searchParams)
+                if (changesOnly) next.delete('changes')
+                else {
+                  next.set('changes', '1')
+                  next.delete('unviewed')
+                }
+                setSearchParams(next)
+              }}
+              onNext={() => {
+                const location = nextUpdatedLocation(pull, changes, draft, {
+                  groupId: selected?.id,
+                  location: focus.location,
+                })
+                if (location) focus.focusLine(location, true)
+              }}
+            />
+          )}
           {grouped && groups.length > 0 && (
             <div className="review-view-controls">
               <Button
@@ -494,6 +530,16 @@ export function ReviewWorkspace({
                       ))}
                     </div>
                   )}
+                  <ReviewSectionList
+                    pull={pull}
+                    group={visibleGroup}
+                    draft={draft}
+                    changes={changes}
+                    onView={toggleSections}
+                    onFocus={(location) => {
+                      focus.focusLine(location, true)
+                    }}
+                  />
                   {items.length ? (
                     <ReviewDiffViewer
                       key={selected.id}
@@ -526,10 +572,14 @@ export function ReviewWorkspace({
                         viewedCount === selectedHunks.length &&
                         selectedHunks.length > 0
                           ? 'All diff sections in this group are viewed'
-                          : 'No text patch in this group'}
+                          : changesOnly
+                            ? 'No updated sections in this group'
+                            : 'No text patch in this group'}
                       </strong>
                       <span className="muted">
-                        Binary files and pure renames may have no line changes.
+                        {changesOnly
+                          ? 'Choose a group with updated sections, or show all changes.'
+                          : 'Binary files and pure renames may have no line changes.'}
                       </span>
                       <a href={`${pull.url}/files`} target="_blank" rel="noreferrer">
                         Inspect files on GitHub

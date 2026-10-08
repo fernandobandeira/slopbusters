@@ -37,6 +37,8 @@ export interface DiffLine {
   newLine: number | null
 }
 export interface Hunk {
+  /** Canonical sections retain their original patch hunk for legacy progress migration. */
+  sourceHunkId?: string
   id: string
   fileId: string
   header: string

@@ -16,7 +16,14 @@ afterEach(cleanup)
 
 function setup(side = DiffSide.right) {
   const pull = { ...fixturePull(), groupingSource: Provider.codex }
-  const finding = fixtureBobFinding()
+  let finding = fixtureBobFinding()
+  if (side === DiffSide.left) {
+    const file = required(pull.files[1])
+    const hunk = required(
+      file.hunks.find((hunk) => hunk.lines.some((line) => line.kind === LineKind.removed)),
+    )
+    finding = { ...finding, path: file.path, hunkId: hunk.id }
+  }
   const targetFile = required(pull.files.find((file) => file.path === finding.path))
   const line =
     side === DiffSide.left

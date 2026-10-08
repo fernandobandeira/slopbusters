@@ -79,9 +79,6 @@
     }
   },
   "server/adapters/store.ts": {
-    "@typescript-eslint/no-unsafe-argument": {
-      "count": 1
-    },
     "@typescript-eslint/no-unsafe-assignment": {
       "count": 1
     },
@@ -461,19 +458,11 @@
       "count": 1
     }
   },
-  "src/features/review/useReviewDiff.ts": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "src/features/review/useReviewDraft.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 1
     },
     "@typescript-eslint/no-unsafe-assignment": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
       "count": 1
     },
     "max-lines-per-function": {

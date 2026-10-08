@@ -1,3 +1,4 @@
+import type { ReviewChanges } from '../../../shared/domain/reviewChanges'
 import * as routes from '../../../shared/api'
 import { routeUrl } from '../../../shared/api/contract'
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react'
@@ -16,7 +17,7 @@ function browserDraft(pull: PullRequest): ReviewDraft {
       return {
         ...restored,
         viewedHunkIds:
-          value.viewedHunkIds ??
+          restored.viewedHunkIds ??
           pull.files
             .filter((file) => restored.viewedFileIds.includes(file.id))
             .flatMap((file) => file.hunks.map((hunk) => hunk.id)),
@@ -31,6 +32,7 @@ function browserDraft(pull: PullRequest): ReviewDraft {
 /** ReviewWorkspace is keyed by pull.id so each hook instance owns one immutable revision. */
 export function useReviewDraft(pull: PullRequest) {
   const [draft, setDraftState] = useState<ReviewDraft>(() => browserDraft(pull))
+  const [changes, setChanges] = useState<ReviewChanges>()
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [writerId] = useState(() => crypto.randomUUID())
@@ -115,6 +117,7 @@ export function useReviewDraft(pull: PullRequest) {
         } catch {
           /* The SQLite draft can load even when browser storage is disabled. */
         }
+        setChanges(stored.changes)
         const useBrowser = edits.current > 0 || hasPending || (!stored.exists && hasLegacy)
         const value = useBrowser ? latest.current : stored.draft
         latest.current = value
@@ -169,5 +172,5 @@ export function useReviewDraft(pull: PullRequest) {
     [flush],
   )
 
-  return { draft, setDraft, ready, error, flush }
+  return { draft, setDraft, ready, error, flush, changes }
 }
