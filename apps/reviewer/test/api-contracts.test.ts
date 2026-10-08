@@ -43,4 +43,15 @@ describe('shared API contracts', () => {
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ url: fixturePull().url }) }),
     )
   })
+
+  it('omits the JSON content type when a route has no request body', async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json(fixturePull()))
+    vi.stubGlobal('fetch', fetch)
+
+    await call(routes.markPullReady, { params: { id: 'review' } })
+
+    const [[, init]] = fetch.mock.calls as [[string, RequestInit]]
+    expect(init.body).toBeUndefined()
+    expect(new Headers(init.headers).has('Content-Type')).toBe(false)
+  })
 })
