@@ -11,6 +11,8 @@ import { bobRouter } from './http/bobRouter'
 import { gandalfRouter } from './http/gandalfRouter'
 import { linusRouter } from './http/linusRouter'
 import { listen } from './http/listen'
+import { ticketsRouter } from './http/ticketsRouter'
+import { jobsRouter } from './http/jobsRouter'
 
 export type { ReviewerServerOptions } from './services'
 
@@ -31,6 +33,8 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
     gandalfRouter(services),
     agentSessionsRouter(services),
     bobRouter(services),
+    ticketsRouter(services),
+    jobsRouter(services),
     sourceRouter(services),
     settingsRouter(services),
   )

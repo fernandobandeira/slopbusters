@@ -32,6 +32,13 @@ import { createGitIdentity } from './adapters/gitIdentity'
 import { logError } from './errors'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
 import type { PullRequest } from '../shared/domain/types'
+import { LinearAuth } from './adapters/linearAuth'
+import { createLinear, type Linear } from './adapters/linear'
+import { createTicketService } from './features/tickets/tickets'
+import { defaultBranchSnapshot } from './features/tickets/defaultBranch'
+import { ticketEvidence } from './features/jobs/ticketEvidence'
+import { TicketReviewJobs } from './features/jobs/ticketReviewJobs'
+import { LINEAR_CLIENT_ID } from './linearApplication'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   dataDirectory: string
@@ -39,10 +46,14 @@ export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   sourceAssetsDirectory?: string
   bobSkillDirectory?: string
   linusSkillDirectory?: string
+  jobsSkillDirectory?: string
   port?: number
   allowedOrigins?: string[]
   sourceRemoteUrl?: (owner: string, repo: string) => string
   github?: GitHub
+  linear?: Linear
+  linearClientId?: string
+  linearCallbackPort?: number
 }
 
 export function createServices(options: ReviewerServerOptions) {
@@ -68,6 +79,12 @@ export function createServices(options: ReviewerServerOptions) {
     sourceProject,
     navigate: (pull, request) => navigator(pull, request),
   })
+  const linearAuth = new LinearAuth(store.tickets, {
+    clientId: options.linearClientId ?? LINEAR_CLIENT_ID,
+    callbackPort: options.linearCallbackPort,
+  })
+  const linear = options.linear ?? createLinear({ authorization: linearAuth })
+  const tickets = createTicketService(linear, github)
   const linusJobs = new LinusJobs(
     store,
     options.staticDirectory,
@@ -75,6 +92,7 @@ export function createServices(options: ReviewerServerOptions) {
     openRepository,
     pulls.fetchPull,
     agentSessions,
+    tickets.contextForPull,
   )
   const bobJobs = new BobJobs({
     store,
@@ -83,6 +101,17 @@ export function createServices(options: ReviewerServerOptions) {
     skillDirectory: options.bobSkillDirectory,
     openRepository,
     loadPull: pulls.fetchPull,
+    context: tickets.contextForPull,
+  })
+  const jobs = new TicketReviewJobs({
+    store,
+    sessions: agentSessions,
+    staticDirectory: options.staticDirectory,
+    skillDirectory: options.jobsSkillDirectory,
+    tickets,
+    evidence: (ticket, signal) => ticketEvidence(github, ticket, signal),
+    openSource: async (name, signal) =>
+      openRepository(await defaultBranchSnapshot(github, name, signal), signal),
   })
   const conflictRemote = options.sourceRemoteUrl
   const gitIdentity = createGitIdentity(github)
@@ -126,6 +155,9 @@ export function createServices(options: ReviewerServerOptions) {
     gandalfJobs,
     agentSessions,
     organizationJobs,
+    linearAuth,
+    tickets,
+    jobs,
     navigateSource: (pull: PullRequest, request: Parameters<typeof navigator>[1]) =>
       navigator(pull, request),
     warmSource: (pull: PullRequest) => {
@@ -148,7 +180,8 @@ export function createServices(options: ReviewerServerOptions) {
     },
     async close() {
       await organizationJobs.close()
-      await Promise.all([linusJobs.close(), bobJobs.close(), gandalfJobs.close()])
+      linearAuth.close()
+      await Promise.all([linusJobs.close(), bobJobs.close(), gandalfJobs.close(), jobs.close()])
       await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])
       navigator.close()
       await workspaces.close()

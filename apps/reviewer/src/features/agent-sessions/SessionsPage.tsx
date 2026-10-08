@@ -6,10 +6,9 @@ import type { AgentRun } from '../../../shared/domain/agentSession'
 import { getAgentSession } from '../../../shared/api/agentSessions'
 import { useApiQuery } from '../../lib/useApiQuery'
 import { useAgentSessions } from './useAgentSessions'
-import { agentNames, modelName, sessionPath } from './sessionPresentation'
+import { agentNames, modelName, sessionPath, sessionSubject } from './sessionPresentation'
 import { AgentState } from './AgentState'
 import { SessionTranscript } from './SessionTranscript'
-import { reviewPath } from '../../lib/routes'
 import './sessions.css'
 
 export function SessionsPage({ id, repository }: { id?: string; repository?: string }) {
@@ -53,7 +52,7 @@ function SessionDetail({ id, repository }: { id: string; repository?: string }) 
       </div>
     )
   const run = selectPass(session.runs, selected)
-  const pullUrl = run?.url ?? session.urls[0]
+  const subject = sessionSubject(session.kind, run?.url ?? session.urls[0])
   return (
     <div className="session-page">
       <header className="session-heading">
@@ -64,9 +63,9 @@ function SessionDetail({ id, repository }: { id: string; repository?: string }) 
           </h2>
         </div>
         <AgentState status={session.status} />
-        {pullUrl && (
-          <Link className="session-pr-link" to={reviewPath({ url: pullUrl, filter: 'mine' })}>
-            Open PR
+        {subject && (
+          <Link className="session-pr-link" to={subject.to}>
+            {subject.label}
           </Link>
         )}
       </header>
@@ -174,8 +173,9 @@ function SessionHistory({ repository }: { repository?: string }) {
             <AgentState status={session.status} />
           </div>
           <p>
-            {session.repository} · {session.urls.length} {session.urls.length === 1 ? 'PR' : 'PRs'}{' '}
-            · {session.runs.length} model {session.runs.length === 1 ? 'pass' : 'passes'}
+            {session.repository || 'Linear'} · {session.urls.length}{' '}
+            {session.kind === 'jobs' ? 'issue' : session.urls.length === 1 ? 'PR' : 'PRs'} ·{' '}
+            {session.runs.length} model {session.runs.length === 1 ? 'pass' : 'passes'}
           </p>
           <small>
             {session.progress} · <time>{new Date(session.createdAt).toLocaleString()}</time>

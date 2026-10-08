@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { ThemePicker } from './ThemePicker'
 import { LanguageServerSettings } from './LanguageServerSettings'
 import { ReviewWorkspaceSettings } from './ReviewWorkspaceSettings'
+import { LinearSettings } from './LinearSettings'
 import { OrganizationSettings } from './OrganizationSettings'
 import { Provider, type AppStatus } from '../../../shared/domain/types'
 import {
@@ -50,6 +51,7 @@ export function SettingsPage({
           companion
         />
       </section>
+      <LinearSettings />
       <LanguageServerSettings />
       <ReviewWorkspaceSettings />
       <section className="settings-section" aria-labelledby="appearance-title">

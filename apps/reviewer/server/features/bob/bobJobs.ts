@@ -17,6 +17,7 @@ export class BobJobs extends DualReviewJobs<BobAdvice> {
     skillDirectory?: string
     openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<RepositoryContext>
     loadPull?: typeof fetchPull
+    context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
   }) {
     const { store, staticDirectory, skillDirectory, openRepository, loadPull = fetchPull } = options
     super({
@@ -43,6 +44,7 @@ export class BobJobs extends DualReviewJobs<BobAdvice> {
       latest: (repository) => store.latestBobSession(repository),
       loadPull,
       openRepository,
+      context: options.context,
       review: reviewWithBob,
       reconcile: reconcileWithBob,
     })

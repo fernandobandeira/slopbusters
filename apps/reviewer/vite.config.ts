@@ -32,6 +32,15 @@ export default defineConfig({
         })
         this.emitFile({
           type: 'asset',
+          fileName: 'jobs-skill.md',
+          source: ['SKILL.md', 'references/review-only.md']
+            .map((file) =>
+              readFileSync(new URL(`../../skills/jobs/${file}`, import.meta.url), 'utf8'),
+            )
+            .join('\n\n'),
+        })
+        this.emitFile({
+          type: 'asset',
           fileName: 'T3_CODE_LICENSE.txt',
           source: readFileSync(new URL('./src/vendor/t3/LICENSE', import.meta.url), 'utf8'),
         })

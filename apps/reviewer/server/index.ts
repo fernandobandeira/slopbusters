@@ -6,6 +6,7 @@ const server = await startReviewerServer({
   staticDirectory: resolve('dist'),
   bobSkillDirectory: resolve('../../skills/unclebob'),
   linusSkillDirectory: resolve('../../skills/linus'),
+  jobsSkillDirectory: resolve('../../skills/jobs'),
   port: 4311,
   allowedOrigins: ['http://127.0.0.1:4310', 'http://localhost:4310'],
 })

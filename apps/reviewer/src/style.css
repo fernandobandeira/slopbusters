@@ -1551,3 +1551,29 @@ pre {
 .organization-overlay .organization-empty-state {
   width: 100%;
 }
+
+.linked-ticket {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+.linked-ticket:hover {
+  color: var(--foreground);
+}
+.linear-connected,
+.linear-key-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  max-width: 520px;
+}
+.sidebar-label-spaced {
+  margin-top: 18px;
+}

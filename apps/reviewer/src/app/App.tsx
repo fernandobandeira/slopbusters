@@ -10,6 +10,7 @@ import { InboxPullActions } from './InboxPullActions'
 import { useReviewLaunch } from './useReviewLaunch'
 import type { ReviewCompanion } from '../components/StartReviewButton'
 import { PullReviewActions } from './PullReviewActions'
+import { IssueRoute, IssuesRoute, LinkedTicketLink } from './IssueRoutes'
 import { useApiQuery } from '../lib/useApiQuery'
 import { usePullReview } from '../features/review/usePullReview'
 import { InboxPage } from '../features/inbox/InboxPage'
@@ -263,9 +264,11 @@ export function App() {
                   ? 'Agent sessions'
                   : route.kind === 'settings'
                     ? 'Settings'
-                    : route.kind === 'not-found'
-                      ? 'Page not found'
-                      : `PR #${route.number}`}
+                    : route.kind === 'issues' || route.kind === 'issue'
+                      ? 'Issues'
+                      : route.kind === 'not-found'
+                        ? 'Page not found'
+                        : `PR #${route.number}`}
               </h1>
             )}
             {route.kind === 'inbox' && (
@@ -293,6 +296,9 @@ export function App() {
             sessionsPage={route.kind === 'sessions'}
             settings={route.kind === 'settings'}
             inboxPage={route.kind === 'inbox'}
+            issuesView={
+              route.kind === 'issues' ? route.view : route.kind === 'issue' ? 'open' : undefined
+            }
             onFilter={(next) => {
               void navigate(inboxPath(repository, next))
             }}
@@ -362,6 +368,22 @@ export function App() {
                 />
               }
             />
+            <Route
+              path="/issues"
+              element={<IssuesRoute view={route.kind === 'issues' ? route.view : 'assigned'} />}
+            />
+            <Route
+              path="/issues/:identifier"
+              element={
+                route.kind === 'issue' ? (
+                  <IssueRoute identifier={route.identifier} repository={repository} />
+                ) : (
+                  <div className="empty-state">
+                    <strong>Page not found</strong>
+                  </div>
+                )
+              }
+            />
             <Route path="/" element={inboxPage} />
             <Route
               path="/repos/:owner/:repo/pulls"
@@ -394,28 +416,31 @@ export function App() {
                     reloading={reloading}
                     inboxUrl={inboxPath(repository, filter)}
                     reviewActions={
-                      <PullReviewActions
-                        pull={pull}
-                        startCompanion="bob"
-                        bobReview={bobReviews.get(pull.url)}
-                        recommendation={recommendations.get(pull.url)}
-                        onBobReplay={(review) => {
-                          openBob(pull.url, review.sessionId)
-                        }}
-                        onReplay={(recommendation) => {
-                          setLinusSelection(undefined)
-                          setLinusReplay({
-                            repository,
-                            sessionId: recommendation.sessionId,
-                            url: pull.url,
-                          })
-                        }}
-                        reviewStarting={Boolean(reviewLaunch.starting)}
-                        reviewStartDisabled={savedBob.loading}
-                        onStartReview={(companion) => {
-                          startReview(companion, pull.url)
-                        }}
-                      />
+                      <>
+                        <LinkedTicketLink url={pull.url} />
+                        <PullReviewActions
+                          pull={pull}
+                          startCompanion="bob"
+                          bobReview={bobReviews.get(pull.url)}
+                          recommendation={recommendations.get(pull.url)}
+                          onBobReplay={(review) => {
+                            openBob(pull.url, review.sessionId)
+                          }}
+                          onReplay={(recommendation) => {
+                            setLinusSelection(undefined)
+                            setLinusReplay({
+                              repository,
+                              sessionId: recommendation.sessionId,
+                              url: pull.url,
+                            })
+                          }}
+                          reviewStarting={Boolean(reviewLaunch.starting)}
+                          reviewStartDisabled={savedBob.loading}
+                          onStartReview={(companion) => {
+                            startReview(companion, pull.url)
+                          }}
+                        />
+                      </>
                     }
                     renderCompanion={({ draft, setDraft, ready, openReview, focusLine }) =>
                       bobReplayId && (

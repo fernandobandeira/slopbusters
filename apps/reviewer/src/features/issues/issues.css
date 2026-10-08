@@ -1,0 +1,93 @@
+.issues-open {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  max-width: 520px;
+}
+.issues-connect {
+  gap: 10px;
+}
+.issue-list {
+  display: flex;
+  flex-direction: column;
+}
+.issue-state-icon {
+  color: var(--muted-foreground);
+}
+.issue-state-icon[data-state='started'] {
+  color: var(--warning, #d29922);
+}
+.issue-state-icon[data-state='unstarted'],
+.issue-state-icon[data-state='backlog'] {
+  color: var(--muted-foreground);
+}
+.issue-state-icon[data-state='triage'] {
+  color: var(--info, #58a6ff);
+}
+.issue-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+  gap: 24px;
+  padding: 24px 32px;
+  align-items: start;
+}
+.issue-document {
+  min-width: 0;
+}
+.issue-header h1 {
+  font-size: 1.5rem;
+  margin: 8px 0 12px;
+}
+.issue-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+.issue-meta a {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.issue-family {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  font-size: 0.9rem;
+}
+.issue-family p,
+.issue-family ul {
+  margin: 4px 0;
+}
+.issue-family ul {
+  list-style: none;
+  padding: 0;
+}
+.issue-family li {
+  padding: 2px 0;
+}
+.issue-family li svg {
+  display: inline;
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+.issue-children summary {
+  cursor: pointer;
+}
+.issue-review {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+}
+@media (max-width: 1100px) {
+  .issue-page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .issue-review {
+    position: static;
+    max-height: none;
+  }
+}

@@ -1,0 +1,160 @@
+.jobs-panel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--card, var(--background));
+}
+.jobs-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.jobs-portrait {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: 50%;
+}
+.jobs-speech {
+  margin: 4px 0 0;
+  line-height: 1.45;
+}
+.jobs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.jobs-repository {
+  font-size: 0.8rem;
+}
+.jobs-progress,
+.jobs-applied {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.9rem;
+}
+.jobs-modes {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.jobs-modes button {
+  padding: 6px 10px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted-foreground);
+}
+.jobs-modes button[aria-selected='true'] {
+  border-bottom-color: var(--foreground);
+  color: var(--foreground);
+}
+.jobs-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.jobs-question {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.jobs-question legend {
+  font-weight: 600;
+  padding: 0 4px;
+}
+.jobs-question p {
+  margin: 4px 0;
+}
+.jobs-question-meta {
+  font-size: 0.8rem;
+}
+.jobs-question textarea,
+.jobs-editor textarea {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  resize: vertical;
+}
+.jobs-editor textarea {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85rem;
+}
+.jobs-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.jobs-options button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.85rem;
+}
+.jobs-options button[aria-pressed='true'] {
+  border-color: var(--foreground);
+}
+.jobs-finding {
+  border-bottom: 1px solid var(--border);
+  padding: 8px 0;
+}
+.jobs-finding header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.jobs-finding blockquote {
+  margin: 6px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+  white-space: pre-wrap;
+  font-size: 0.85rem;
+}
+.jobs-caveats {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+.jobs-caveats summary {
+  cursor: pointer;
+}
+.jobs-proposal-title {
+  margin: 0 0 8px;
+}
+.jobs-diff {
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  max-height: 60vh;
+  overflow: auto;
+  margin: 0 0 10px;
+}
+.jobs-diff-added {
+  background: color-mix(in srgb, var(--success, #3fb950) 18%, transparent);
+}
+.jobs-diff-removed {
+  background: color-mix(in srgb, var(--destructive, #f85149) 18%, transparent);
+}
+.jobs-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.jobs-summary {
+  font-size: 0.9rem;
+  border-left: 3px solid var(--border);
+  padding-left: 10px;
+  margin-bottom: 10px;
+}
