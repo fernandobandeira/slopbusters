@@ -30,6 +30,7 @@ import { openConflictWorkspace } from './adapters/conflictWorkspace'
 import { loadCiFailures } from './adapters/ciFailures'
 import { createGitIdentity } from './adapters/gitIdentity'
 import { logError, UserError } from './errors'
+import { CHAT_CONTEXT_TIMEOUT_MS } from './limits'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
 import type { PullRequest } from '../shared/domain/types'
 import { LinearAuth } from './adapters/linearAuth'
@@ -39,9 +40,10 @@ import { defaultBranchSnapshot } from './features/tickets/defaultBranch'
 import { ticketEvidence } from './features/jobs/ticketEvidence'
 import { TicketReviewJobs } from './features/jobs/ticketReviewJobs'
 import { LINEAR_CLIENT_ID } from './linearApplication'
-import { EngineConnection } from './adapters/t3Engine/engineConnection'
-import { EngineThreads, type EngineThreadOperations } from './adapters/t3Engine/engineThreads'
-import { startLinusChat } from './features/linus/linusChat'
+import { createChatHosts, type BundledEngineSettings } from './adapters/t3Engine/engines'
+import type { ChatHosts } from './adapters/t3Engine/chatHosts'
+import { startPullChat, startTicketChat } from './features/chat/personaChats'
+import type { PullChatRequest } from '../shared/domain/chat'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   dataDirectory: string
@@ -57,8 +59,10 @@ export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   linear?: Linear
   linearClientId?: string
   linearCallbackPort?: number
-  /** The user's T3 Code engine; replaced in tests. */
-  engine?: EngineThreadOperations
+  /** The T3 Code engine Slopbusters ships, for chats the user's T3 Code cannot take. */
+  bundledEngine?: BundledEngineSettings
+  /** Where chats run; replaced in tests. */
+  chatHosts?: ChatHosts
 }
 
 export function createServices(options: ReviewerServerOptions) {
@@ -144,8 +148,17 @@ export function createServices(options: ReviewerServerOptions) {
       }),
   })
   const organizationJobs = new OrganizationJobs(store, agentSessions)
-  const engine =
-    options.engine ?? new EngineThreads(new EngineConnection({ credentials: store.engine }))
+  const engines = createChatHosts({
+    credentials: store.engine,
+    dataDirectory: options.dataDirectory,
+    bundled: options.bundledEngine,
+  })
+  const chatHosts = options.chatHosts ?? engines.hosts
+  const chatModel = () => {
+    const model = store.getPreferences().organization
+    if (!model) throw new UserError('Choose your primary model in Settings first.')
+    return model
+  }
   return {
     store,
     github,
@@ -165,10 +178,24 @@ export function createServices(options: ReviewerServerOptions) {
     linearAuth,
     tickets,
     jobs,
-    startLinusChat: (pullId: string) => {
-      const model = store.getPreferences().organization
-      if (!model) throw new UserError('Choose your primary model in Settings first.')
-      return startLinusChat(engine, store.getPull(pullId), model)
+    chats: {
+      startPullChat: (pullId: string, request: PullChatRequest) => {
+        const model = chatModel()
+        const pull = store.getPull(pullId)
+        return startPullChat(
+          chatHosts,
+          { pull, model, request },
+          {
+            loadFailures: (failing) =>
+              loadCiFailures(github, failing, AbortSignal.timeout(CHAT_CONTEXT_TIMEOUT_MS)),
+          },
+        )
+      },
+      startTicketChat: async (identifier: string, repository: string) => {
+        const model = chatModel()
+        const ticket = await tickets.get(identifier, { refresh: true })
+        return startTicketChat(chatHosts, ticket, ticket.pulls[0]?.repository ?? repository, model)
+      },
     },
     navigateSource: (pull: PullRequest, request: Parameters<typeof navigator>[1]) =>
       navigator(pull, request),
@@ -197,6 +224,7 @@ export function createServices(options: ReviewerServerOptions) {
       await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])
       navigator.close()
       await workspaces.close()
+      await engines.close()
       await repository.close()
       agentSessions.store.close()
       store.close()

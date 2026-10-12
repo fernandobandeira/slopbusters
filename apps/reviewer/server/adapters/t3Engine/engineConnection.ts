@@ -51,17 +51,23 @@ export class EngineConnection {
     this.tickets = new EngineTickets(options)
   }
 
+  /** The engine this connection reaches, started or found; it fails if none is available. */
+  locate(): Promise<RunningEngine> {
+    return (this.options.locate ?? findRunningEngine)()
+  }
+
   async run<A, E>(
     operation: (client: EngineClient, engine: RunningEngine) => Effect.Effect<A, E>,
+    timeoutMs = T3_ENGINE_CALL_TIMEOUT_MS,
   ): Promise<A> {
-    const engine = await (this.options.locate ?? findRunningEngine)()
+    const engine = await this.locate()
     const ticket = await this.tickets.next(engine)
     const protocol = (this.options.protocol ?? webSocketProtocol)(socketUrl(engine.origin, ticket))
     const exit = await Effect.runPromiseExit(
       Effect.gen(function* () {
         const client = yield* makeClient
         return yield* operation(client, engine)
-      }).pipe(Effect.timeout(T3_ENGINE_CALL_TIMEOUT_MS), Effect.scoped, Effect.provide(protocol)),
+      }).pipe(Effect.timeout(timeoutMs), Effect.scoped, Effect.provide(protocol)),
     )
     if (Exit.isSuccess(exit)) return exit.value
     throw engineFailure(exit.cause)

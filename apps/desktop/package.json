@@ -27,13 +27,13 @@
     "appId": "dev.slopbusters.reviewer",
     "productName": "Slopbusters",
     "directories": { "output": "release" },
-    "files": ["dist/**", "!dist/workspaceTypeScriptWorker.cjs", "!dist/typescript/**", "package.json"],
+    "files": ["dist/**", "!dist/workspaceTypeScriptWorker.cjs", "!dist/typescript/**", "!dist/t3-engine/**", "package.json"],
     "extraResources": [
       { "from": "dist/workspaceTypeScriptWorker.cjs", "to": "source-analysis/workspaceTypeScriptWorker.cjs" },
       { "from": "dist/typescript", "to": "source-analysis/typescript", "filter": ["*.d.ts"] }
     ],
     "asar": true,
-    "afterPack": "scripts/update-config.cjs",
+    "afterPack": "scripts/after-pack.cjs",
     "mac": {
       "icon": "dist/icon.png",
       "category": "public.app-category.developer-tools",
@@ -44,7 +44,8 @@
       "hardenedRuntime": true,
       "notarize": true,
       "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "signIgnore": ["/t3-engine/"]
     },
     "win": { "icon": "dist/icon.png", "target": ["nsis"] },
     "linux": { "icon": "dist/icon.png", "category": "Development", "target": ["AppImage"] },

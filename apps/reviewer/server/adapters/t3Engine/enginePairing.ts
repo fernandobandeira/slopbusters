@@ -68,25 +68,37 @@ function macApplicationCli(exists: (path: string) => boolean) {
  */
 export async function pairWithEngine(
   engine: RunningEngine,
-  dependencies: {
-    cli?: EngineCli
-    run?: typeof runCommand
-    fetch?: typeof fetch
-    now?: () => number
-  } = {},
+  dependencies: PairingDependencies & { fetch?: typeof fetch; now?: () => number } = {},
 ): Promise<EngineAccess> {
+  const pairingToken = await mintPairingToken(engine, ENGINE_CLIENT_LABEL, dependencies)
+  return exchangePairingToken(engine.origin, pairingToken, dependencies)
+}
+
+interface PairingDependencies {
+  cli?: EngineCli
+  run?: typeof runCommand
+}
+
+/**
+ * A one-time pairing token from `t3 pair`. A browser that opens an engine page with it in the URL
+ * hash signs in as `label`.
+ */
+export async function mintPairingToken(
+  engine: RunningEngine,
+  label: string,
+  dependencies: PairingDependencies = {},
+): Promise<string> {
   const cli = dependencies.cli ?? findEngineCli(engine.home)
   const output = await (dependencies.run ?? runCommand)({
     command: cli.command,
-    args: [...cli.args, 'pair', '--label', ENGINE_CLIENT_LABEL, '--ttl', '2m'],
+    args: [...cli.args, 'pair', '--label', label, '--ttl', '2m'],
     env: cli.env,
     timeoutMs: T3_ENGINE_PAIR_TIMEOUT_MS,
   }).catch((cause: unknown) => {
     logError('Pairing with T3 Code', cause)
     throw new UserError('Slopbusters could not pair with T3 Code. Make sure T3 Code is open.')
   })
-  const pairingToken = parsePairingToken(output)
-  return exchangePairingToken(engine.origin, pairingToken, dependencies)
+  return parsePairingToken(output)
 }
 
 /** The one-time token from `t3 pair` output, which also prints a QR code and a pairing URL. */

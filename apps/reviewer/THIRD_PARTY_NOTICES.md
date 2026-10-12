@@ -15,6 +15,8 @@ Tracked files, under `apps/web/src/` unless noted:
 
 The server's T3 Code engine client uses the engine's API contracts, copied verbatim from upstream `packages/contracts` into `vendor/t3-engine` with test files excluded. The engine contracts are pinned to `v0.0.45` (commit `6c8fed35dded9ff71c5b46807125457acbb76be6`), the T3 Code release the client speaks to, and the same MIT license is kept in `vendor/t3-engine/LICENSE`. They have no local changes.
 
+The desktop app also bundles that release of the T3 Code engine itself: the unmodified `@t3code/t3-<platform>` build T3 publishes to npm, at the same version as the contracts (`pnpm t3:check` enforces this). It ships under `t3-engine` in the app's resources, outside the application archive and with T3's own code signature, and Slopbusters runs it as a separate process. T3 Code is MIT licensed, and the build carries the license inventory of its web client in `t3-engine/client/third-party-licenses.json`.
+
 The reviewer's `src/components/SessionMarkdown.tsx` follows the sanitized Markdown pipeline of T3's `ChatMarkdown.tsx` without copying it, and `src/components/ReviewDiffCodeView.tsx` layers the review chrome over the vendored viewer through its props. The surrounding repository inbox, grouping workflow, SQLite draft storage, review progress, review submission, and layout are specific to Slopbusters. Theme provenance and notices are preserved separately in [src/vendor/themes](src/vendor/themes/README.md).
 
 The repository README credits T3 Code, and production builds preserve its full license in `T3_CODE_LICENSE.txt`. Slopbusters is an independent project, not an official T3 product.

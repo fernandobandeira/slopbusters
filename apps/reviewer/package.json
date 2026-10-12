@@ -71,5 +71,8 @@
     "typescript-eslint": "^8.71.0",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"
+  },
+  "optionalDependencies": {
+    "@t3code/t3-darwin-arm64": "0.0.45"
   }
 }

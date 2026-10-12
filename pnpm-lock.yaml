@@ -153,6 +153,10 @@ importers:
       vitest:
         specifier: ^5.0.3
         version: 5.0.3(@types/node@26.6.4)(happy-dom@20.14.5)(vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+    optionalDependencies:
+      '@t3code/t3-darwin-arm64':
+        specifier: 0.0.45
+        version: 0.0.45
 
 packages:
 
@@ -1020,6 +1024,20 @@ packages:
   '@szmarczak/http-timer@4.0.6':
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
     engines: {node: '>=10'}
+
+  '@t3code/t3-darwin-arm64@0.0.45':
+    resolution: {integrity: sha512-Q7Y3dYLKygpuIQd+6uPM83+EzSBcHOFOLa/EcVkynVgdToklVsnjZbbctgtkiZHyV7zJ4jJ/RUQalZABivfQsA==}
+    cpu: [arm64]
+    os: [darwin]
+    bundledDependencies:
+      - '@ff-labs/fff-bin-darwin-arm64'
+      - '@ff-labs/fff-node'
+      - '@napi-rs/keyring'
+      - '@napi-rs/keyring-darwin-arm64'
+      - '@yuuang/ffi-rs-darwin-arm64'
+      - ffi-rs
+      - node-addon-api
+      - node-pty
 
   '@tailwindcss/node@4.3.3':
     resolution: {integrity: sha512-/T8IKEsf9VTU6tLjgC7+sv2mOPtQxzE2jMw7u4Tt40Tx+QSZxpzh95/H6cMKoja9XuW7iMdLJYBB0o9G1CaAgg==}
@@ -4420,6 +4438,9 @@ snapshots:
   '@szmarczak/http-timer@4.0.6':
     dependencies:
       defer-to-connect: 2.0.1
+
+  '@t3code/t3-darwin-arm64@0.0.45':
+    optional: true
 
   '@tailwindcss/node@4.3.3':
     dependencies:

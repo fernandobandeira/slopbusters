@@ -9,6 +9,7 @@ import { T3_ENGINE_REQUEST_TIMEOUT_MS } from '../../limits'
 /** A T3 Code engine that is running on this machine and speaks the protocol we were built for. */
 export interface RunningEngine {
   readonly home: string
+  readonly pid: number
   readonly origin: string
   readonly environmentId: string
   readonly serverVersion: string
@@ -37,7 +38,7 @@ export async function findRunningEngine(
 ): Promise<RunningEngine> {
   const state = await readRuntimeState(home)
   if (!state || !(dependencies.isAlive ?? isProcessAlive)(state.pid))
-    throw new UserError('Open T3 Code first. Slopbusters starts Linus in your running T3 Code.')
+    throw new UserError('T3 Code is not running.')
   const descriptor = await fetchDescriptor(state.origin, dependencies.fetch ?? fetch)
   const protocol = descriptor.orchestrationProtocolVersion ?? 1
   if (protocol !== ORCHESTRATION_PROTOCOL_VERSION)
@@ -46,6 +47,7 @@ export async function findRunningEngine(
     )
   return {
     home,
+    pid: state.pid,
     origin: state.origin,
     environmentId: descriptor.environmentId,
     serverVersion: descriptor.serverVersion,
@@ -77,7 +79,7 @@ async function fetchDescriptor(origin: string, fetchImpl: typeof fetch) {
   return parsed.data
 }
 
-function isProcessAlive(pid: number): boolean {
+export function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0)
     return true

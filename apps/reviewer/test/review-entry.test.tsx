@@ -87,7 +87,9 @@ vi.mock('../src/features/review/ReviewWorkspace', () => ({
     createElement(
       'div',
       null,
-      props.reviewActions,
+      typeof props.reviewActions === 'function'
+        ? props.reviewActions(undefined)
+        : props.reviewActions,
       props.renderCompanion?.({
         draft: { comments: [], summary: '', viewedFileIds: [] },
         setDraft: vi.fn(),

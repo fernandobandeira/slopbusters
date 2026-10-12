@@ -33,3 +33,12 @@
   background: var(--accent);
   color: var(--accent-foreground);
 }
+.review-menu [role='menuitem'] strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chat-error {
+  color: var(--destructive-foreground);
+  font-size: 12px;
+}

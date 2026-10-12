@@ -13,6 +13,7 @@ import { linusRouter } from './http/linusRouter'
 import { listen } from './http/listen'
 import { ticketsRouter } from './http/ticketsRouter'
 import { jobsRouter } from './http/jobsRouter'
+import { chatRouter } from './http/chatRouter'
 
 export type { ReviewerServerOptions } from './services'
 
@@ -35,6 +36,7 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
     bobRouter(services),
     ticketsRouter(services),
     jobsRouter(services),
+    chatRouter(services),
     sourceRouter(services),
     settingsRouter(services),
   )

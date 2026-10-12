@@ -8,9 +8,10 @@ import {
   ProviderInstanceId,
   ThreadId,
   type ClientOrchestrationCommand,
+  type ProjectCloneSnapshot,
 } from '@t3tools/contracts'
 import { UserError } from '../../errors'
-import { runCommand } from '../process'
+import { T3_ENGINE_CLONE_TIMEOUT_MS } from '../../limits'
 import type { EngineConnection } from './engineConnection'
 
 /** A T3 Code project, with the canonical key of the repository it is a checkout of. */
@@ -33,9 +34,11 @@ export interface EngineThreadStart {
   readonly projectId: string
   readonly title: string
   readonly model: { readonly instanceId: string; readonly model: string }
-  readonly branch: string
+  /** Null runs the thread in the project's own checkout. */
+  readonly branch: string | null
   readonly worktreePath: string | null
-  readonly pullRequest: {
+  /** The pull request the thread is about, linked so T3 Code shows its status. */
+  readonly pullRequest?: {
     readonly host: string
     readonly repository: string
     readonly number: number
@@ -44,23 +47,30 @@ export interface EngineThreadStart {
   readonly message: string
 }
 
-/** Thread operations on the user's T3 Code engine, as the reviewer's features need them. */
+export interface EngineProjectClone {
+  /** `owner/repo` on GitHub. */
+  readonly repository: string
+  readonly title: string
+  readonly destinationPath: string
+}
+
+/** Thread operations on a T3 Code engine, as the reviewer's features need them. */
 export interface EngineThreadOperations {
   projects(): Promise<EngineProject[]>
+  /** Clone a repository into a new project, resolving once the checkout is ready. */
+  cloneProject(input: EngineProjectClone): Promise<EngineProject>
+  /** Wait for a project's clone if one is running, or retry it if it failed. */
+  settleClone(projectId: string): Promise<void>
   preparePullRequest(input: {
     readonly cwd: string
     readonly url: string
     readonly threadId: string
   }): Promise<PreparedPullRequest>
   startThread(input: EngineThreadStart): Promise<void>
-  reveal(): Promise<void>
 }
 
 export class EngineThreads implements EngineThreadOperations {
-  constructor(
-    private readonly connection: Pick<EngineConnection, 'run'>,
-    private readonly revealApp: () => Promise<void> = revealT3Code,
-  ) {}
+  constructor(private readonly connection: Pick<EngineConnection, 'run'>) {}
 
   projects(): Promise<EngineProject[]> {
     return this.connection.run((client) =>
@@ -81,6 +91,69 @@ export class EngineThreads implements EngineThreadOperations {
         ),
       ),
     )
+  }
+
+  async cloneProject(input: EngineProjectClone): Promise<EngineProject> {
+    const projectId = ProjectId.make(randomUUID())
+    const started = await this.connection.run((client) =>
+      client['projectClone.start']({
+        projectId,
+        title: input.title,
+        createdAt: new Date().toISOString(),
+        provider: 'github',
+        repository: input.repository,
+        destinationPath: input.destinationPath,
+      }),
+    )
+    await this.untilCloned(projectId)
+    return {
+      id: started.projectId,
+      title: input.title,
+      workspaceRoot: started.cwd,
+      repository: `github.com/${input.repository}`.toLowerCase(),
+    }
+  }
+
+  async settleClone(projectId: string): Promise<void> {
+    const clone = await this.connection.run((client) =>
+      client['subscribeProjectClones']({}).pipe(
+        Stream.runHead,
+        Effect.map((event) =>
+          event._tag === 'Some'
+            ? event.value.find((snapshot) => snapshot.projectId === projectId)
+            : undefined,
+        ),
+      ),
+    )
+    if (!clone || clone.phase === 'done') return
+    if (clone.phase !== 'running')
+      await this.connection.run((client) =>
+        client['projectClone.retry']({ projectId: ProjectId.make(projectId) }),
+      )
+    await this.untilCloned(projectId)
+  }
+
+  /** Follow the engine's clone progress until the project's clone finishes. */
+  private async untilCloned(projectId: string): Promise<void> {
+    const finished = await this.connection.run(
+      (client) =>
+        client['subscribeProjectClones']({}).pipe(
+          Stream.map((event) => event.find((snapshot) => snapshot.projectId === projectId)),
+          Stream.filter(
+            (snapshot): snapshot is ProjectCloneSnapshot | undefined =>
+              snapshot?.phase !== 'running',
+          ),
+          Stream.runHead,
+        ),
+      T3_ENGINE_CLONE_TIMEOUT_MS,
+    )
+    const clone = finished._tag === 'Some' ? finished.value : undefined
+    if (clone && clone.phase !== 'done')
+      throw new UserError(
+        clone.error
+          ? `T3 Code could not clone the repository: ${clone.error}`
+          : 'T3 Code stopped cloning the repository.',
+      )
   }
 
   async preparePullRequest(input: {
@@ -136,13 +209,14 @@ export class EngineThreads implements EngineThreadOperations {
           worktreePath: input.worktreePath,
           createdAt: new Date().toISOString(),
         })
-        yield* dispatch({
-          type: 'thread.pull-request.link',
-          commandId: newCommandId(),
-          threadId,
-          ...input.pullRequest,
-          source: 'manual',
-        })
+        if (input.pullRequest)
+          yield* dispatch({
+            type: 'thread.pull-request.link',
+            commandId: newCommandId(),
+            threadId,
+            ...input.pullRequest,
+            source: 'manual',
+          })
         yield* dispatch({
           type: 'thread.turn.start',
           commandId: newCommandId(),
@@ -161,22 +235,8 @@ export class EngineThreads implements EngineThreadOperations {
       }),
     )
   }
-
-  reveal(): Promise<void> {
-    return this.revealApp()
-  }
 }
 
 function newCommandId() {
   return CommandId.make(randomUUID())
-}
-
-/** Bring T3 Code to the front, where the new thread is at the top of the sidebar. */
-async function revealT3Code(): Promise<void> {
-  if (process.platform !== 'darwin') return
-  await runCommand({ command: 'open', args: ['-b', 'com.t3tools.t3code'] }).catch(() => {
-    throw new UserError(
-      'Linus started in T3 Code, but Slopbusters could not bring T3 Code forward.',
-    )
-  })
 }

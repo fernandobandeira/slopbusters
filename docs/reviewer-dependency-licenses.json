@@ -667,6 +667,14 @@
       "homepage": "https://github.com/szmarczak/http-timer#readme"
     },
     {
+      "name": "@t3code/t3-darwin-arm64",
+      "versions": [
+        "0.0.45"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/pingdotgg/t3code#readme"
+    },
+    {
       "name": "@tailwindcss/node",
       "versions": [
         "4.3.3"

@@ -27,11 +27,14 @@ export function JobsPanel({
   repository,
   onApplied,
   renderSessionCard,
+  chatAction,
 }: {
   ticket: Ticket
   repository: string
   onApplied: () => void
   renderSessionCard: (session: JobsSession) => ReactNode
+  /** Starts a conversation about the issue, beside the review button. */
+  chatAction?: ReactNode
 }) {
   const job = useJobsSession(ticket.identifier, repository)
   const [open, setOpen] = useState(false)
@@ -51,6 +54,7 @@ export function JobsPanel({
           setOpen((value) => !value)
         }}
       />
+      {chatAction}
       {open && (
         <aside
           className="linus-companion jobs-companion linus-open"

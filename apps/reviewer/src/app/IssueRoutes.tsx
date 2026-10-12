@@ -9,6 +9,7 @@ import { AgentSessionCard } from '../features/agent-sessions/AgentSessionCard'
 import { IssuePage } from '../features/issues/IssuePage'
 import { IssuesPage } from '../features/issues/IssuesPage'
 import { JobsPanel } from '../features/jobs/JobsPanel'
+import { JobsChatButton } from '../features/chat/JobsChatButton'
 import { issuePath } from '../lib/routes'
 import { useApiQuery } from '../lib/useApiQuery'
 
@@ -52,6 +53,12 @@ export function IssueRoute({ identifier, repository }: { identifier: string; rep
           ticket={ticket}
           repository={ticket.pulls[0]?.repository ?? repository}
           onApplied={reload}
+          chatAction={
+            <JobsChatButton
+              ticket={ticket.identifier}
+              repository={ticket.pulls[0]?.repository ?? repository}
+            />
+          }
           renderSessionCard={(session) => (
             <AgentSessionCard sessionId={session.id} repository={session.repository} />
           )}

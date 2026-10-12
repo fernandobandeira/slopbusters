@@ -11,6 +11,7 @@ import type { RunningEngine } from '../server/adapters/t3Engine/engineLocation'
 
 const engine: RunningEngine = {
   home: '/home/user/.t3',
+  pid: 4242,
   origin: 'http://127.0.0.1:3773',
   environmentId: 'environment-1',
   serverVersion: '0.0.45',

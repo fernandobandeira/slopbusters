@@ -69,7 +69,12 @@ interface Props {
   inboxUrl: string
   renderCompanion?: (context: ReviewCompanionContext) => import('react').ReactNode
   titlebarTarget?: HTMLElement | null
-  reviewActions?: import('react').ReactNode
+  /** Actions beside the review controls; a function receives the PR's live status. */
+  reviewActions?:
+    | import('react').ReactNode
+    | ((
+        status: import('../../../shared/domain/pullStatus').PullStatus | undefined,
+      ) => import('react').ReactNode)
 }
 export function ReviewWorkspace({
   pull,
@@ -271,7 +276,7 @@ export function ReviewWorkspace({
       )}
       <CompactReviewHeader pull={pull} />
       <div className="review-toolbar">
-        {reviewActions}
+        {typeof reviewActions === 'function' ? reviewActions(pullStatus.status) : reviewActions}
         {grouped && (
           <>
             <Button

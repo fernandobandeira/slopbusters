@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { adviceSchema, verdictSchema, type LinusChat, type LinusSession } from '../domain/linus'
+import { adviceSchema, verdictSchema, type LinusSession } from '../domain/linus'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, repositoryQuery, pullUrlSchema } from './contract'
 import { pullSchema } from './reviewSchemas'
@@ -72,13 +72,4 @@ export const retryLinus = defineRoute('POST', '/linus/:id/retry', {
 export const cancelLinus = defineRoute('DELETE', '/linus/:id', {
   params: idParams,
   response: session,
-})
-export const startLinusChat = defineRoute('POST', '/pulls/:id/linus-chat', {
-  params: idParams,
-  response: z.object({
-    threadId: z.string(),
-    title: z.string(),
-    project: z.string(),
-    onPullRequestHead: z.boolean(),
-  }) satisfies z.ZodType<LinusChat>,
 })

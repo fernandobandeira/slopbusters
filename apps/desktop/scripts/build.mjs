@@ -56,6 +56,14 @@ await build({
   external: ['electron', 'electron-updater', 'node:*'],
   legalComments: 'eof',
 })
+// Chats the user's T3 Code cannot take run on the T3 Code engine the reviewer pins. It ships as
+// T3's own signed release build, copied outside the application archive.
+const enginePackage = `@t3code/t3-${process.platform}-${process.arch}`
+const enginePlatforms = Object.keys(JSON.parse(await readFile(resolve(directory, '../reviewer/package.json'), 'utf8')).optionalDependencies ?? {})
+if (enginePlatforms.includes(enginePackage)) {
+  const engineDirectory = dirname(reviewerRequire.resolve(`${enginePackage}/package.json`))
+  await cp(engineDirectory, resolve(destination, 't3-engine'), { recursive: true, dereference: true })
+}
 await cp(resolve(directory, '../reviewer/dist'), resolve(destination, 'renderer'), {
   recursive: true,
 })

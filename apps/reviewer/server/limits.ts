@@ -41,6 +41,17 @@ export const T3_ENGINE_PAIR_TIMEOUT_MS = 60_000
 /** Preparing a pull request worktree can fetch the PR head, so engine calls get longer. */
 export const T3_ENGINE_CALL_TIMEOUT_MS = 180_000
 export const T3_ENGINE_TOKEN_REFRESH_MARGIN_MS = 24 * 60 * 60 * 1000
+/** The bundled engine runs its migrations on first start. */
+export const T3_ENGINE_START_TIMEOUT_MS = 60_000
+export const T3_ENGINE_START_POLL_MS = 250
+/** The bundled engine stops its provider sessions and flushes its database before exiting. */
+export const T3_ENGINE_STOP_TIMEOUT_MS = 10_000
+/** The bundled engine clones a repository the first time a chat needs it. */
+export const T3_ENGINE_CLONE_TIMEOUT_MS = 15 * 60_000
+/** A Gandalf chat's first message carries the failed step of each failing check. */
+export const MAX_CHAT_FAILURES = 8
+export const MAX_CHAT_FAILURE_LOG_CHARACTERS = 6_000
+export const CHAT_CONTEXT_TIMEOUT_MS = 60_000
 export const MAX_DIFF_FILE_CACHE_ENTRIES = 60
 export const MAX_SOURCE_FILE_CACHE_ENTRIES = 1000
 export const MAX_SOURCE_TREE_CACHE_ENTRIES = 20

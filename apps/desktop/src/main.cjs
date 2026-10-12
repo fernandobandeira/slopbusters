@@ -16,6 +16,10 @@ const sourceAnalysisOptions = {
   typeScriptLibDirectory: join(analysisDirectory, 'typescript'),
 }
 
+// The T3 Code engine ships as T3's own signed build, outside the application archive.
+const engineDirectory = app.isPackaged ? join(process.resourcesPath, 't3-engine') : join(__dirname, 't3-engine')
+const engineExecutable = join(engineDirectory, process.platform === 'win32' ? 't3.exe' : 't3')
+
 const smoke = process.argv.includes('--smoke-test')
 const smokeArgument = (name) => process.argv.find((value) => value.startsWith(`${name}=`))?.slice(name.length + 1)
 function smokeStage(stage) { if (smoke) console.log(JSON.stringify({ smokeStage: stage, phase: smokeArgument('--smoke-phase') })) }
@@ -28,6 +32,7 @@ if (smoke) {
 
 let server
 let mainWindow
+let chatWindow
 let stopping = false
 let quitting = false
 let installing = false
@@ -116,6 +121,67 @@ function openExternal(value) {
   }
 }
 
+const loopbackHosts = new Set(['127.0.0.1', 'localhost'])
+let chatOrigin
+
+function isChatLocation(value) {
+  try { return new URL(value).origin === chatOrigin } catch { return false }
+}
+
+/**
+ * Chats that run on the bundled engine open in its own web app, in one window with a separate
+ * session. The URL signs the window in with a one-time pairing token.
+ */
+async function openChatWindow(value) {
+  const url = new URL(value)
+  if (url.protocol !== 'http:' || !loopbackHosts.has(url.hostname)) throw new Error('Chats open only on the local T3 Code engine.')
+  // The engine picks a new port each time it starts.
+  chatOrigin = url.origin
+  if (!chatWindow || chatWindow.isDestroyed()) chatWindow = createChatWindow()
+  await chatWindow.loadURL(url.href)
+  chatWindow.show()
+  chatWindow.focus()
+}
+
+function createChatWindow() {
+  const chatSession = session.fromPartition('persist:t3-engine')
+  const allowed = (permission) => permission === 'clipboard-sanitized-write'
+  chatSession.setPermissionRequestHandler((_contents, permission, callback) => callback(allowed(permission)))
+  chatSession.setPermissionCheckHandler((_contents, permission) => allowed(permission))
+  const window = new BrowserWindow({
+    width: 1280,
+    height: 860,
+    minWidth: 720,
+    minHeight: 480,
+    title: 'Slopbusters chat',
+    icon: join(__dirname, 'icon.png'),
+    backgroundColor: '#111214',
+    webPreferences: {
+      partition: 'persist:t3-engine',
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+    },
+  })
+  const contents = window.webContents
+  contents.setWindowOpenHandler(({ url }) => {
+    openExternal(url)
+    return { action: 'deny' }
+  })
+  contents.on('will-navigate', (event, url) => {
+    if (isChatLocation(url)) return
+    event.preventDefault()
+    openExternal(url)
+  })
+  contents.on('will-redirect', (event, url) => {
+    if (!isChatLocation(url)) event.preventDefault()
+  })
+  contents.on('will-attach-webview', (event) => event.preventDefault())
+  window.on('closed', () => { chatWindow = undefined })
+  return window
+}
+
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -185,6 +251,11 @@ async function verifySmoke(window) {
   smokeStage('parsers-ready')
   const workspaceResult = await require('./workspace-smoke.cjs').verifyWorkspaceWorker(sourceAnalysisOptions)
   smokeStage('workspace-worker-ready')
+  if (process.platform === 'darwin' && process.arch === 'arm64') {
+    const { stdout } = await promisify(execFile)(engineExecutable, ['--version'], { timeout: 30000 })
+    if (!/^t3 v\d/.test(stdout.trim())) throw new Error('The bundled T3 Code engine did not run.')
+  }
+  smokeStage('engine-ready')
   const phase = smokeArgument('--smoke-phase')
   const isolation = window.webContents.getLastWebPreferences()
   if (!isolation.sandbox || !isolation.contextIsolation || isolation.nodeIntegration) throw new Error('The renderer must remain sandboxed and isolated from Node.')
@@ -323,6 +394,7 @@ async function start() {
     staticDirectory: join(__dirname, 'renderer'),
     sourceAssetsDirectory: join(__dirname, 'syntax'),
     ...sourceAnalysisOptions,
+    bundledEngine: { executable: engineExecutable, openUrl: openChatWindow },
     port: 0,
   })
   smokeStage('server-ready')

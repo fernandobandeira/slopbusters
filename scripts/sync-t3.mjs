@@ -16,7 +16,8 @@
 //   node scripts/sync-t3.mjs add [--tree t] <path>  track more upstream files at the pin
 //
 // `--tree` defaults to ui. The engine tree's ref is a release tag such as v0.0.46; syncing it
-// also reports the `effect` version the reviewer must install to match.
+// also reports the `effect` version and the bundled `@t3code/t3-*` engine build the reviewer
+// must install to match.
 
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -43,6 +44,7 @@ const TREES = {
       text: (commit, ref) => `engine contracts are pinned to \`${ref}\` (commit \`${commit}\`)`,
     },
     matchesEffect: true,
+    matchesEngineBuild: true,
   },
 }
 
@@ -104,6 +106,12 @@ function checkTree(tree) {
     const installed = reviewerEffectVersion()
     if (required !== installed) {
       failures.push(`${tree.name}: apps/reviewer must depend on effect ${required} exactly (found ${installed ?? 'none'})`)
+    }
+  }
+  if (tree.matchesEngineBuild) {
+    const release = manifest.ref.replace(/^v/, '')
+    for (const [name, version] of Object.entries(reviewerEngineBuilds())) {
+      if (version !== release) failures.push(`${tree.name}: apps/reviewer must bundle ${name} ${release} exactly (found ${version})`)
     }
   }
   if (failures.length === 0) {
@@ -190,6 +198,12 @@ async function sync([ref]) {
     const required = upstreamEffectVersion(target)
     if (required !== reviewerEffectVersion())
       console.log(`Set apps/reviewer's effect dependency to exactly ${required}, then run pnpm install.`)
+  }
+  if (tree.matchesEngineBuild) {
+    const release = requested.replace(/^v/, '')
+    for (const [name, version] of Object.entries(reviewerEngineBuilds())) {
+      if (version !== release) console.log(`Set apps/reviewer's ${name} optional dependency to exactly ${release}.`)
+    }
   }
   if (missing.length > 0) console.error(`Removed upstream but changed locally (kept):\n  ${missing.join('\n  ')}`)
   if (conflicts.length > 0) {
@@ -301,6 +315,12 @@ function upstreamEffectVersion(commit) {
   const workspace = upstreamFile(commit, 'pnpm-workspace.yaml') ?? ''
   const catalog = workspace.slice(workspace.indexOf('\ncatalog:'))
   return /\n\s+effect:\s*["']?([^\s"']+)/.exec(catalog)?.[1] ?? null
+}
+
+/** The platform builds of the T3 Code engine the desktop app bundles, by package name. */
+function reviewerEngineBuilds() {
+  const pkg = JSON.parse(readFileSync(reviewerPackagePath, 'utf8'))
+  return Object.fromEntries(Object.entries(pkg.optionalDependencies ?? {}).filter(([name]) => name.startsWith('@t3code/t3-')))
 }
 
 function reviewerEffectVersion() {

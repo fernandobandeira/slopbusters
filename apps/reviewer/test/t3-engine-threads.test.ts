@@ -5,6 +5,7 @@ import { expect, it, vi } from 'vitest'
 import {
   ClientOrchestrationCommand,
   GitPreparePullRequestThreadInput,
+  ProjectCloneStartInput,
   type OrchestrationShellStreamItem,
 } from '@t3tools/contracts'
 import type { EngineClient } from '../server/adapters/t3Engine/engineConnection'
@@ -13,6 +14,7 @@ import { EngineThreads } from '../server/adapters/t3Engine/engineThreads'
 
 const engine: RunningEngine = {
   home: '/home/user/.t3',
+  pid: 4242,
   origin: 'http://127.0.0.1:3773',
   environmentId: 'environment-1',
   serverVersion: '0.0.45',
@@ -161,4 +163,88 @@ it('starts the thread in the runtime mode the project overrides in T3 Code', asy
     undefined,
     'approval-required',
   ])
+})
+
+it('starts a thread in the project checkout without linking a PR when none is given', async () => {
+  const { threads, encoded } = engineWithSettings({
+    defaultRuntimeMode: 'full-access',
+    projectSettingsOverrides: {},
+  })
+
+  await threads.startThread({
+    ...chatStart,
+    branch: null,
+    worktreePath: null,
+    pullRequest: undefined,
+  })
+
+  const commands = encoded()
+  expect(commands.map((command) => command.type)).toEqual(['thread.create', 'thread.turn.start'])
+  expect(commands[0]).toMatchObject({ branch: null, worktreePath: null })
+})
+
+const clone = (phase: string, error: string | null = null) => ({
+  projectId: 'cloned',
+  remoteUrl: 'https://github.com/Example/Project.git',
+  destinationPath: '/engine/repositories/Example/Project',
+  repository: null,
+  phase,
+  stage: 'checkout',
+  percent: null,
+  detail: null,
+  error,
+  startedAt: '2026-10-12T00:00:00.000Z',
+  endedAt: null,
+  sequence: 1,
+})
+
+it('clones a repository into a project and resolves once the clone is done', async () => {
+  const start = vi.fn((_input: unknown) =>
+    Effect.succeed({
+      projectId: 'cloned',
+      cwd: '/engine/repositories/Example/Project',
+      remoteUrl: 'https://github.com/Example/Project.git',
+      repository: null,
+    }),
+  )
+  const threads = new EngineThreads(
+    connectionTo({
+      'projectClone.start': start,
+      subscribeProjectClones: () => Stream.make([clone('running')], [clone('done')]),
+    }),
+  )
+
+  const project = await threads.cloneProject({
+    repository: 'Example/Project',
+    title: 'Project',
+    destinationPath: '/engine/repositories/Example/Project',
+  })
+
+  expect(project).toEqual({
+    id: 'cloned',
+    title: 'Project',
+    workspaceRoot: '/engine/repositories/Example/Project',
+    repository: 'github.com/example/project',
+  })
+  const input = start.mock.calls[0]?.[0] as Record<string, unknown>
+  expect(Schema.encodeUnknownSync(ProjectCloneStartInput)(input)).toMatchObject({
+    provider: 'github',
+    repository: 'Example/Project',
+    destinationPath: '/engine/repositories/Example/Project',
+  })
+})
+
+it('retries a failed clone and reports why it fails again', async () => {
+  const retry = vi.fn((_input: unknown) => Effect.succeed({ applied: true }))
+  const threads = new EngineThreads(
+    connectionTo({
+      'projectClone.retry': retry,
+      subscribeProjectClones: () => Stream.make([clone('failed', 'Repository not found.')]),
+    }),
+  )
+
+  await expect(threads.settleClone('cloned')).rejects.toThrow(
+    'T3 Code could not clone the repository: Repository not found.',
+  )
+  expect(retry).toHaveBeenCalledWith({ projectId: 'cloned' })
 })
