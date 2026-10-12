@@ -10,6 +10,7 @@ import {
 import { DiffSide, type PullRequest, type ReviewDraft } from '../../../shared/domain/types'
 import type { ReviewLocation } from '../../../shared/domain/review'
 import { BobComment, saveBobComment } from './BobComment'
+import { BobCopyButton, bobFindingMarkdown, bobReviewMarkdown } from './BobCopy'
 import { BobText } from './BobText'
 
 export interface BobDraftContext {
@@ -67,16 +68,20 @@ export function BobTour({
             This PR changed after Uncle Bob’s review. Review it again before adding comments.
           </p>
         )}
-        {finding && (
-          <BobDraftAnnotation
-            key={`${result.fingerprint}:${finding.id}`}
-            result={result}
-            finding={finding}
-            context={context}
-            stale={stale}
-          />
-        )}
       </div>
+      {finding ? (
+        <BobDraftAnnotation
+          key={`${result.fingerprint}:${finding.id}`}
+          result={result}
+          finding={finding}
+          context={context}
+          stale={stale}
+        />
+      ) : (
+        <div className="bob-actions" key={result.fingerprint}>
+          <BobCopyButton label="Copy review" text={bobReviewMarkdown(advice)} />
+        </div>
+      )}
       <BobTourControls index={index} count={advice.findings.length + 1} advance={advance} />
       {context.draft.comments.length > 0 && (
         <Button
@@ -111,6 +116,7 @@ function BobDraftAnnotation({
       finding={finding}
       comments={context.draft.comments}
       disabled={stale || !context.ready}
+      actions={<BobCopyButton label="Copy" text={bobFindingMarkdown(finding)} />}
       onSave={(comment) => {
         context.setDraft((draft) => saveBobComment(draft, comment))
       }}

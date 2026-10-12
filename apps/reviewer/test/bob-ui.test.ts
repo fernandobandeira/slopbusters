@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { createElement, useState } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BobCompanion } from '../src/features/bob/BobCompanion'
 import { useBobSession } from '../src/features/bob/useBobSession'
@@ -9,7 +9,7 @@ import { BobReviewBadge } from '../src/features/bob/BobReviewBadge'
 import { BobText } from '../src/features/bob/BobText'
 import type { BobResult } from '../shared/domain/bob'
 import { Provider, type ReviewDraft } from '../shared/domain/types'
-import { fixtureBobAdvice } from './fixtures/bob'
+import { fixtureBobAdvice, required } from './fixtures/bob'
 import { fixturePull } from './fixtures/pull'
 
 vi.mock('../src/features/bob/useBobSession', () => ({ useBobSession: vi.fn() }))
@@ -23,7 +23,7 @@ const result: BobResult = {
   fingerprint: 'saved',
   reviewers: [],
 }
-function Tour({ stale = false }: { stale?: boolean }) {
+function Tour({ stale = false, index = 1 }: { stale?: boolean; index?: number }) {
   const [draft, setDraft] = useState<ReviewDraft>({
     comments: [],
     summary: 'Existing summary',
@@ -31,7 +31,7 @@ function Tour({ stale = false }: { stale?: boolean }) {
   })
   return createElement(BobTour, {
     result,
-    index: 1,
+    index,
     advance: vi.fn(),
     context: {
       pull: stale ? { ...result.pull, baseSha: 'changed' } : result.pull,
@@ -174,6 +174,28 @@ describe('Uncle Bob comment collection during the tour', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove comment' }))
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.getByRole('button', { name: 'Add review comment' })).toBeTruthy()
+  })
+  it('copies the finding and the whole review as Markdown, even when the review is stale', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const finding = required(result.advice.findings[0])
+    render(createElement(Tour, { stale: true }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+
+    await waitFor(() => screen.getByRole('button', { name: 'Copied' }))
+    const copied = String(writeText.mock.lastCall?.[0])
+    expect(copied).toContain(finding.title)
+    expect(copied).toContain(`\`${finding.path}:${finding.line}\``)
+    expect(copied).toContain(finding.suggestion)
+
+    cleanup()
+    render(createElement(Tour, { index: 0 }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy review' }))
+
+    await waitFor(() => screen.getByRole('button', { name: 'Copied' }))
+    expect(String(writeText.mock.lastCall?.[0])).toContain(result.advice.summary)
+    expect(String(writeText.mock.lastCall?.[0])).toContain(finding.title)
   })
   it('blocks annotations when the current PR base differs from the saved review', () => {
     render(createElement(Tour, { stale: true }))

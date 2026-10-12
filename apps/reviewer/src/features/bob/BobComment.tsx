@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button } from '~/components/ui/button'
 import { bobCommentId, bobDraftComment, type BobFinding } from '../../../shared/domain/bob'
 import type { DraftComment, PullRequest, ReviewDraft } from '../../../shared/domain/types'
@@ -10,6 +10,7 @@ interface BobCommentProps {
   disabled: boolean
   onSave: (comment: DraftComment) => void
   onDelete: (id: string) => void
+  actions?: ReactNode
 }
 export function BobComment({
   pull,
@@ -18,6 +19,7 @@ export function BobComment({
   onSave,
   onDelete,
   disabled,
+  actions,
 }: BobCommentProps) {
   const saved = comments.find((comment) => comment.id === bobCommentId(pull, finding))
   const [editing, setEditing] = useState(false)
@@ -28,7 +30,7 @@ export function BobComment({
   }
   if (!editing)
     return (
-      <div className="bob-comment">
+      <div className="bob-actions">
         {saved && (
           <p className="bob-saved" role="status">
             Comment saved in your review draft
@@ -49,15 +51,47 @@ export function BobComment({
             Remove comment
           </Button>
         )}
+        {actions}
       </div>
     )
+  return (
+    <BobCommentForm
+      finding={finding}
+      body={body}
+      setBody={setBody}
+      disabled={disabled}
+      onSubmit={() => {
+        onSave(bobDraftComment(pull, finding, body))
+        setEditing(false)
+      }}
+      onCancel={() => {
+        setEditing(false)
+      }}
+    />
+  )
+}
+
+function BobCommentForm({
+  finding,
+  body,
+  setBody,
+  disabled,
+  onSubmit,
+  onCancel,
+}: {
+  finding: BobFinding
+  body: string
+  setBody: (body: string) => void
+  disabled: boolean
+  onSubmit: () => void
+  onCancel: () => void
+}) {
   return (
     <form
       className="bob-comment"
       onSubmit={(event) => {
         event.preventDefault()
-        onSave(bobDraftComment(pull, finding, body))
-        setEditing(false)
+        onSubmit()
       }}
     >
       <label htmlFor="bob-comment-body">
@@ -77,14 +111,7 @@ export function BobComment({
         <Button size="sm" type="submit" disabled={disabled || !body.trim()}>
           Save to review draft
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          type="button"
-          onClick={() => {
-            setEditing(false)
-          }}
-        >
+        <Button size="sm" variant="ghost" type="button" onClick={onCancel}>
           Cancel
         </Button>
       </div>

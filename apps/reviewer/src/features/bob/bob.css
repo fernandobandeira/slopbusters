@@ -97,8 +97,16 @@
   font-weight: 600;
   margin-bottom: 8px;
 }
+.bob-actions,
 .bob-comment {
-  margin: 16px 0;
+  flex-shrink: 0;
+  margin-top: 14px;
+}
+.bob-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 .bob-comment label {
   display: block;
@@ -111,6 +119,7 @@
   margin-bottom: 10px;
 }
 .bob-saved {
+  flex-basis: 100%;
   color: var(--success);
   font-size: 11px;
 }
