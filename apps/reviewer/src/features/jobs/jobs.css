@@ -1,26 +1,13 @@
+.jobs-bubble {
+  width: min(560px, calc(100vw - 32px));
+}
 .jobs-panel {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--card, var(--background));
-}
-.jobs-header {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-.jobs-portrait {
-  width: 64px;
-  height: 64px;
-  flex: none;
-  border-radius: 50%;
 }
 .jobs-speech {
-  margin: 4px 0 0;
-  line-height: 1.45;
+  margin: 12px 0 0;
 }
 .jobs-actions {
   display: flex;

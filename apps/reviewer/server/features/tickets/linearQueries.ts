@@ -1,26 +1,52 @@
 import { z } from 'zod'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
-import type { TicketSummary, TicketView } from '../../../shared/domain/tickets'
+import {
+  ticketFinished,
+  type TicketProgress,
+  type TicketReference,
+  type TicketSummary,
+  type TicketView,
+} from '../../../shared/domain/tickets'
 
-const state = z.object({ name: z.string(), type: z.string() })
+const state = z.object({ name: z.string(), type: z.string(), color: z.string() })
 const urls = z.object({ nodes: z.array(z.object({ url: z.string() })) })
+const reference = z.object({ identifier: z.string(), title: z.string(), url: z.string(), state })
+const childStates = z.object({
+  nodes: z.array(z.object({ state: z.object({ type: z.string() }) })),
+})
+const relations = z.object({
+  nodes: z.array(z.object({ type: z.string(), relatedIssue: reference })),
+})
+const inverseRelations = z.object({
+  nodes: z.array(z.object({ type: z.string(), issue: reference })),
+})
 const summaryNode = z.object({
   identifier: z.string(),
   title: z.string(),
   url: z.string(),
   priority: z.number(),
   updatedAt: z.string(),
+  subIssueSortOrder: z.number().nullable(),
   state,
   assignee: z.object({ name: z.string() }).nullable(),
   team: z.object({ key: z.string(), name: z.string() }),
   project: z.object({ name: z.string() }).nullable(),
-  labels: z.object({ nodes: z.array(z.object({ name: z.string() })) }),
-  parent: z.object({ identifier: z.string() }).nullable(),
+  labels: z.object({ nodes: z.array(z.object({ name: z.string(), color: z.string() })) }),
+  parent: reference.extend({ children: childStates }).nullable(),
+  children: childStates,
+  relations,
+  inverseRelations,
   attachments: urls,
 })
-const summaryFields = `identifier title url priority updatedAt
-  state { name type } assignee { name } team { key name } project { name }
-  labels(first: 20) { nodes { name } } parent { identifier }
+const referenceFields = 'identifier title url state { name type color }'
+const relationFields = `relations(first: 20) { nodes { type relatedIssue { ${referenceFields} } } }
+  inverseRelations(first: 20) { nodes { type issue { ${referenceFields} } } }`
+const childStateFields = 'children(first: 50) { nodes { state { type } } }'
+const summaryFields = `identifier title url priority updatedAt subIssueSortOrder
+  state { name type color } assignee { name } team { key name } project { name }
+  labels(first: 20) { nodes { name color } }
+  parent { ${referenceFields} ${childStateFields} } ${childStateFields}
+  ${relationFields}
   attachments(first: 25) { nodes { url } }`
 
 export const ticketListQuery = `query SlopbustersTickets($filter: IssueFilter, $after: String) {
@@ -47,9 +73,9 @@ export function ticketFilter(view: TicketView) {
 export const ticketQuery = `query SlopbustersTicket($id: String!) {
   issue(id: $id) {
     id description branchName ${summaryFields}
-    parentTicket: parent { identifier title url description state { name type } }
-    children(first: 100) {
-      nodes { identifier title url state { name type } attachments(first: 25) { nodes { url } } }
+    parentTicket: parent { ${referenceFields} description }
+    subIssues: children(first: 100) {
+      nodes { ${referenceFields} subIssueSortOrder ${relationFields} attachments(first: 25) { nodes { url } } }
     }
   }
 }`
@@ -58,22 +84,13 @@ export const ticketSchema = z.object({
     id: z.string(),
     description: z.string().nullable(),
     branchName: z.string(),
-    parentTicket: z
-      .object({
-        identifier: z.string(),
-        title: z.string(),
-        url: z.string(),
-        description: z.string().nullable(),
-        state,
-      })
-      .nullable(),
-    children: z.object({
+    parentTicket: reference.extend({ description: z.string().nullable() }).nullable(),
+    subIssues: z.object({
       nodes: z.array(
-        z.object({
-          identifier: z.string(),
-          title: z.string(),
-          url: z.string(),
-          state,
+        reference.extend({
+          subIssueSortOrder: z.number().nullable(),
+          relations,
+          inverseRelations,
           attachments: urls,
         }),
       ),
@@ -137,8 +154,38 @@ export function ticketSummary(node: z.infer<typeof summaryNode>): TicketSummary 
     assignee: node.assignee?.name ?? null,
     team: node.team,
     project: node.project?.name ?? null,
-    labels: node.labels.nodes.map((label) => label.name),
-    parent: node.parent?.identifier ?? null,
+    labels: node.labels.nodes,
+    parent: node.parent && {
+      ...reference.parse(node.parent),
+      progress: progress(node.parent.children),
+    },
+    sortOrder: node.subIssueSortOrder ?? 0,
+    progress: progress(node.children),
+    ...blockers(node),
     pullUrls: pullUrls(node.attachments),
+  }
+}
+
+/** The unfinished issues on either side of this issue's "blocks" relations. */
+export function blockers(node: {
+  relations: z.infer<typeof relations>
+  inverseRelations: z.infer<typeof inverseRelations>
+}): { blockedBy: TicketReference[]; blocking: TicketReference[] } {
+  return {
+    blockedBy: node.inverseRelations.nodes
+      .filter((relation) => relation.type === 'blocks' && !ticketFinished(relation.issue.state))
+      .map((relation) => relation.issue),
+    blocking: node.relations.nodes
+      .filter(
+        (relation) => relation.type === 'blocks' && !ticketFinished(relation.relatedIssue.state),
+      )
+      .map((relation) => relation.relatedIssue),
+  }
+}
+
+function progress(children: z.infer<typeof childStates>): TicketProgress {
+  return {
+    done: children.nodes.filter((child) => ticketFinished(child.state)).length,
+    total: children.nodes.length,
   }
 }

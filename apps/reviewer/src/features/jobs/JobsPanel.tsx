@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import { LoaderCircle } from 'lucide-react'
+import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
+import { LoaderCircle, X } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import {
   jobsExpression,
@@ -16,10 +16,12 @@ import { JobsProposal } from './JobsProposal'
 import { JobsQuestions } from './JobsQuestions'
 import { useJobsSession } from './useJobsSession'
 import '../../linus.css'
+import '../../components/startReview.css'
 import './jobs.css'
 
 type Tab = 'questions' | 'findings' | 'proposal'
 
+/** Steve Jobs waits behind a button beside the issue title and opens as a floating companion. */
 export function JobsPanel({
   ticket,
   repository,
@@ -32,22 +34,110 @@ export function JobsPanel({
   renderSessionCard: (session: JobsSession) => ReactNode
 }) {
   const job = useJobsSession(ticket.identifier, repository)
+  const [open, setOpen] = useState(false)
+  useCloseOnEscape(open, () => {
+    setOpen(false)
+  })
+  const expression = jobsExpression(job.session)
+  function close() {
+    setOpen(false)
+  }
+  return (
+    <>
+      <JobsButton
+        session={job.session}
+        open={open}
+        onToggle={() => {
+          setOpen((value) => !value)
+        }}
+      />
+      {open && (
+        <aside
+          className="linus-companion jobs-companion linus-open"
+          aria-label="Steve Jobs ticket review"
+        >
+          <div className="linus-bubble jobs-bubble">
+            <header>
+              <span className="linus-eyebrow">STEVE JOBS · TICKET REVIEW</span>
+              <button className="linus-icon-button" aria-label="Close Steve Jobs" onClick={close}>
+                <X size={16} />
+              </button>
+            </header>
+            <JobsConversation
+              job={job}
+              ticket={ticket}
+              repository={repository}
+              onApplied={onApplied}
+              renderSessionCard={renderSessionCard}
+            />
+          </div>
+          <button className="linus-portrait" aria-label="Minimize Steve Jobs" onClick={close}>
+            <img src={`/jobs/${expression}.png`} alt={`Steve Jobs, ${expression}`} />
+          </button>
+        </aside>
+      )}
+    </>
+  )
+}
+
+function JobsButton({
+  session,
+  open,
+  onToggle,
+}: {
+  session: JobsSession | undefined
+  open: boolean
+  onToggle: () => void
+}) {
+  const revision = latestJobsAdvice(session)
+  const working = session?.status === 'running' || session?.status === 'partial'
+  const questions = revision?.advice.questions.length ?? 0
+  return (
+    <Button size="sm" variant="outline" aria-expanded={open} onClick={onToggle}>
+      <img className="review-companion-icon" src={`/jobs/${jobsExpression(session)}.png`} alt="" />
+      {working && <LoaderCircle size={13} className="animate-spin" />}
+      {working
+        ? 'Steve is reading…'
+        : revision
+          ? `${jobsVerdictLabels[revision.advice.verdict]}${questions ? ` · ${String(questions)} open` : ''}`
+          : 'Ask Steve Jobs'}
+    </Button>
+  )
+}
+
+function useCloseOnEscape(open: boolean, close: () => void) {
+  const onEscape = useEffectEvent(close)
+  useEffect(() => {
+    if (!open) return
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') onEscape()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+}
+
+function JobsConversation({
+  job,
+  ticket,
+  repository,
+  onApplied,
+  renderSessionCard,
+}: {
+  job: ReturnType<typeof useJobsSession>
+  ticket: Ticket
+  repository: string
+  onApplied: () => void
+  renderSessionCard: (session: JobsSession) => ReactNode
+}) {
   const { session } = job
   const revision = latestJobsAdvice(session)
   const working = session?.status === 'running' || session?.status === 'partial'
   return (
-    <section className="jobs-panel" aria-label="Steve Jobs ticket review">
-      <header className="jobs-header">
-        <img
-          className="jobs-portrait"
-          src={`/jobs/${jobsExpression(session)}.png`}
-          alt={`Steve Jobs, ${jobsExpression(session)}`}
-        />
-        <div>
-          <span className="linus-eyebrow">STEVE JOBS · TICKET REVIEW</span>
-          <p className="jobs-speech">{speech(session, revision)}</p>
-        </div>
-      </header>
+    <div className="jobs-panel">
+      <p className="linus-speech jobs-speech">{speech(session, revision)}</p>
       {session && renderSessionCard(session)}
       <JobsControls job={job} repository={repository} hasReview={Boolean(revision)} />
       {working && (
@@ -77,7 +167,7 @@ export function JobsPanel({
           {job.error}
         </p>
       )}
-    </section>
+    </div>
   )
 }
 

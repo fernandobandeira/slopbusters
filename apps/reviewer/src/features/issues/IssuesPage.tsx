@@ -13,7 +13,8 @@ import { call, message } from '../../lib/api'
 import { issuePath, issuesPath } from '../../lib/routes'
 import { useApiQuery } from '../../lib/useApiQuery'
 import { LinearConnectButton } from '../../components/LinearConnect'
-import { IssueRow } from './IssueRow'
+import { IssueGroupRows } from './IssueRow'
+import { issueGroups } from './issueGroups'
 import { useLinearStatus } from '../../lib/useLinearStatus'
 import './issues.css'
 
@@ -145,8 +146,8 @@ function IssueList({
   if (!tickets.length) return <div className="empty-state">No open issues here.</div>
   return (
     <div className="issue-list">
-      {tickets.map((ticket) => (
-        <IssueRow key={ticket.identifier} ticket={ticket} badge={renderBadge(ticket)} />
+      {issueGroups(tickets).map((group) => (
+        <IssueGroupRows key={group.head.identifier} group={group} renderBadge={renderBadge} />
       ))}
       {next && (
         <Button variant="ghost" onClick={() => void loadMore()} disabled={loadingMore}>

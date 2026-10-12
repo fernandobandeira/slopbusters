@@ -34,13 +34,16 @@ export async function downloadTicket(
       ...issue.parentTicket,
       description: issue.parentTicket.description ?? '',
     },
-    children: issue.children.nodes.map((child) => ({
-      identifier: child.identifier,
-      title: child.title,
-      url: child.url,
-      state: child.state,
-      pullUrls: queries.pullUrls(child.attachments),
-    })),
+    children: issue.subIssues.nodes
+      .toSorted((a, b) => (a.subIssueSortOrder ?? 0) - (b.subIssueSortOrder ?? 0))
+      .map((child) => ({
+        identifier: child.identifier,
+        title: child.title,
+        url: child.url,
+        state: child.state,
+        pullUrls: queries.pullUrls(child.attachments),
+        blockedBy: queries.blockers(child).blockedBy,
+      })),
     pulls: await Promise.all(
       summary.pullUrls.map((url) => pullState(services.github, url, signal)),
     ),

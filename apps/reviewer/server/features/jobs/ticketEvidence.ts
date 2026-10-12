@@ -31,7 +31,9 @@ export async function ticketEvidence(
       team: ticket.team.name,
       project: ticket.project,
       assignee: ticket.assignee,
-      labels: ticket.labels,
+      labels: ticket.labels.map((label) => label.name),
+      blockedBy: ticket.blockedBy.map((issue) => `${issue.identifier}: ${issue.title}`),
+      blocking: ticket.blocking.map((issue) => `${issue.identifier}: ${issue.title}`),
       branchName: ticket.branchName,
       description: ticket.description,
     },
@@ -46,6 +48,7 @@ export async function ticketEvidence(
       title: child.title,
       state: child.state.name,
       pullUrls: child.pullUrls,
+      blockedBy: child.blockedBy.map((issue) => issue.identifier),
     })),
     linkedPulls: pulls,
   })

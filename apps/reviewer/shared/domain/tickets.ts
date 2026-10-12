@@ -12,21 +12,34 @@ export const ticketViews: { id: TicketView; label: string }[] = [
   { id: 'created', label: 'Created by me' },
 ]
 
-const stateSchema = z.object({ name: z.string(), type: z.string() })
+const stateSchema = z.object({ name: z.string(), type: z.string(), color: z.string() })
+export type TicketState = z.infer<typeof stateSchema>
 const ticketReferenceSchema = z.object({
   identifier: z.string(),
   title: z.string(),
   url: z.string(),
   state: stateSchema,
 })
+export type TicketReference = z.infer<typeof ticketReferenceSchema>
+/** Finished and total sub-issues, counting cancelled ones as finished like Linear does. */
+const progressSchema = z.object({ done: z.number().int(), total: z.number().int() })
+export type TicketProgress = z.infer<typeof progressSchema>
+const relativeSchema = ticketReferenceSchema.extend({ progress: progressSchema })
 export const ticketSummarySchema = ticketReferenceSchema.extend({
   priority: z.number().int(),
   updatedAt: z.string(),
   assignee: z.string().nullable(),
   team: z.object({ key: z.string(), name: z.string() }),
   project: z.string().nullable(),
-  labels: z.array(z.string()),
-  parent: z.string().nullable(),
+  labels: z.array(z.object({ name: z.string(), color: z.string() })),
+  parent: relativeSchema.nullable(),
+  /** Linear's manual order among siblings. */
+  sortOrder: z.number(),
+  progress: progressSchema,
+  /** Unfinished issues that must ship before this one. */
+  blockedBy: z.array(ticketReferenceSchema),
+  /** Unfinished issues waiting on this one. */
+  blocking: z.array(ticketReferenceSchema),
   pullUrls: z.array(z.string()),
 })
 export const ticketPullSchema = z.object({
@@ -41,7 +54,12 @@ export const ticketSchema = ticketSummarySchema.extend({
   description: z.string(),
   branchName: z.string(),
   parentTicket: ticketReferenceSchema.extend({ description: z.string() }).nullable(),
-  children: z.array(ticketReferenceSchema.extend({ pullUrls: z.array(z.string()) })),
+  children: z.array(
+    ticketReferenceSchema.extend({
+      pullUrls: z.array(z.string()),
+      blockedBy: z.array(ticketReferenceSchema),
+    }),
+  ),
   pulls: z.array(ticketPullSchema),
 })
 export type TicketSummary = z.infer<typeof ticketSummarySchema>
@@ -58,6 +76,11 @@ export const linearStatusSchema = z.object({
   detail: z.string(),
 })
 export type LinearStatus = z.infer<typeof linearStatusSchema>
+
+/** Completed and cancelled issues no longer block anything. */
+export function ticketFinished(state: { type: string }): boolean {
+  return state.type === 'completed' || state.type === 'canceled'
+}
 
 /** Linear stores collapsible sections as `+++`, but its API returns them as `>>>`. */
 export function linearMarkdown(description: string): string {

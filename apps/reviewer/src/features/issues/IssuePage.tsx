@@ -1,12 +1,20 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ArrowLeft, ArrowUpRight, GitPullRequest } from 'lucide-react'
-import { Badge } from '~/components/ui/badge'
 import { getTicket } from '../../../shared/api/tickets'
 import type { Ticket } from '../../../shared/domain/tickets'
 import { TicketMarkdown } from '../../components/TicketMarkdown'
 import { issuePath, issuesPath, reviewPath } from '../../lib/routes'
 import { useApiQuery } from '../../lib/useApiQuery'
+import {
+  BlockerChips,
+  IssueLabels,
+  IssueReferenceLine,
+  PriorityIcon,
+  ProgressChip,
+  PullCount,
+  StatusIcon,
+} from './IssueParts'
 import './issues.css'
 
 export function IssuePage({
@@ -39,85 +47,134 @@ export function IssuePage({
         <Link className="back-to-inbox" to={issuesPath()}>
           <ArrowLeft size={14} /> All issues
         </Link>
-        <IssueHeader ticket={ticket} />
-        <IssueFamily ticket={ticket} />
+        {ticket.parent && (
+          <Link className="issue-breadcrumb muted" to={issuePath(ticket.parent.identifier)}>
+            Part of <StatusIcon state={ticket.parent.state} />
+            <span>{ticket.parent.identifier}</span>
+            <span className="issue-title">{ticket.parent.title}</span>
+            <ProgressChip progress={ticket.parent.progress} />
+          </Link>
+        )}
+        <IssueHeader ticket={ticket} actions={renderReview(ticket, query.reload)} />
+        <IssueRelations ticket={ticket} />
         {ticket.description.trim() ? (
           <TicketMarkdown markdown={ticket.description} label="Issue description" />
         ) : (
           <p className="muted">This issue has no description yet.</p>
         )}
       </section>
-      <aside className="issue-review">{renderReview(ticket, query.reload)}</aside>
     </div>
   )
 }
 
-function IssueHeader({ ticket }: { ticket: Ticket }) {
+function IssueHeader({ ticket, actions }: { ticket: Ticket; actions: ReactNode }) {
   return (
     <header className="issue-header">
-      <div className="issue-meta muted">
-        <span>{ticket.identifier}</span>
-        <Badge variant="outline">{ticket.state.name}</Badge>
-        {ticket.assignee && <span>{ticket.assignee}</span>}
-        {ticket.project && <span>{ticket.project}</span>}
-        {ticket.labels.map((label) => (
-          <Badge key={label} variant="secondary">
-            {label}
-          </Badge>
-        ))}
+      <div className="issue-heading">
+        <h1>{ticket.title}</h1>
+        <div className="issue-header-actions">{actions}</div>
+      </div>
+      <div className="issue-meta">
+        <span className="issue-chip">{ticket.identifier}</span>
+        <span className="issue-chip" style={{ color: ticket.state.color }}>
+          <StatusIcon state={ticket.state} />
+          <span className="issue-state-name">{ticket.state.name}</span>
+        </span>
+        {ticket.priority > 0 && (
+          <span className="issue-chip">
+            <PriorityIcon priority={ticket.priority} />
+          </span>
+        )}
+        <BlockerChips blockedBy={ticket.blockedBy} blocking={ticket.blocking} />
+        <IssueLabels labels={ticket.labels} />
+        {ticket.assignee && <span className="muted">{ticket.assignee}</span>}
+        {ticket.project && <span className="muted">{ticket.project}</span>}
         <a href={ticket.url} target="_blank" rel="noreferrer" title="Open in Linear">
           Linear <ArrowUpRight size={13} aria-hidden="true" />
         </a>
       </div>
-      <h1>{ticket.title}</h1>
     </header>
   )
 }
 
-function IssueFamily({ ticket }: { ticket: Ticket }) {
-  if (!ticket.parentTicket && !ticket.children.length && !ticket.pulls.length) return null
+/** What holds this issue up, what it holds up, its sub-issues and its pull requests. */
+function IssueRelations({ ticket }: { ticket: Ticket }) {
+  const { blockedBy, blocking, children, pulls } = ticket
+  if (!blockedBy.length && !blocking.length && !children.length && !pulls.length) return null
   return (
     <div className="issue-family">
-      {ticket.parentTicket && (
-        <p>
-          Part of{' '}
-          <Link to={issuePath(ticket.parentTicket.identifier)}>
-            {ticket.parentTicket.identifier} {ticket.parentTicket.title}
-          </Link>
-        </p>
-      )}
-      {ticket.pulls.length > 0 && (
-        <ul aria-label="Linked pull requests">
-          {ticket.pulls.map((pull) => (
-            <li key={pull.url}>
-              <GitPullRequest size={14} aria-hidden="true" />
-              <Link to={reviewPath({ url: pull.url, filter: 'mine' })}>
-                {pull.repository}#{pull.number} {pull.title}
-              </Link>
-              <span className="muted"> · {pull.state}</span>
-            </li>
+      {blockedBy.length > 0 && (
+        <IssueSection title="Blocked by" tone="blocked">
+          {blockedBy.map((issue) => (
+            <IssueReferenceLine key={issue.identifier} issue={issue} />
           ))}
-        </ul>
+        </IssueSection>
       )}
-      {ticket.children.length > 0 && (
-        <details className="issue-children" open={ticket.children.length <= 12}>
-          <summary>{ticket.children.length} sub-issues</summary>
-          <ul>
-            {ticket.children.map((child) => (
-              <li key={child.identifier}>
-                <Link to={issuePath(child.identifier)}>
-                  {child.identifier} {child.title}
-                </Link>
-                <span className="muted">
-                  {' '}
-                  · {child.state.name}
-                  {child.pullUrls.length ? ` · ${String(child.pullUrls.length)} PR` : ' · no PR'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
+      {blocking.length > 0 && (
+        <IssueSection title="Blocking" tone="blocking">
+          {blocking.map((issue) => (
+            <IssueReferenceLine key={issue.identifier} issue={issue} />
+          ))}
+        </IssueSection>
+      )}
+      {children.length > 0 && (
+        <IssueSection
+          title="Sub-issues"
+          extra={<ProgressChip progress={ticket.progress} />}
+          collapsible={children.length > 12}
+        >
+          {children.map((child) => (
+            <IssueReferenceLine key={child.identifier} issue={child}>
+              <BlockerChips blockedBy={child.blockedBy} blocking={[]} />
+              <span className="issue-spacer" />
+              <PullCount count={child.pullUrls.length} />
+            </IssueReferenceLine>
+          ))}
+        </IssueSection>
+      )}
+      {pulls.length > 0 && (
+        <IssueSection title="Pull requests">
+          {pulls.map((pull) => (
+            <Link
+              key={pull.url}
+              className="issue-line"
+              to={reviewPath({ url: pull.url, filter: 'mine' })}
+            >
+              <span className="issue-identifier">#{pull.number}</span>
+              <GitPullRequest size={14} className="issue-pull-icon" data-state={pull.state} />
+              <span className="issue-title">{pull.title || pull.url}</span>
+              <span className="issue-spacer" />
+              <span className="muted">
+                {pull.repository} · {pull.state}
+              </span>
+            </Link>
+          ))}
+        </IssueSection>
       )}
     </div>
+  )
+}
+
+function IssueSection({
+  title,
+  tone,
+  extra,
+  collapsible = false,
+  children,
+}: {
+  title: string
+  tone?: 'blocked' | 'blocking'
+  extra?: ReactNode
+  collapsible?: boolean
+  children: ReactNode
+}) {
+  return (
+    <details className="issue-section" data-tone={tone} open={!collapsible}>
+      <summary>
+        {title}
+        {extra}
+      </summary>
+      {children}
+    </details>
   )
 }

@@ -17,16 +17,40 @@ vi.mock('../server/adapters/reviewWorkspaces', () => ({
 }))
 
 const ticket = fixtureTicket()
+const blocker = {
+  identifier: 'SCH-755',
+  title: 'Open a receiving account',
+  url: 'https://linear.app/clinic/issue/SCH-755/receiving-account',
+  state: { name: 'In Review', type: 'started', color: '#5e6ad2' },
+}
 function issueNode() {
+  const done = { state: { type: 'completed' } }
   return {
     ...ticket,
+    subIssueSortOrder: 1,
     assignee: { name: 'Avery Example' },
     project: null,
-    labels: { nodes: [{ name: 'ready-for-agent' }] },
-    parent: { identifier: 'SCH-750' },
+    labels: { nodes: ticket.labels },
+    parent: { ...ticket.parentTicket, children: { nodes: [done, { state: { type: 'started' } }] } },
+    children: { nodes: [] },
+    relations: { nodes: [] },
+    inverseRelations: {
+      nodes: [
+        { type: 'blocks', issue: blocker },
+        { type: 'related', issue: { ...blocker, identifier: 'SCH-756' } },
+        {
+          type: 'blocks',
+          issue: {
+            ...blocker,
+            identifier: 'SCH-757',
+            state: { ...blocker.state, type: 'completed' },
+          },
+        },
+      ],
+    },
     attachments: { nodes: [{ url: 'https://github.com/acme/app/pull/9' }] },
     parentTicket: ticket.parentTicket,
-    children: { nodes: [] },
+    subIssues: { nodes: [] },
   }
 }
 const linear: Linear = {
@@ -60,12 +84,18 @@ describe('ticket API', () => {
     })
     try {
       const list = (await (await fetch(`${app.url}/api/tickets?view=assigned`)).json()) as {
-        tickets: { identifier: string; pullUrls: string[] }[]
+        tickets: unknown[]
       }
       expect(list.tickets).toEqual([
         expect.objectContaining({
           identifier: 'SCH-760',
           pullUrls: ['https://github.com/acme/app/pull/9'],
+          parent: expect.objectContaining({
+            identifier: 'SCH-750',
+            progress: { done: 1, total: 2 },
+          }) as unknown,
+          blockedBy: [blocker],
+          blocking: [],
         }),
       ])
       const invalid = await fetch(`${app.url}/api/tickets/sch-760`)
