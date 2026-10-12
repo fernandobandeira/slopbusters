@@ -3,4 +3,5 @@
 dist
 node_modules
 src/vendor
+vendor/t3-engine
 pnpm-lock.yaml

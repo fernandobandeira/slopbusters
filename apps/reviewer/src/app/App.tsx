@@ -10,6 +10,7 @@ import { InboxPullActions } from './InboxPullActions'
 import { useReviewLaunch } from './useReviewLaunch'
 import type { ReviewCompanion } from '../components/StartReviewButton'
 import { PullReviewActions } from './PullReviewActions'
+import { LinusChatButton } from '../features/linus/LinusChatButton'
 import { IssueRoute, IssuesRoute, LinkedTicketLink } from './IssueRoutes'
 import { useApiQuery } from '../lib/useApiQuery'
 import { usePullReview } from '../features/review/usePullReview'
@@ -440,6 +441,7 @@ export function App() {
                             startReview(companion, pull.url)
                           }}
                         />
+                        <LinusChatButton pullId={pull.id} number={pull.number} onError={setError} />
                       </>
                     }
                     renderCompanion={({ draft, setDraft, ready, openReview, focusLine }) =>

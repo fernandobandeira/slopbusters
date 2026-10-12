@@ -13,7 +13,8 @@
     "resolveJsonModule": true,
     "paths": {
       "~/*": ["./src/vendor/t3/apps/web/src/*"],
-      "@t3tools/shared/*": ["./src/vendor/t3/packages/shared/src/*"]
+      "@t3tools/shared/*": ["./src/vendor/t3/packages/shared/src/*"],
+      "@t3tools/contracts": ["./vendor/t3-engine/packages/contracts/src/index.ts"]
     },
     "types": ["node", "vite/client"],
     "noUnusedLocals": true,

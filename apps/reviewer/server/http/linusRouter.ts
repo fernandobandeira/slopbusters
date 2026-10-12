@@ -5,7 +5,7 @@ import { UserError } from '../errors'
 import type { Services } from '../services'
 import { handle } from './contractRouter'
 
-export function linusRouter({ linusJobs, store }: Services) {
+export function linusRouter({ linusJobs, store, startLinusChat }: Services) {
   const router = Router()
   handle(router, routes.latestLinus, ({ query }) => ({
     session: linusJobs.latest(query.repository) ?? null,
@@ -34,5 +34,6 @@ export function linusRouter({ linusJobs, store }: Services) {
     return linusJobs.retry(params.id)
   })
   handle(router, routes.cancelLinus, ({ params }) => linusJobs.cancel(params.id))
+  handle(router, routes.startLinusChat, ({ params }) => startLinusChat(params.id))
   return router
 }

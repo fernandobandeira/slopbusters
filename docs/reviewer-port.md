@@ -8,6 +8,8 @@ The port copies the review app's tracked React, Express, shared TypeScript, test
 
 T3 Code-derived files stay under `apps/reviewer/src/vendor/t3` at their upstream paths, verbatim at the commit recorded in its `manifest.json`. Local changes are unified diffs under `patches/`, shims are listed in the manifest, and `scripts/sync-t3.mjs` checks, records, and syncs them (`pnpm t3:check`, `pnpm t3:patch`, `pnpm t3:sync`). The file list and the reasons for each patch are in [the app's notices](../apps/reviewer/THIRD_PARTY_NOTICES.md). The preserved license is the upstream `LICENSE` at that commit and is synced with the rest of the tree.
 
+The server's T3 Code engine client uses upstream `packages/contracts`, vendored verbatim under `apps/reviewer/vendor/t3-engine` at the release tag of the engine it targets (`pnpm t3:sync --tree engine <tag>`). The same script checks that the reviewer's `effect` version matches that release.
+
 The pinned MIT license permits copying, modification, and distribution with its copyright and permission notice included. Those notices remain in the source tree, and production builds emit the full T3 license as `T3_CODE_LICENSE.txt`. The requested one-line credit appears at the bottom of the repository README. The application uses the existing Slopbusters logo for its sidebar, favicon, and desktop icons.
 
 Review Room's original MIT copyright notice is retained in the app license, alongside a Slopbusters contributor notice. The app license is scoped to the imported app; pre-existing skills, artwork, and archived material are not relicensed by this change.

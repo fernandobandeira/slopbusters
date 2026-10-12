@@ -29,7 +29,7 @@ import { createGandalfPlanner } from './features/gandalf/gandalfPlan'
 import { openConflictWorkspace } from './adapters/conflictWorkspace'
 import { loadCiFailures } from './adapters/ciFailures'
 import { createGitIdentity } from './adapters/gitIdentity'
-import { logError } from './errors'
+import { logError, UserError } from './errors'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
 import type { PullRequest } from '../shared/domain/types'
 import { LinearAuth } from './adapters/linearAuth'
@@ -39,6 +39,9 @@ import { defaultBranchSnapshot } from './features/tickets/defaultBranch'
 import { ticketEvidence } from './features/jobs/ticketEvidence'
 import { TicketReviewJobs } from './features/jobs/ticketReviewJobs'
 import { LINEAR_CLIENT_ID } from './linearApplication'
+import { EngineConnection } from './adapters/t3Engine/engineConnection'
+import { EngineThreads, type EngineThreadOperations } from './adapters/t3Engine/engineThreads'
+import { startLinusChat } from './features/linus/linusChat'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   dataDirectory: string
@@ -54,6 +57,8 @@ export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   linear?: Linear
   linearClientId?: string
   linearCallbackPort?: number
+  /** The user's T3 Code engine; replaced in tests. */
+  engine?: EngineThreadOperations
 }
 
 export function createServices(options: ReviewerServerOptions) {
@@ -139,6 +144,8 @@ export function createServices(options: ReviewerServerOptions) {
       }),
   })
   const organizationJobs = new OrganizationJobs(store, agentSessions)
+  const engine =
+    options.engine ?? new EngineThreads(new EngineConnection({ credentials: store.engine }))
   return {
     store,
     github,
@@ -158,6 +165,11 @@ export function createServices(options: ReviewerServerOptions) {
     linearAuth,
     tickets,
     jobs,
+    startLinusChat: (pullId: string) => {
+      const model = store.getPreferences().organization
+      if (!model) throw new UserError('Choose your primary model in Settings first.')
+      return startLinusChat(engine, store.getPull(pullId), model)
+    },
     navigateSource: (pull: PullRequest, request: Parameters<typeof navigator>[1]) =>
       navigator(pull, request),
     warmSource: (pull: PullRequest) => {

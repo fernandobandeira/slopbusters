@@ -36,6 +36,11 @@ export const LSP_IDLE_MS = 120_000
 export const MAX_IDLE_LANGUAGE_SESSIONS = 3
 export const TOOL_STATUS_TIMEOUT_MS = 10_000
 export const TOOL_VERSION_TIMEOUT_MS = 5000
+export const T3_ENGINE_REQUEST_TIMEOUT_MS = 10_000
+export const T3_ENGINE_PAIR_TIMEOUT_MS = 60_000
+/** Preparing a pull request worktree can fetch the PR head, so engine calls get longer. */
+export const T3_ENGINE_CALL_TIMEOUT_MS = 180_000
+export const T3_ENGINE_TOKEN_REFRESH_MARGIN_MS = 24 * 60 * 60 * 1000
 export const MAX_DIFF_FILE_CACHE_ENTRIES = 60
 export const MAX_SOURCE_FILE_CACHE_ENTRIES = 1000
 export const MAX_SOURCE_TREE_CACHE_ENTRIES = 20

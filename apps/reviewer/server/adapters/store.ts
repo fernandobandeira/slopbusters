@@ -22,6 +22,7 @@ import { gandalfSessionSchema, type GandalfSession } from '../../shared/domain/g
 import type { BobSession } from '../../shared/domain/bob'
 import { readSavedBobReviews } from './savedBobReviews'
 import { migrateTicketStore, TicketStore } from './ticketStore'
+import { EngineCredentialStore } from './t3Engine/engineCredentials'
 import type { LinusRecommendation, LinusSession } from '../../shared/domain/linus'
 
 export class ReviewNotFoundError extends UserError {
@@ -39,6 +40,7 @@ export interface StoredDraft {
 export class ReviewerStore {
   private readonly database: DatabaseSync
   readonly tickets: TicketStore
+  readonly engine: EngineCredentialStore
   constructor({ dataDirectory }: { dataDirectory: string }) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 })
     const filename = join(dataDirectory, 'reviewer.sqlite')
@@ -87,6 +89,7 @@ export class ReviewerStore {
     if (version < 6) migrateReviewProgress(this.database)
     if (version < 7) migrateTicketStore(this.database)
     this.tickets = new TicketStore(this.database)
+    this.engine = new EngineCredentialStore(this.database)
   }
   savePull(pull: PullRequest): void {
     this.database

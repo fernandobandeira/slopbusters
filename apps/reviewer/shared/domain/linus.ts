@@ -70,6 +70,16 @@ export interface LinusSession {
   createdAt: string
 }
 
+/** A conversation with Linus about one PR, started in the user's T3 Code. */
+export interface LinusChat {
+  threadId: string
+  title: string
+  /** The T3 Code project whose checkout holds the PR worktree. */
+  project: string
+  /** False when a reused worktree kept local commits or changes and is not at the PR head. */
+  onPullRequestHead: boolean
+}
+
 export interface LinusRecommendation {
   sessionId: string
   createdAt: string

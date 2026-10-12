@@ -26,6 +26,8 @@ CI indicators and merge readiness show which PRs need attention. Open their deta
 
 `pnpm build` builds the desktop app; `pnpm desktop:start` opens it and `pnpm desktop:pack` creates a local application bundle. `pnpm dev` still runs the browser UI at http://localhost:4310; `pnpm start` serves its last build at http://localhost:4311. See the [desktop guide](apps/desktop/README.md) and [reviewer guide](apps/reviewer/README.md) for details. The UI reviews GitHub pull requests and Linear issues: connect Linear with one click, and Steve Jobs reviews a ticket, asks what only you can answer, and folds your answers into a rewrite you can apply. The skills below also cover plans, specs, and PR preparation.
 
+**Chat with Linus** on a pull request opens a conversation in your running [T3 Code](https://github.com/pingdotgg/t3code). Slopbusters pairs with T3 Code once, checks the PR out in a worktree of the matching T3 Code project, links the thread to the PR, and starts Linus there with your primary model. Add the repository as a project in T3 Code first.
+
 The diff viewer and UI components include MIT-licensed code from [T3 Code](https://github.com/pingdotgg/t3code). Its copyright and license notices are preserved in source and builds. See [the app's notices](apps/reviewer/THIRD_PARTY_NOTICES.md) and the [port and publication review](docs/reviewer-port.md) for source provenance and license scope.
 
 ## Install

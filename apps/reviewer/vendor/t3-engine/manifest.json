@@ -1,0 +1,21 @@
+{
+  "repository": "https://github.com/pingdotgg/t3code",
+  "ref": "v0.0.45",
+  "commit": "6c8fed35dded9ff71c5b46807125457acbb76be6",
+  "files": [
+    {
+      "path": "LICENSE"
+    },
+    {
+      "path": "packages/contracts/package.json"
+    },
+    {
+      "path": "packages/contracts/src",
+      "directory": true,
+      "exclude": [
+        ".test.ts"
+      ]
+    }
+  ],
+  "shims": []
+}

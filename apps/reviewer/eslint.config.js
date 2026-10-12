@@ -4,7 +4,7 @@ import hooks from 'eslint-plugin-react-hooks'
 import globals from 'globals'
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', '.data', '.reference', 'src/vendor'] },
+  { ignores: ['dist', 'node_modules', '.data', '.reference', 'src/vendor', 'vendor/t3-engine'] },
   js.configs.recommended,
   { files: ['**/*.{js,cjs,mjs}'], languageOptions: { globals: globals.node } },
   ...tseslint.configs.strictTypeChecked.map((config) => ({ ...config, files: ['**/*.{ts,tsx}'] })),

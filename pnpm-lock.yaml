@@ -47,6 +47,9 @@ importers:
       diff:
         specifier: ^9.0.0
         version: 9.0.0
+      effect:
+        specifier: 4.0.0-rc.115
+        version: 4.0.0-rc.115
       express:
         specifier: ^5.2.1
         version: 5.2.1
@@ -1745,6 +1748,9 @@ packages:
 
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
+
+  effect@4.0.0-rc.115:
+    resolution: {integrity: sha512-ogYulZ5ffeOzrJqQrG0XOkDO5lKn2s9KNHhoxJy/6wKUkF0i12dlVXWA9TgsgQ+zV/JzizyG0+XMPepZEQX6vw==}
 
   ejs@3.1.10:
     resolution: {integrity: sha512-UeJmFfOrAQS8OJWPZ4qtgHyWExa088/MtK5UEyoJGFH67cDEXkZSviOiKRCZ4Xij0zxI3JECgYs3oKx+AizQBA==}
@@ -5190,6 +5196,8 @@ snapshots:
       readable-stream: 2.3.8
 
   ee-first@1.1.1: {}
+
+  effect@4.0.0-rc.115: {}
 
   ejs@3.1.10:
     dependencies:
