@@ -1,7 +1,7 @@
 import type { RefObject, Dispatch, SetStateAction, ReactNode } from 'react'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
-import { StyledDiffCodeView } from '~/components/diffs/StyledDiffCodeView'
+import { ReviewDiffCodeView } from '../../components/ReviewDiffCodeView'
 import {
   DiffSide,
   type PullRequest,
@@ -78,7 +78,7 @@ export function ReviewDiffViewer({
 }: Props) {
   const { themeId, resolvedTheme } = useReviewerTheme()
   return (
-    <StyledDiffCodeView
+    <ReviewDiffCodeView
       className="viewer"
       viewerRef={viewerRef}
       items={annotated.items}

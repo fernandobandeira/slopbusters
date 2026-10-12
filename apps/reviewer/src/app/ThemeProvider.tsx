@@ -97,7 +97,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }),
     [themeId, setTheme, error, preferencesError],
   )
-  const runtime = useMemo(() => ({ themeId, createWorker, contextMenuToken }), [themeId])
+  const runtime = useMemo(
+    () => ({ resolvedTheme: themeId, createWorker, contextMenuToken }),
+    [themeId],
+  )
   return (
     <ThemeContext value={value}>
       <DiffRuntimeContext value={runtime}>{children}</DiffRuntimeContext>

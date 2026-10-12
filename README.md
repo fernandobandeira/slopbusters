@@ -78,6 +78,7 @@ Both detect which agents you have installed and copy the skills into the right p
 skills/<name>/SKILL.md        # every skill lives here; all agents share it
 apps/reviewer/               # local React + Express review app
 apps/desktop/                # Electron runtime and packaging
+apps/reviewer/src/vendor/t3/ # verbatim T3 Code files; see manifest.json, patches/, pnpm t3:sync
 docs/reviewer-port.md         # port provenance and public-source review
 .claude-plugin/               # Claude Code plugin + marketplace
 .codex-plugin/                # Codex plugin

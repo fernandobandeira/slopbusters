@@ -1,7 +1,7 @@
 import { Provider } from '../../../shared/domain/types'
 import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router'
-import { OpenAI, ClaudeAI } from '~/components/ProviderLogos'
+import { OpenAI, ClaudeAI } from '~/components/Icons'
 import type { AgentRun } from '../../../shared/domain/agentSession'
 import { getAgentSession } from '../../../shared/api/agentSessions'
 import { useApiQuery } from '../../lib/useApiQuery'

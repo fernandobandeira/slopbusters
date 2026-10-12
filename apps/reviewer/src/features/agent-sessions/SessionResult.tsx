@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { SessionMarkdown } from '~/components/chat/SessionMarkdown'
+import { SessionMarkdown } from '../../components/SessionMarkdown'
 
 const resultSchema = z.object({
   summary: z.string().optional(),

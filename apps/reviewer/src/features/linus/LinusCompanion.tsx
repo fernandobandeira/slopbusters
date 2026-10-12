@@ -29,7 +29,7 @@ import {
 import type { Preferences } from '../../../shared/domain/preferences'
 import { Button } from '~/components/ui/button'
 import { PullDescription } from '../review/PullDescription'
-import { StyledDiffCodeView } from '~/components/diffs/StyledDiffCodeView'
+import { ReviewDiffCodeView } from '../../components/ReviewDiffCodeView'
 import { diffItems } from '../review/diff/diffItems'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { linusReviewTurns } from './linusReviewTurns'
@@ -62,7 +62,7 @@ function LinusDiffEvidence({
     [pull, file, hunk],
   )
   return (
-    <StyledDiffCodeView
+    <ReviewDiffCodeView
       key={`${pull.id}:${hunk.id}`}
       className="linus-diff"
       items={items}

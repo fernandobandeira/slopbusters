@@ -1,7 +1,7 @@
 import { Provider } from '../../../shared/domain/types'
 import { providerLabel } from '../../../shared/domain/preferences'
 import { Link } from 'react-router'
-import { OpenAI, ClaudeAI } from '~/components/ProviderLogos'
+import { OpenAI, ClaudeAI } from '~/components/Icons'
 import { useAgentSessions } from './useAgentSessions'
 import { modelName, sessionPath } from './sessionPresentation'
 import { AgentState } from './AgentState'

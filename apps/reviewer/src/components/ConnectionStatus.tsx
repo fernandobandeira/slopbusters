@@ -1,6 +1,6 @@
 import { UserRound } from 'lucide-react'
 import type { AppStatus, ToolStatus } from '../../shared/domain/types'
-import { OpenAI, ClaudeAI } from '~/components/ProviderLogos'
+import { OpenAI, ClaudeAI } from '~/components/Icons'
 import '../connectionStatus.css'
 
 function providerState(status: ToolStatus | undefined) {

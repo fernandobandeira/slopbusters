@@ -57,6 +57,13 @@ export default defineConfig({
       },
     },
   ],
-  resolve: { alias: { '~': fileURLToPath(new URL('./src/vendor/t3', import.meta.url)) } },
+  resolve: {
+    alias: {
+      '~': fileURLToPath(new URL('./src/vendor/t3/apps/web/src', import.meta.url)),
+      '@t3tools/shared': fileURLToPath(
+        new URL('./src/vendor/t3/packages/shared/src', import.meta.url),
+      ),
+    },
+  },
   server: { port: 4310, strictPort: true, proxy: { '/api': 'http://127.0.0.1:4311' } },
 })

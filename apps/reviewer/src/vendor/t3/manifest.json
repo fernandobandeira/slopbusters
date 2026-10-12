@@ -1,0 +1,68 @@
+{
+  "repository": "https://github.com/pingdotgg/t3code",
+  "commit": "5753207d53362608f281738eda3a9faf4e13b6be",
+  "files": [
+    {
+      "path": "LICENSE"
+    },
+    {
+      "path": "apps/web/src/components/DiffWorkerPoolProvider.tsx"
+    },
+    {
+      "path": "apps/web/src/components/Icons.tsx"
+    },
+    {
+      "path": "apps/web/src/components/chat/TimelineSystemDivider.tsx"
+    },
+    {
+      "path": "apps/web/src/components/diffs/StyledDiffCodeView.tsx"
+    },
+    {
+      "path": "apps/web/src/components/ui/badge.tsx"
+    },
+    {
+      "path": "apps/web/src/components/ui/button.tsx"
+    },
+    {
+      "path": "apps/web/src/components/ui/dialog-styles.ts"
+    },
+    {
+      "path": "apps/web/src/components/ui/dialog.tsx"
+    },
+    {
+      "path": "apps/web/src/components/ui/input.tsx"
+    },
+    {
+      "path": "apps/web/src/components/ui/scroll-area.tsx"
+    },
+    {
+      "path": "apps/web/src/components/ui/tooltip.tsx"
+    },
+    {
+      "path": "apps/web/src/lib/diffRendering.ts"
+    },
+    {
+      "path": "apps/web/src/lib/syntaxHighlighting.ts"
+    },
+    {
+      "path": "packages/shared/src/gitPatchPath.ts"
+    }
+  ],
+  "shims": [
+    {
+      "path": "apps/web/src/hooks/useTheme.ts",
+      "replaces": "apps/web/src/hooks/useTheme.ts",
+      "note": "Upstream reads a theme store. The shim is a React context the app fills with its selected diff theme and worker factory."
+    },
+    {
+      "path": "apps/web/src/lib/utils.ts",
+      "replaces": "apps/web/src/lib/utils.ts",
+      "note": "Upstream imports @t3tools/contracts and effect. Only cn and its Tailwind merge configuration are kept."
+    },
+    {
+      "path": "apps/web/src/lib/windowControlsOverlay.ts",
+      "replaces": "apps/web/src/lib/windowControlsOverlay.ts",
+      "note": "Upstream measures the Electron title bar. The reviewer has no native title bar inset."
+    }
+  ]
+}

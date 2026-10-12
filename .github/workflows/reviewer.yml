@@ -54,6 +54,7 @@ jobs:
       - run: pnpm audit:check
       - run: pnpm dedupe:check
       - run: pnpm licenses:check
+      - run: pnpm t3:check
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build

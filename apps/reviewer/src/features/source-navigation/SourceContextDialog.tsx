@@ -10,7 +10,7 @@ import type {
 import type { PullFileContent } from '../../../shared/domain/fileContent'
 import { DiffSide, type PullRequest } from '../../../shared/domain/types'
 import { Dialog, DialogPopup, DialogHeader, DialogTitle } from '~/components/ui/dialog'
-import { StyledDiffCodeView } from '~/components/diffs/StyledDiffCodeView'
+import { ReviewDiffCodeView } from '../../components/ReviewDiffCodeView'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { call, message } from '../../lib/api'
 import { clickedSymbol, type CodeSymbol } from '../review/diff/codeSymbols'
@@ -313,7 +313,7 @@ export function SourceContextDialog({
               </div>
             )}
             <div className="source-context-body">
-              <StyledDiffCodeView
+              <ReviewDiffCodeView
                 key={sourceId}
                 className="source-context-viewer"
                 viewerRef={viewer}

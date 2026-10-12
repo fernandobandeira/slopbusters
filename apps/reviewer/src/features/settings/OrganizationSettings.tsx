@@ -7,7 +7,7 @@ import {
   providerLabel,
   type OrganizationPreferences,
 } from '../../../shared/domain/preferences'
-import { OpenAI, ClaudeAI } from '~/components/ProviderLogos'
+import { OpenAI, ClaudeAI } from '~/components/Icons'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { message } from '../../lib/api'

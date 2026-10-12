@@ -6,7 +6,8 @@
 - I/O belongs in `server/adapters`. Git uses `hardenedGit`; GitHub uses the injected `GitHub` object's `rest`, `graphql` and `paginate`. Build on the bounded process runner.
 - Services and caches belong to a server instance. Reuse `createCache` for LRU bounds, bytes, TTLs and concurrent loads; do not add module-global request caches.
 - Only `UserError` carries a message safe to show. Log unexpected failures and return a generic 500. Best-effort fallbacks must report a warning or log the failure.
-- Vendor code is a leaf and receives app behavior through props or context. Import T3 code through `~`.
+- Vendor code is a leaf and receives app behavior through props or context. Import T3 code through `~` (their `apps/web/src`) or `@t3tools/shared` (their `packages/shared/src`).
+- `src/vendor/t3` mirrors upstream T3 Code paths and is kept verbatim at the commit in its `manifest.json`. Prefer wrapping a vendored module (see `src/components/ReviewDiffCodeView.tsx`) over editing it. If you must edit one, keep the change minimal, mark it with a `Slopbusters:` comment, and run `pnpm t3:patch` from the repository root so it is recorded under `src/vendor/t3/patches`; `pnpm t3:check` runs in CI. Shims listed in the manifest are ours and never synced. To take upstream changes, run `pnpm t3:diff` then `pnpm t3:sync [ref]`, resolve any conflict markers, run `pnpm t3:patch`, and then lint, test and build. To vendor another upstream file, run `pnpm t3:add <upstream path>`.
 - Feature modules stay inside their feature. Compose features in `src/app`; shared browser utilities live in `src/lib`, reusable components in `src/components`.
 - Keep entry points short; extract hooks and components around a named behavior. Put high-level operations before details.
 - Use `server/limits.ts` for server resource limits and timeouts. Do not execute repository configuration, hooks, filters or install scripts during source inspection.

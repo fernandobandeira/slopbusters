@@ -8,7 +8,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 import { AgentSessionCard } from '../src/features/agent-sessions/AgentSessionCard'
 import { SessionsPage } from '../src/features/agent-sessions/SessionsPage'
-import { SessionMarkdown } from '~/components/chat/SessionMarkdown'
+import { SessionMarkdown } from '../src/components/SessionMarkdown'
 import { Provider } from '../shared/domain/types'
 import type { AgentRun, AgentEvent } from '../shared/domain/agentSession'
 

@@ -1,15 +1,33 @@
-import { WorkerPoolContext, useWorkerPool } from "@pierre/diffs/react"
-import { WorkerPoolManager } from "@pierre/diffs/worker"
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react"
-import { useTheme } from "../hooks/useTheme"
-import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering"
-import { PREFERRED_HIGHLIGHTER } from "../lib/syntaxHighlighting"
+import { WorkerPoolContext, useWorkerPool } from "@pierre/diffs/react";
+import { WorkerPoolManager } from "@pierre/diffs/worker";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { useTheme } from "../hooks/useTheme";
+import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering";
+import { PREFERRED_HIGHLIGHTER } from "../lib/syntaxHighlighting";
 
+// Slopbusters: a plain Error stands in for upstream's effect Schema.TaggedError.
 export class DiffWorkerError extends Error {
   readonly operation: "create-worker" | "get-render-options" | "set-render-options";
-  constructor(params: { operation: DiffWorkerError["operation"]; themeName: DiffThemeName; cause: unknown }) {
-    super(`Diff worker operation ${params.operation} failed for theme ${params.themeName}.`, { cause: params.cause });
-    this.operation = params.operation;
+  readonly themeName: DiffThemeName;
+
+  constructor(fields: {
+    operation: DiffWorkerError["operation"];
+    themeName: DiffThemeName;
+    cause: unknown;
+  }) {
+    super(`Diff worker operation ${fields.operation} failed for theme ${fields.themeName}.`, {
+      cause: fields.cause,
+    });
+    this.name = "DiffWorkerError";
+    this.operation = fields.operation;
+    this.themeName = fields.themeName;
   }
 }
 
@@ -23,12 +41,21 @@ let sharedWorkerPool:
   | undefined;
 
 /** Create workers after a viewer commits, then reuse them across short panel closures. */
-function acquireDiffWorkerPool(themeName: DiffThemeName, poolSize: number, createWorker: () => Worker) {
+// Slopbusters: the app injects its worker factory instead of Pierre's stock worker.
+function acquireDiffWorkerPool(
+  themeName: DiffThemeName,
+  poolSize: number,
+  createWorker: () => Worker,
+) {
   const entry = (sharedWorkerPool ??= {
     pool: new WorkerPoolManager(
       {
         workerFactory: () => {
-          return createWorker();
+          try {
+            return createWorker();
+          } catch (cause) {
+            throw new DiffWorkerError({ operation: "create-worker", themeName, cause });
+          }
         },
         poolSize,
         totalASTLRUCacheSize: 240,
@@ -114,8 +141,8 @@ function DiffWorkerReady({ children }: { children?: ReactNode }) {
 }
 
 export function DiffWorkerPoolProvider({ children }: { children?: ReactNode }) {
-  const { themeId, createWorker } = useTheme();
-  const diffThemeName = resolveDiffThemeName(themeId);
+  const { resolvedTheme, createWorker } = useTheme();
+  const diffThemeName = resolveDiffThemeName(resolvedTheme);
   const workerPoolSize = useMemo(() => {
     const cores =
       typeof navigator === "undefined" ? 4 : Math.max(1, navigator.hardwareConcurrency || 4);

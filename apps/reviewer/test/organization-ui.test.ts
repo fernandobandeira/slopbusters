@@ -21,7 +21,7 @@ vi.mock('../src/features/review/useReviewDraft', () => ({
 vi.mock('../src/app/ThemeProvider', () => ({
   useReviewerTheme: () => ({ themeId: 'github-dark', resolvedTheme: 'dark' }),
 }))
-vi.mock('../src/vendor/t3/components/diffs/StyledDiffCodeView', () => ({
+vi.mock('~/components/diffs/StyledDiffCodeView', () => ({
   StyledDiffCodeView: () => createElement('div', null, 'Rendered diffs'),
 }))
 

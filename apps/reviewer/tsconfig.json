@@ -12,7 +12,8 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "paths": {
-      "~/*": ["./src/vendor/t3/*"]
+      "~/*": ["./src/vendor/t3/apps/web/src/*"],
+      "@t3tools/shared/*": ["./src/vendor/t3/packages/shared/src/*"]
     },
     "types": ["node", "vite/client"],
     "noUnusedLocals": true,

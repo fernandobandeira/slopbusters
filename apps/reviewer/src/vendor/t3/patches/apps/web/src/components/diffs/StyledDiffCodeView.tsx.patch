@@ -1,0 +1,34 @@
+--- a/apps/web/src/components/diffs/StyledDiffCodeView.tsx
++++ b/apps/web/src/components/diffs/StyledDiffCodeView.tsx
+@@ -12,8 +12,18 @@
+ import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
+ import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
+ 
++/** Slopbusters: row height shared by the stylesheet and the virtualizer's row metrics. */
++export const DIFF_LINE_HEIGHT = 22;
++
+ /** The app's diff stylesheet, shared by single-file renderers so their separators match. */
+ export const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
++[data-diff],
++[data-file] {
++  --diffs-line-height: ${DIFF_LINE_HEIGHT}px !important;
++  /* Line-height is computed on Pierre's host before this variable is overridden. */
++  line-height: ${DIFF_LINE_HEIGHT}px !important;
++}
++
+ :is(
+   [data-line],
+   [data-line-annotation],
+@@ -252,8 +262,11 @@
+             // rendered height, and the end of the list sat past the reachable scroll range —
+             // one clipped file row per expanded file above it.
+             paddingBottom: 8,
++            // Slopbusters: virtual row heights must match the stylesheet above.
++            lineHeight: DIFF_LINE_HEIGHT,
+           },
+-          layout: { paddingTop: 0, paddingBottom: 0, gap: 0 },
++          // Slopbusters: space between files and below the final file.
++          layout: { paddingTop: 0, paddingBottom: 24, gap: 24 },
+         }}
+       />
+     </DiffWorkerPoolProvider>
