@@ -50,7 +50,7 @@ interface ReviewRequest {
 }
 export async function reviewWithBob(request: ReviewRequest): Promise<BobAdvice> {
   const { pull, model, skill, signal, companion, repository } = request
-  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nYou are the independent ${companion ? 'companion' : 'primary'} reviewer. Inspect the code for yourself; a clean review is valid.\n\nPR snapshot:\n${reviewEvidence(pull, 'Bob')}${ticketInstructions(request.context)}`
+  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nYou are the independent ${companion ? 'companion' : 'primary'} reviewer. Inspect the code for yourself; a clean review is valid.\n\nPR snapshot:\n${reviewEvidence(pull)}${ticketInstructions(request.context)}`
   return validateBobAdvice(
     pull,
     await runStructured(model, prompt, bobAdviceSchema, signal, {
@@ -68,7 +68,7 @@ export async function reconcileWithBob(request: {
   observer?: ProviderObserver
 }): Promise<BobAdvice> {
   const { pending, model, skill, signal, repository } = request
-  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nReconcile both independent reviews against the original code. Verify findings by evidence, not votes. Deduplicate overlapping findings, discard unsupported assertions and stylistic preferences, keep actionable concrete fixes, and preserve material unresolved disagreements. Do not concatenate the lists. Keep stable finding IDs when retaining a finding.\n\nPR snapshot:\n${reviewEvidence(pending.pull, 'Bob')}${ticketInstructions(pending.context)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
+  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nReconcile both independent reviews against the original code. Verify findings by evidence, not votes. Deduplicate overlapping findings, discard unsupported assertions and stylistic preferences, keep actionable concrete fixes, and preserve material unresolved disagreements. Do not concatenate the lists. Keep stable finding IDs when retaining a finding.\n\nPR snapshot:\n${reviewEvidence(pending.pull)}${ticketInstructions(pending.context)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
   const advice = validateBobAdvice(
     pending.pull,
     await runStructured(model, prompt, bobAdviceSchema, signal, {

@@ -79,10 +79,4 @@ describe('Linus model inputs', () => {
     expect(result.limitations.join(' ')).toContain('Single-model review')
     expect(result.limitations.join(' ')).toContain('incomplete or unavailable')
   })
-  it('rejects oversized snapshots before starting a model call', async () => {
-    const pull = fixturePull()
-    pull.files[0]!.hunks[0]!.lines[0]!.text = 'x'.repeat(230_000)
-    await expect(reviewWithLinus(pull, primary, 'Skill', signal)).rejects.toThrow(/review limit/)
-    expect(runStructured).not.toHaveBeenCalled()
-  })
 })

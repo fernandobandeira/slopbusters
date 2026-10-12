@@ -1,4 +1,3 @@
-import { MAX_REVIEW_SNAPSHOT_CHARACTERS } from './limits'
 import { createHash } from 'node:crypto'
 import type { PullRequest } from '../shared/domain/types'
 
@@ -17,8 +16,8 @@ export function pullFingerprint(pull: PullRequest): string {
     .digest('hex')
 }
 
-export function reviewEvidence(pull: PullRequest, reviewer = 'Linus'): string {
-  const data = JSON.stringify({
+export function reviewEvidence(pull: PullRequest): string {
+  return JSON.stringify({
     url: pull.url,
     title: pull.title,
     description: pull.description,
@@ -44,9 +43,4 @@ export function reviewEvidence(pull: PullRequest, reviewer = 'Linus'): string {
     })),
     warnings: pull.warnings,
   })
-  if (data.length > MAX_REVIEW_SNAPSHOT_CHARACTERS)
-    throw new Error(
-      `This PR exceeds ${reviewer}’s review limit. Review a smaller PR or inspect the full diff manually.`,
-    )
-  return data
 }

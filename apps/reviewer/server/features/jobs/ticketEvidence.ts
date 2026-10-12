@@ -3,11 +3,7 @@ import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import type { Ticket } from '../../../shared/domain/tickets'
 import type { GitHub } from '../../adapters/github'
 import { logError } from '../../errors'
-import {
-  MAX_REVIEW_SNAPSHOT_CHARACTERS,
-  MAX_TICKET_CONTEXT_CHARACTERS,
-  MAX_TICKET_RELATIVE_CHARACTERS,
-} from '../../limits'
+import { MAX_TICKET_CONTEXT_CHARACTERS, MAX_TICKET_RELATIVE_CHARACTERS } from '../../limits'
 import { clip } from '../tickets/tickets'
 
 const pullBody = z.object({ body: z.string().nullable(), head: z.object({ ref: z.string() }) })
@@ -26,7 +22,7 @@ export async function ticketEvidence(
   signal?: AbortSignal,
 ): Promise<string> {
   const pulls = await Promise.all(ticket.pulls.map((pull) => pullEvidence(github, pull, signal)))
-  const evidence = JSON.stringify({
+  return JSON.stringify({
     ticket: {
       identifier: ticket.identifier,
       title: ticket.title,
@@ -53,11 +49,6 @@ export async function ticketEvidence(
     })),
     linkedPulls: pulls,
   })
-  if (evidence.length > MAX_REVIEW_SNAPSHOT_CHARACTERS)
-    throw new Error(
-      'This ticket and its linked PRs exceed Jobs’s review limit. Shorten the ticket or review it in parts.',
-    )
-  return evidence
 }
 
 async function pullEvidence(github: GitHub, pull: Ticket['pulls'][number], signal?: AbortSignal) {
