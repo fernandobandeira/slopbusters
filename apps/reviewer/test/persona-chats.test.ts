@@ -87,6 +87,7 @@ describe('continuing a PR review in T3 Code', () => {
       cwd: '/engine/repositories/example',
       url: pull.url,
       threadId: chat.threadId,
+      headSha: pull.headSha,
     })
     expect(startThread).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -215,6 +216,33 @@ describe('which review a PR chat continues', () => {
     })
 
     expect(host.firstMessage()).toContain('may not match the PR head')
+  })
+})
+
+describe("continuing in the user's own checkout", () => {
+  it("works in the user's own checkout when it already has the PR branch, and protects their changes", async () => {
+    const host = fakeHosts()
+    host.preparePullRequest.mockResolvedValue({
+      branch: 'feature',
+      worktreePath: null,
+      onPullRequestHead: false,
+    })
+
+    await continueInT3Code(host.hosts, {
+      sessions: sessionsWith({ bob: bobSession() }),
+      model: claude,
+      request: { persona: 'unclebob', sessionId: 'bob-1' },
+    })
+
+    expect(host.preparePullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ headSha: expect.any(String) as string }),
+    )
+    expect(host.firstMessage()).toContain(
+      'This is my own checkout of the repository, already on the PR branch feature',
+    )
+    expect(host.firstMessage()).toContain(
+      'Do not discard, reset, stash or overwrite changes you did not make.',
+    )
   })
 })
 

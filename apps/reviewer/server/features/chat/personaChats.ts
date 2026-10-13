@@ -40,6 +40,7 @@ async function startPullThread(
     cwd: workspace.project.workspaceRoot,
     url: pull.url,
     threadId,
+    headSha: pull.headSha,
   })
   const title = chatTitle(seed.title)
   await workspace.threads.startThread({

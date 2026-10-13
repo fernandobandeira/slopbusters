@@ -12,6 +12,7 @@ import {
 } from '@t3tools/contracts'
 import { UserError } from '../../errors'
 import { T3_ENGINE_CLONE_TIMEOUT_MS } from '../../limits'
+import { checkedOutBranch } from '../git'
 import type { EngineConnection } from './engineConnection'
 
 /** A T3 Code project, with the canonical key of the repository it is a checkout of. */
@@ -61,16 +62,25 @@ export interface EngineThreadOperations {
   cloneProject(input: EngineProjectClone): Promise<EngineProject>
   /** Wait for a project's clone if one is running, or retry it if it failed. */
   settleClone(projectId: string): Promise<void>
+  /**
+   * Check the PR out in its own worktree of the project, or when the project's own checkout is
+   * already on the PR branch, use that checkout as it is.
+   */
   preparePullRequest(input: {
     readonly cwd: string
     readonly url: string
     readonly threadId: string
+    /** The PR head, to tell whether a reused checkout is on it. */
+    readonly headSha?: string
   }): Promise<PreparedPullRequest>
   startThread(input: EngineThreadStart): Promise<void>
 }
 
 export class EngineThreads implements EngineThreadOperations {
-  constructor(private readonly connection: Pick<EngineConnection, 'run'>) {}
+  constructor(
+    private readonly connection: Pick<EngineConnection, 'run'>,
+    private readonly readCheckout: typeof checkedOutBranch = checkedOutBranch,
+  ) {}
 
   projects(): Promise<EngineProject[]> {
     return this.connection.run((client) =>
@@ -160,15 +170,30 @@ export class EngineThreads implements EngineThreadOperations {
     cwd: string
     url: string
     threadId: string
+    headSha?: string
   }): Promise<PreparedPullRequest> {
-    const result = await this.connection.run((client) =>
-      client['git.preparePullRequestThread']({
-        cwd: input.cwd,
-        reference: input.url,
-        mode: 'worktree',
-        threadId: ThreadId.make(input.threadId),
-      }),
-    )
+    const result = await this.connection
+      .run((client) =>
+        client['git.preparePullRequestThread']({
+          cwd: input.cwd,
+          reference: input.url,
+          mode: 'worktree',
+          threadId: ThreadId.make(input.threadId),
+        }),
+      )
+      .catch(async (error: unknown) => {
+        const checkout = isBranchInMainCheckout(error) && (await this.readCheckout(input.cwd))
+        if (!checkout) throw error
+        return checkout
+      })
+    if ('clean' in result)
+      // T3 Code will not add a worktree for a branch the main checkout has, and its local mode
+      // would force that branch to the PR head, dropping unpushed commits. Use the checkout as is.
+      return {
+        branch: result.branch,
+        worktreePath: null,
+        onPullRequestHead: result.clean && result.head === input.headSha,
+      }
     return {
       branch: result.branch,
       worktreePath: result.worktreePath,
@@ -239,4 +264,9 @@ export class EngineThreads implements EngineThreadOperations {
 
 function newCommandId() {
   return CommandId.make(randomUUID())
+}
+
+/** T3 Code's refusal to add a worktree for the branch the project's own checkout is on. */
+function isBranchInMainCheckout(error: unknown): boolean {
+  return error instanceof Error && /already checked out in the main repo/i.test(error.message)
 }

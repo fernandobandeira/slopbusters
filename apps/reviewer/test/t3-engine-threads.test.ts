@@ -1,7 +1,7 @@
 import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
-import { expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   ClientOrchestrationCommand,
   GitPreparePullRequestThreadInput,
@@ -11,6 +11,7 @@ import {
 import type { EngineClient } from '../server/adapters/t3Engine/engineConnection'
 import type { RunningEngine } from '../server/adapters/t3Engine/engineLocation'
 import { EngineThreads } from '../server/adapters/t3Engine/engineThreads'
+import { UserError } from '../server/errors'
 
 const engine: RunningEngine = {
   home: '/home/user/.t3',
@@ -247,4 +248,55 @@ it('retries a failed clone and reports why it fails again', async () => {
     'T3 Code could not clone the repository: Repository not found.',
   )
   expect(retry).toHaveBeenCalledWith({ projectId: 'cloned' })
+})
+
+describe('a PR branch the project checkout already has', () => {
+  const refusal = new UserError(
+    'T3 Code: This PR branch is already checked out in the main repo. Use Local, or switch the main repo off that branch before creating a worktree thread.',
+  )
+  const refusingEngine = (error: Error) => ({ run: () => Promise.reject(error) })
+  const prepare = (threads: EngineThreads) =>
+    threads.preparePullRequest({
+      cwd: '/code/project',
+      url,
+      threadId: 'thread-1',
+      headSha: 'head-sha',
+    })
+
+  it('uses the checkout as it is instead of forcing it onto the PR head', async () => {
+    const readCheckout = vi
+      .fn()
+      .mockResolvedValue({ branch: 'feature', head: 'head-sha', clean: true })
+    const threads = new EngineThreads(refusingEngine(refusal), readCheckout)
+
+    const prepared = await prepare(threads)
+
+    expect(readCheckout).toHaveBeenCalledWith('/code/project')
+    expect(prepared).toEqual({ branch: 'feature', worktreePath: null, onPullRequestHead: true })
+  })
+
+  it('says the checkout may not match the PR when it has changes or another commit', async () => {
+    const dirty = new EngineThreads(
+      refusingEngine(refusal),
+      vi.fn().mockResolvedValue({ branch: 'feature', head: 'head-sha', clean: false }),
+    )
+    const behind = new EngineThreads(
+      refusingEngine(refusal),
+      vi.fn().mockResolvedValue({ branch: 'feature', head: 'older-sha', clean: true }),
+    )
+
+    expect((await prepare(dirty)).onPullRequestHead).toBe(false)
+    expect((await prepare(behind)).onPullRequestHead).toBe(false)
+  })
+
+  it('reports any other failure, and this one when the checkout cannot be read', async () => {
+    const other = new EngineThreads(refusingEngine(new UserError('T3 Code: Not found')), vi.fn())
+    const unreadable = new EngineThreads(
+      refusingEngine(refusal),
+      vi.fn().mockResolvedValue(undefined),
+    )
+
+    await expect(prepare(other)).rejects.toThrow('Not found')
+    await expect(prepare(unreadable)).rejects.toThrow('already checked out in the main repo')
+  })
 })

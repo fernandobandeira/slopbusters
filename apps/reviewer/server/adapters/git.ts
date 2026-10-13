@@ -41,3 +41,27 @@ export function hardenedGit(directory: string, args: string[], options: GitOptio
   if (!options.network) return run()
   return retryNetwork(run, { idempotent: options.network === 'fetch', signal: options.signal })
 }
+
+/** The branch a working checkout is on, its commit, and whether tracked files have changes. */
+export interface CheckedOutBranch {
+  readonly branch: string
+  readonly head: string
+  readonly clean: boolean
+}
+
+/** What a Git checkout has checked out, or undefined if it is not on a branch or not a checkout. */
+export async function checkedOutBranch(
+  directory: string,
+  signal?: AbortSignal,
+): Promise<CheckedOutBranch | undefined> {
+  try {
+    const [branch, head, status] = await Promise.all([
+      hardenedGit(directory, ['symbolic-ref', '--quiet', '--short', 'HEAD'], { signal }),
+      hardenedGit(directory, ['rev-parse', 'HEAD'], { signal }),
+      hardenedGit(directory, ['status', '--porcelain', '--untracked-files=no'], { signal }),
+    ])
+    return { branch: branch.trim(), head: head.trim(), clean: !status.trim() }
+  } catch {
+    return undefined
+  }
+}

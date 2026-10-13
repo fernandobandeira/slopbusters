@@ -20,13 +20,15 @@ export interface ReviewSessions {
   gandalf: { get(id: string): GandalfSession }
 }
 
-export type Checkout = Pick<PreparedPullRequest, 'branch' | 'onPullRequestHead'>
+export type Checkout = Pick<PreparedPullRequest, 'branch' | 'worktreePath' | 'onPullRequestHead'>
 export interface PullSubject {
   url: string
   owner: string
   repo: string
   number: number
   title: string
+  /** Known for reviewed PRs; tells whether a reused checkout is at the PR head. */
+  headSha?: string
 }
 
 /** What a chat starts from: where it works, its title, and the first message. */
@@ -135,9 +137,7 @@ function gandalfSeed(session: GandalfSession, url: string): ChatSeed {
     message: (_provider, checkout) =>
       paragraphs(
         `You are Gandalf. In Slopbusters you ${work} ${subject(pull)}`,
-        checkout.onPullRequestHead
-          ? `This worktree has the PR head checked out on branch ${checkout.branch}.`
-          : `This worktree is on branch ${checkout.branch}, but it kept local commits or changes and may not match the PR head; say so if that gets in the way.`,
+        checkoutDescription(checkout),
         'This is what you reported there:',
         clip(gandalfSessionMarkdown(session, url), MAX_CHAT_REVIEW_CHARACTERS),
         'Commit any change you make and explain each one. Do not push; I will review the commits first.',
@@ -169,9 +169,19 @@ function subject(pull: Pick<PullSubject, 'number' | 'title' | 'url'>): string {
 }
 
 function checkoutLine(pull: PullRequest, checkout: Checkout): string {
-  return checkout.onPullRequestHead
-    ? `This worktree has the PR head checked out on branch ${checkout.branch}. It targets ${pull.baseBranch}.`
-    : `This worktree is on branch ${checkout.branch}, but it kept local commits or changes and may not match the PR head; say so if that gets in the way. It targets ${pull.baseBranch}.`
+  return `${checkoutDescription(checkout)} It targets ${pull.baseBranch}.`
+}
+
+/** Where the thread works: its own worktree, or the user's checkout when it was already on the PR branch. */
+function checkoutDescription(checkout: Checkout): string {
+  if (checkout.worktreePath)
+    return checkout.onPullRequestHead
+      ? `This worktree has the PR head checked out on branch ${checkout.branch}.`
+      : `This worktree is on branch ${checkout.branch}, but it kept local commits or changes and may not match the PR head; say so if that gets in the way.`
+  const state = checkout.onPullRequestHead
+    ? 'at the PR head with no uncommitted changes'
+    : 'but it has uncommitted changes or is not at the PR head; say so if that gets in the way'
+  return `This is my own checkout of the repository, already on the PR branch ${checkout.branch}, ${state}. Do not discard, reset, stash or overwrite changes you did not make.`
 }
 
 function reviewedLine(pull: PullRequest, partial: boolean): string {
