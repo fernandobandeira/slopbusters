@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import * as Effect from 'effect/Effect'
@@ -10,6 +10,7 @@ import {
   CommandId,
   MessageId,
   ProjectId,
+  PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   ProviderInstanceId,
   ThreadId,
   type ClientOrchestrationCommand,
@@ -19,14 +20,22 @@ import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import { Provider } from '../../../shared/domain/types'
 import { logError } from '../../errors'
-import { PROVIDER_TIMEOUT_MS, T3_ENGINE_TURN_MARGIN_MS } from '../../limits'
+import {
+  PROVIDER_TIMEOUT_MS,
+  T3_ENGINE_TURN_INPUT_MARGIN_CHARS,
+  T3_ENGINE_TURN_MARGIN_MS,
+} from '../../limits'
 import { copyForInspection, listInspectionFiles } from '../inspectionCopy'
 import { CommandTimeoutError } from '../process'
 import type { EngineClient, EngineConnection } from './engineConnection'
 import {
   correctionPrompt,
+  instructionsInFile,
+  OVERFLOW_DIRECTORY,
   parseStructuredReply,
   withOutputContract,
+  wrapLongLines,
+  type FileListing,
   type InspectionFiles,
 } from './structuredOutput'
 import { TurnFollower, type TurnOutcome } from './turnFollower'
@@ -63,6 +72,8 @@ interface TurnThread {
 
 interface Workspace {
   readonly projectId: string
+  /** The agent's working directory: the copy, or an empty scratch directory. */
+  readonly root: string
   /** The copy's files, when the run inspects a directory. */
   readonly files?: InspectionFiles
   release(): Promise<void>
@@ -92,7 +103,10 @@ export class EngineTurns implements StructuredTurns {
     try {
       const thread = await this.createThread(workspace.projectId, request)
       try {
-        return await this.converse(thread, request, { deadline, files: workspace.files })
+        return await this.converse(thread, request, {
+          deadline,
+          message: await firstMessage(request, workspace),
+        })
       } finally {
         await this.archive(thread.id)
       }
@@ -105,16 +119,12 @@ export class EngineTurns implements StructuredTurns {
   private async converse<T>(
     thread: TurnThread,
     request: StructuredTurnRequest<T>,
-    { deadline, files }: { deadline: number; files?: InspectionFiles },
+    { deadline, message }: { deadline: number; message: string },
   ): Promise<T> {
-    const first = await this.turn(
-      thread,
-      withOutputContract(request.prompt, request.schema, request.model.provider, files),
-      {
-        request,
-        deadline,
-      },
-    )
+    const first = await this.turn(thread, message, {
+      request,
+      deadline,
+    })
     const reply = parseStructuredReply(first, request.schema)
     if (reply.success) return reply.data
     const correction = correctionPrompt(reply.error)
@@ -218,8 +228,8 @@ export class EngineTurns implements StructuredTurns {
     const removeRoot = () => rm(root, { recursive: true, force: true })
     let projectId: string
     let files: InspectionFiles | undefined
+    const workspaceRoot = directory ? join(root, basename(resolve(directory)) || 'source') : root
     try {
-      const workspaceRoot = directory ? join(root, basename(resolve(directory)) || 'source') : root
       if (directory) {
         await copyForInspection(directory, workspaceRoot, signal)
         files = await listInspectionFiles(workspaceRoot)
@@ -231,6 +241,7 @@ export class EngineTurns implements StructuredTurns {
     }
     return {
       projectId,
+      root: workspaceRoot,
       files,
       release: async () => {
         try {
@@ -352,4 +363,39 @@ function runtimeModeFor(model: OrganizationPreferences): RuntimeMode {
 
 function agentName(model: OrganizationPreferences) {
   return model.provider === Provider.claude ? 'Claude' : 'Codex'
+}
+
+/**
+ * The first message: the prompt and its output contract. The engine refuses a turn input over
+ * `PROVIDER_SEND_TURN_MAX_INPUT_CHARS`, so what does not fit moves into files in the working
+ * directory, first Claude's file list and then the prompt itself.
+ */
+async function firstMessage<T>(
+  request: StructuredTurnRequest<T>,
+  workspace: Workspace,
+): Promise<string> {
+  const agent = request.model.provider
+  const fits = (message: string) =>
+    message.length <= PROVIDER_SEND_TURN_MAX_INPUT_CHARS - T3_ENGINE_TURN_INPUT_MARGIN_CHARS
+  const inline = withOutputContract(request.prompt, request.schema, agent, workspace.files)
+  if (fits(inline)) return inline
+  const overflow = join(workspace.root, OVERFLOW_DIRECTORY)
+  await mkdir(overflow, { recursive: true })
+  let files: FileListing | undefined = workspace.files
+  if (workspace.files) {
+    const path = `${OVERFLOW_DIRECTORY}/files.txt`
+    await writeFile(join(workspace.root, path), `${workspace.files.paths.join('\n')}\n`)
+    files = { path, count: workspace.files.paths.length }
+    const listed = withOutputContract(request.prompt, request.schema, agent, files)
+    if (fits(listed)) return listed
+  }
+  const path = `${OVERFLOW_DIRECTORY}/instructions.md`
+  const instructions = wrapLongLines(request.prompt)
+  await writeFile(join(workspace.root, path), instructions)
+  return withOutputContract(
+    instructionsInFile(path, instructions, agent),
+    request.schema,
+    agent,
+    files,
+  )
 }

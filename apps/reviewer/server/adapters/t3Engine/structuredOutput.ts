@@ -23,12 +23,27 @@ export interface InspectionFiles {
   readonly truncated: boolean
 }
 
+/** The file list, inline or, when it does not fit in the message, in a file. */
+export type FileListing = InspectionFiles | { readonly path: string; readonly count: number }
+
+/** Where the runner leaves what does not fit in one engine message, in the working directory. */
+export const OVERFLOW_DIRECTORY = '.slopbusters'
+
+/** Longest line in an overflow file; Claude's Read and Codex's command output show it whole. */
+const MAX_OVERFLOW_LINE_CHARS = 500
+
+/** How each agent reads a long file: in order, in chunks its tool shows without truncating. */
+const chunkedReading: Record<Provider, string> = {
+  claude: 'Read it with the Read tool, 150 lines at a time, using offset and limit.',
+  codex: "Read it with `sed -n 'START,ENDp'`, 20 lines at a time.",
+}
+
 /** The prompt, followed by the contract the agent's reply must meet. */
 export function withOutputContract(
   prompt: string,
   schema: z.ZodType,
   agent: Provider,
-  files?: InspectionFiles,
+  files?: FileListing,
 ): string {
   const jsonSchema = JSON.stringify(z.toJSONSchema(schema, { target: 'draft-7' }), null, 2)
   return [
@@ -49,7 +64,12 @@ export function withOutputContract(
   ].join('\n')
 }
 
-function fileListing(files: InspectionFiles): string[] {
+function fileListing(files: FileListing): string[] {
+  if ('path' in files)
+    return [
+      '',
+      `The ${String(files.count)} files in the working directory are listed in ${files.path}, one per line.`,
+    ]
   return [
     '',
     files.truncated
@@ -58,6 +78,33 @@ function fileListing(files: InspectionFiles): string[] {
     '',
     ...files.paths,
   ]
+}
+
+/**
+ * The message that stands in for instructions too long for one engine message; they are written
+ * to `path`, wrapped by `wrapLongLines`.
+ */
+export function instructionsInFile(path: string, instructions: string, agent: Provider): string {
+  const lines = instructions.split('\n').length
+  return [
+    `Your instructions are too long to send in one message, so they are in the file ${path} in the working directory (${String(lines)} lines). Read the whole file, in order, before you answer; it is the task.`,
+    chunkedReading[agent],
+    `Lines longer than ${String(MAX_OVERFLOW_LINE_CHARS)} characters continue on the next line: join them back when you read JSON.`,
+  ].join('\n\n')
+}
+
+/** Split lines longer than the agents' read tools show whole; nothing else changes. */
+export function wrapLongLines(text: string): string {
+  return text
+    .split('\n')
+    .flatMap((line) =>
+      line.length <= MAX_OVERFLOW_LINE_CHARS
+        ? [line]
+        : Array.from({ length: Math.ceil(line.length / MAX_OVERFLOW_LINE_CHARS) }, (_, index) =>
+            line.slice(index * MAX_OVERFLOW_LINE_CHARS, (index + 1) * MAX_OVERFLOW_LINE_CHARS),
+          ),
+    )
+    .join('\n')
 }
 
 /** The follow-up turn sent once when a reply does not meet the output contract. */

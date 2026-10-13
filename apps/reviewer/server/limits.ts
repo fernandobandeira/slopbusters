@@ -50,6 +50,8 @@ export const T3_ENGINE_STOP_TIMEOUT_MS = 10_000
 export const T3_ENGINE_CLONE_TIMEOUT_MS = 15 * 60_000
 /** A structured turn's engine call outlives the turn so the interrupt can still be sent. */
 export const T3_ENGINE_TURN_MARGIN_MS = 30_000
+/** Room left under the engine's message limit for anything it adds to a turn's input. */
+export const T3_ENGINE_TURN_INPUT_MARGIN_CHARS = 4000
 /** Copying a review checkout for one structured turn; a clone on APFS takes moments. */
 export const INSPECTION_COPY_TIMEOUT_MS = 120_000
 /** Claude has no file search tool in Claude Code 2.1, so its prompt lists the copy's files. */

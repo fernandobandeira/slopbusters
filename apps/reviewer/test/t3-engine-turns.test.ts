@@ -1,3 +1,4 @@
+import { PROVIDER_SEND_TURN_MAX_INPUT_CHARS } from '@t3tools/contracts'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -254,6 +255,28 @@ it('runs the agent in a scrubbed copy of the directory that it deletes afterward
   expect(existsSync(root ?? '')).toBe(false)
   expect(readFileSync(join(checkout, 'README.md'), 'utf8')).toBe('readme\n')
   expect(existsSync(join(checkout, '.claude', 'settings.json'))).toBe(true)
+})
+
+it('moves a prompt longer than the engine accepts into a file the agent reads from its copy', async () => {
+  const prompt = `Find the marker.\n${'x'.repeat(130_000)}MARKER`
+  let instructions = ''
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'thread.turn.start') return
+    const root = fake.workspaceRoots()[0] ?? ''
+    instructions = readFileSync(join(root, '.slopbusters', 'instructions.md'), 'utf8')
+    thread.reply(command, '{"files":[]}')
+  })
+
+  await fake.turns.run(request({ prompt }))
+
+  const start = fake.commands.find((command) => command.type === 'thread.turn.start')
+  const text = (start?.message as { text: string }).text
+  expect(text.length).toBeLessThan(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)
+  expect(text).toContain('in the file .slopbusters/instructions.md')
+  expect(text).toContain('Read it with the Read tool, 150 lines at a time')
+  expect(text).toContain('"files"')
+  expect(instructions.split('\n').every((line) => line.length <= 500)).toBe(true)
+  expect(instructions.replaceAll('\n', '')).toBe(prompt.replaceAll('\n', ''))
 })
 
 it('gives overlapping runs on one directory their own copies and projects', async () => {

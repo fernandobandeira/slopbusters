@@ -1,8 +1,10 @@
 import { expect, it } from 'vitest'
 import { z } from 'zod'
 import {
+  instructionsInFile,
   parseStructuredReply,
   withOutputContract,
+  wrapLongLines,
 } from '../server/adapters/t3Engine/structuredOutput'
 import { Provider } from '../shared/domain/types'
 
@@ -63,4 +65,24 @@ it("lists the copy's files for Claude, which has no search tool, and lets Codex 
   )
   expect(codex).toContain('read-only commands such as ls, rg and cat')
   expect(codex).not.toContain('src/index.ts')
+})
+
+it('wraps only lines longer than the read tools show whole, keeping every character', () => {
+  const text = `short\n${'a'.repeat(1200)}\nend`
+
+  const wrapped = wrapLongLines(text)
+
+  expect(wrapped.split('\n').map((line) => line.length)).toEqual([5, 500, 500, 200, 3])
+  expect(wrapped.replaceAll('\n', '')).toBe(text.replaceAll('\n', ''))
+})
+
+it('tells each agent how to read instructions that live in a file', () => {
+  const claude = instructionsInFile('.slopbusters/instructions.md', 'one\ntwo', Provider.claude)
+  const codex = instructionsInFile('.slopbusters/instructions.md', 'one\ntwo', Provider.codex)
+
+  expect(claude).toContain(
+    'in the file .slopbusters/instructions.md in the working directory (2 lines)',
+  )
+  expect(claude).toContain('Read tool, 150 lines at a time')
+  expect(codex).toContain("sed -n 'START,ENDp'")
 })
