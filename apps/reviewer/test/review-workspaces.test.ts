@@ -6,10 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { runCommand } from '../server/adapters/process'
 import { LocalSourceRepository } from '../server/adapters/sourceRepository'
 import { ReviewWorkspaces } from '../server/adapters/reviewWorkspaces'
-import { createSourceNavigator } from '../server/features/navigation/navigation'
 import { createSourceProjectLoader } from '../server/features/navigation/fileContent'
 import { WorkspaceTypeScriptNavigation } from '../server/adapters/workspaceNavigation'
-import { startRepositoryTools } from '../server/adapters/repositoryTools'
 import { DiffSide } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
 import { startReviewerServer } from '../server/app'
@@ -332,77 +330,5 @@ describe('independent local review checkouts', () => {
     // The synthetic server writes a diagnostic record; production cleanup
     // must preserve such unexpected files until explicitly removed.
     await expect(workspaces.remove(pull, pull.headSha)).rejects.toThrow('changes')
-  }, 20_000)
-
-  it('exposes authenticated read-only MCP tools with the same semantic results as the UI', async () => {
-    const { pull, project, workspaces } = await fixture()
-    const semantic = new WorkspaceTypeScriptNavigation(project, workspaces)
-    cleanup.push(() => semantic.close())
-    const navigate = createSourceNavigator(project, undefined, semantic)
-    cleanup.push(async () => {
-      navigate.close()
-    })
-    const lease = await workspaces.acquire(pull, pull.headSha)
-    const context = await startRepositoryTools(pull, lease, project, navigate)
-    cleanup.push(() => context.close())
-    let id = 0
-    const call = async (method: string, params: unknown) =>
-      (
-        await fetch(context.url, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${context.token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
-        })
-      ).json()
-    expect(
-      (
-        await fetch(context.url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: '{}',
-        })
-      ).status,
-    ).toBe(403)
-    expect(
-      (await call('initialize', { protocolVersion: '2025-03-26' })).result.capabilities,
-    ).toEqual({ tools: {} })
-    const tools = (await call('tools/list', {})).result.tools
-    expect(tools.map((tool: { name: string }) => tool.name)).toContain('go_to_definition')
-    expect(
-      tools.every(
-        (tool: { annotations: { readOnlyHint: boolean } }) => tool.annotations.readOnlyHint,
-      ),
-    ).toBe(true)
-    const search = JSON.parse(
-      (await call('tools/call', { name: 'search_text', arguments: { query: 'surrounding' } }))
-        .result.content[0].text,
-    )
-    expect(search).toMatchObject({
-      sha: pull.headSha,
-      matches: [{ path: 'docs/context.md', line: 1 }],
-    })
-    const definition = JSON.parse(
-      (
-        await call('tools/call', {
-          name: 'go_to_definition',
-          arguments: { path: 'src/use.ts', line: 2, column: 25 },
-        })
-      ).result.content[0].text,
-    )
-    expect(definition).toMatchObject({
-      sha: pull.headSha,
-      source: { kind: 'local' },
-      targets: [{ path: 'src/types.ts', name: 'Purpose' }],
-    })
-    expect(
-      (await call('tools/call', { name: 'read_file', arguments: { path: '../outside' } })).result
-        .isError,
-    ).toBe(true)
-    expect(
-      (await call('tools/call', { name: 'write_file', arguments: { path: 'src/types.ts' } })).error
-        .code,
-    ).toBe(-32602)
-    await context.close()
-    await expect(fetch(context.url)).rejects.toThrow()
   }, 20_000)
 })

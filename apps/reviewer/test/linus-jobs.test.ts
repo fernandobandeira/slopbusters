@@ -13,6 +13,7 @@ import {
 import { Provider } from '../shared/domain/types'
 import type { LinusAdvice } from '../shared/domain/linus'
 import { fixturePull } from './fixtures/pull'
+import { recordingTurns } from './fixtures/turns'
 
 vi.mock('../server/features/pulls/github', () => ({ fetchPull: vi.fn() }))
 vi.mock('../server/features/linus/linusReview', async (original) => ({
@@ -34,6 +35,7 @@ const advice: LinusAdvice = {
 const primary = { provider: Provider.codex, model: 'gpt-6.1-sol' }
 const companion = { provider: Provider.claude, model: 'claude-opus-5-5' }
 const repository = 'review-room/example'
+const anySignal: unknown = expect.any(AbortSignal)
 let directory: string
 let store: ReviewerStore
 let jobs: LinusJobs
@@ -42,7 +44,7 @@ beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'linus-jobs-'))
   store = new ReviewerStore({ dataDirectory: directory })
   store.savePreferences({ organization: primary, companion })
-  jobs = new LinusJobs(store, directory)
+  jobs = new LinusJobs({ store, turns: recordingTurns().turns, staticDirectory: directory })
   vi.mocked(fetchPull).mockResolvedValue(fixturePull())
   vi.mocked(loadLinusSkill).mockResolvedValue('Linus review-only skill')
   vi.mocked(reviewWithLinus).mockResolvedValue(advice)
@@ -67,19 +69,23 @@ describe('dual Linus review sessions', () => {
     })
     expect(reviewWithLinus).toHaveBeenNthCalledWith(
       1,
-      fixturePull(),
-      primary,
-      'Linus review-only skill',
-      expect.any(AbortSignal),
-      false,
+      expect.objectContaining({
+        pull: fixturePull(),
+        model: primary,
+        skill: 'Linus review-only skill',
+        signal: anySignal,
+        companion: false,
+      }),
     )
     expect(reviewWithLinus).toHaveBeenNthCalledWith(
       2,
-      fixturePull(),
-      companion,
-      'Linus review-only skill',
-      expect.any(AbortSignal),
-      true,
+      expect.objectContaining({
+        pull: fixturePull(),
+        model: companion,
+        skill: 'Linus review-only skill',
+        signal: anySignal,
+        companion: true,
+      }),
     )
     finish[0]!(advice)
     await Promise.resolve()
@@ -90,51 +96,53 @@ describe('dual Linus review sessions', () => {
     })
     expect(reconcileWithLinus).toHaveBeenCalledWith(
       expect.objectContaining({
-        reviews: [
-          { model: primary, advice },
-          { model: companion, advice },
-        ],
+        pending: expect.objectContaining({
+          reviews: [
+            { model: primary, advice },
+            { model: companion, advice },
+          ],
+        }) as unknown,
+        model: primary,
+        skill: 'Linus review-only skill',
+        signal: anySignal,
       }),
-      primary,
-      'Linus review-only skill',
-      expect.any(AbortSignal),
     )
     expect(jobs.get(session.id).results[0]!.reviewers).toEqual([primary, companion])
-    expect(new LinusJobs(store, directory).latest(repository)?.results).toHaveLength(1)
+    expect(
+      new LinusJobs({ store, turns: recordingTurns().turns, staticDirectory: directory }).latest(
+        repository,
+      )?.results,
+    ).toHaveLength(1)
   })
   it('shares local inspection with both reviewers and reconciliation, then releases it', async () => {
     const context = {
       directory,
       sha: fixturePull().headSha,
-      url: 'http://127.0.0.1:1/mcp',
-      token: 'fixture-token',
-      close: vi.fn(async () => {}),
+      release: vi.fn(),
     }
     const prepare = vi.fn(async () => context)
-    jobs = new LinusJobs(store, directory, undefined, prepare)
+    jobs = new LinusJobs({
+      store,
+      turns: recordingTurns().turns,
+      staticDirectory: directory,
+      openRepository: prepare,
+    })
     const session = jobs.start(repository, [fixturePull().url])
     await vi.waitFor(() => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
     expect(prepare).toHaveBeenCalledTimes(1)
     expect(
-      vi
-        .mocked(reviewWithLinus)
-        .mock.calls.every(
-          (call) => call[5] && 'repository' in call[5] && call[5].repository === context,
-        ),
+      vi.mocked(reviewWithLinus).mock.calls.every(([request]) => request.repository === context),
     ).toBe(true)
-    expect(vi.mocked(reconcileWithLinus).mock.calls[0]![4]!).toEqual({
-      repository: context,
-      observer: undefined,
-    })
+    expect(vi.mocked(reconcileWithLinus).mock.calls[0]![0].repository).toBe(context)
     await vi.waitFor(() => {
-      expect(context.close).toHaveBeenCalledTimes(1)
+      expect(context.release).toHaveBeenCalledTimes(1)
     })
   })
 
   it('waits for an explicit single-model choice when a reviewer fails', async () => {
-    vi.mocked(reviewWithLinus).mockImplementation(async (_pull, model) => {
+    vi.mocked(reviewWithLinus).mockImplementation(async ({ model }) => {
       if (model.provider === Provider.claude) throw new Error('Companion unavailable')
       return advice
     })
@@ -177,7 +185,7 @@ describe('dual Linus review sessions', () => {
   })
   it('cancels both reviewers and ignores late results', async () => {
     vi.mocked(reviewWithLinus).mockImplementation(
-      (_pull, _model, _skill, signal) =>
+      ({ signal }) =>
         new Promise((_resolve, reject) => {
           signal.addEventListener(
             'abort',

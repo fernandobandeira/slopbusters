@@ -4,6 +4,7 @@ import type { GandalfSession, GandalfTask, GandalfTurn } from '../../../shared/d
 import { organizationDefaults } from '../../../shared/domain/preferences'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
 import type { ReviewerStore } from '../../adapters/store'
+import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import type { ConflictWorkspace } from '../../adapters/conflictWorkspace'
 import { BaseAdvancedError } from '../../adapters/conflictRevision'
 import type { CiFailure } from '../../adapters/ciFailures'
@@ -22,6 +23,7 @@ import { completion, publishedResult, saveResult, unchangedResult } from './gand
 
 interface Options {
   store: ReviewerStore
+  turns: StructuredTurns
   sessions?: AgentSessions
   loadPull: (url: string) => Promise<PullRequest>
   openWorkspace: (
@@ -31,6 +33,7 @@ interface Options {
   ) => Promise<ConflictWorkspace>
   loadFailures?: (pull: PullRequest, signal: AbortSignal) => Promise<CiFailure[]>
   plan?: (urls: string[], signal: AbortSignal) => Promise<string[]>
+  /** Replaces the model turn, which otherwise runs `resolveWithGandalf` on `turns`. */
   resolve?: typeof resolveWithGandalf
   networkRetryDelaysMs?: readonly number[]
 }
@@ -323,6 +326,7 @@ export class GandalfJobs {
       const snapshot = await workspace.inspect()
       signal.throwIfAborted()
       const request: Parameters<typeof resolveWithGandalf>[0] = {
+        turns: this.options.turns,
         pull,
         task: session.task,
         role,

@@ -7,9 +7,13 @@ import { ReviewerStore } from '../server/adapters/store'
 import { organizePull } from '../server/features/organization/organize'
 import { Provider, type ChangeGroup } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
+import { recordingTurns } from './fixtures/turns'
 
 vi.mock('../server/features/organization/organize', () => ({ organizePull: vi.fn() }))
 const paths: string[] = []
+const { turns } = recordingTurns()
+const anySignal: unknown = expect.any(AbortSignal)
+const anyObserver: unknown = expect.any(Function)
 afterEach(() => {
   vi.resetAllMocks()
   for (const path of paths.splice(0)) rmSync(path, { recursive: true, force: true })
@@ -21,7 +25,12 @@ async function server() {
   const store = new ReviewerStore({ dataDirectory: path })
   store.savePull(fixturePull())
   store.close()
-  return startReviewerServer({ dataDirectory: path, staticDirectory: path, port: 0 })
+  return startReviewerServer({
+    dataDirectory: path,
+    staticDirectory: path,
+    port: 0,
+    structuredTurns: turns,
+  })
 }
 const organization = { provider: Provider.claude, model: 'claude-opus-5-5' }
 function put(url: string, body: unknown) {
@@ -79,12 +88,10 @@ describe('automatic organization API', () => {
       const first = (await (await organize(url)).json()) as { id: string }
       const second = await (await organize(url)).json()
       expect(second).toEqual(first)
-      expect(organizePull).toHaveBeenCalledExactlyOnceWith(
-        pull,
-        organization,
-        expect.any(AbortSignal),
-        expect.any(Function),
-      )
+      expect(organizePull).toHaveBeenCalledExactlyOnceWith(turns, pull, organization, {
+        signal: anySignal,
+        observer: anyObserver,
+      })
       finish(pull.groups)
       await vi.waitFor(async () => {
         expect(await (await fetch(`${app.url}/api/jobs/${first.id}`)).json()).toMatchObject({
@@ -117,12 +124,10 @@ describe('automatic organization API', () => {
       const next = { provider: Provider.codex, model: 'custom-model' }
       await put(`${app.url}/api/preferences`, { organization: next })
       await organize(url)
-      expect(organizePull).toHaveBeenLastCalledWith(
-        fixturePull(),
-        next,
-        expect.any(AbortSignal),
-        expect.any(Function),
-      )
+      expect(organizePull).toHaveBeenLastCalledWith(turns, fixturePull(), next, {
+        signal: anySignal,
+        observer: anyObserver,
+      })
     } finally {
       await app.close()
     }

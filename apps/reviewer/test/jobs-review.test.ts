@@ -14,6 +14,7 @@ import type { Ticket } from '../shared/domain/tickets'
 import { Provider } from '../shared/domain/types'
 import { required } from './fixtures/bob'
 import { fixtureJobsAdvice, fixtureTicket } from './fixtures/tickets'
+import { recordingTurns } from './fixtures/turns'
 
 vi.mock('../server/features/jobs/ticketReview', () => ({
   loadJobsSkill: vi.fn(),
@@ -39,6 +40,7 @@ beforeEach(() => {
   current = fixtureTicket()
   jobs = new TicketReviewJobs({
     store,
+    turns: recordingTurns().turns,
     staticDirectory: directory,
     tickets: { get: () => Promise.resolve(current), update },
     evidence: (ticket) => Promise.resolve(JSON.stringify({ ticket: ticket.identifier })),

@@ -16,7 +16,7 @@ gh auth login
 pnpm desktop:dev
 ```
 
-The Electron app opens a local review workspace. Select a repository or paste a PR URL. Read changes in file order, or organize related code with your installed Codex or Claude Code CLI. Draft comments stay local until you explicitly submit a GitHub review; you can also copy feedback into your coding agent. Sign in to your chosen coding CLI before organizing changes.
+The Electron app opens a local review workspace. Select a repository or paste a PR URL. Read changes in file order, or organize related code with Codex or Claude Code, which the bundled T3 Code engine runs through your installed CLI. Draft comments stay local until you explicitly submit a GitHub review; you can also copy feedback into your coding agent. Sign in to your chosen coding CLI before organizing changes.
 
 Viewed sections, drafts, PR snapshots, and preferences persist in SQLite. Unchanged sections keep their viewed status when a PR updates, and “Unviewed only” hides completed sections. Background checks highlight “Updates available” on Reload when the PR changes. Exact moved or copied code has source → destination markers in the review UI. Open **Settings** from the homepage to choose among 24 themes, including Nord, Tokyo Night, Catppuccin, Solarized, and One Dark.
 

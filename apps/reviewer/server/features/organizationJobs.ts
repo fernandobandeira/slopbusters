@@ -1,6 +1,8 @@
 import type { AgentSessions } from './agent-sessions/agentSessions'
+import type { ProviderObserver } from '../../shared/domain/agentSession'
 import { randomUUID } from 'node:crypto'
 import type { ReviewerStore } from '../adapters/store'
+import type { StructuredTurns } from '../adapters/t3Engine/engineTurns'
 import { organizePull } from './organization/organize'
 import { JOB_RETENTION_MS } from '../limits'
 import { UserError, publicError } from '../errors'
@@ -19,6 +21,7 @@ export class OrganizationJobs {
   private stopped = false
   constructor(
     private readonly store: ReviewerStore,
+    private readonly turns: StructuredTurns,
     private readonly sessions?: AgentSessions,
   ) {}
 
@@ -40,8 +43,8 @@ export class OrganizationJobs {
       repository: `${pull.owner}/${pull.repo}`,
       urls: [pull.url],
     })
-    const execute = (observer?: import('../../shared/domain/agentSession').ProviderObserver) =>
-      organizePull(pull, organization, job.controller.signal, observer)
+    const execute = (observer?: ProviderObserver) =>
+      organizePull(this.turns, pull, organization, { signal: job.controller.signal, observer })
     const operation = this.sessions
       ? this.sessions.run(
           id,

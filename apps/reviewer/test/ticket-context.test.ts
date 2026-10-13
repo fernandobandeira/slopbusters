@@ -12,6 +12,7 @@ import type { GitHub } from '../server/adapters/github'
 import { Provider } from '../shared/domain/types'
 import { fixtureBobAdvice, required } from './fixtures/bob'
 import { fixturePull } from './fixtures/pull'
+import { recordingTurns } from './fixtures/turns'
 
 vi.mock('../server/features/bob/bobReview', () => ({
   loadBobSkill: vi.fn(),
@@ -36,6 +37,7 @@ describe('linked tickets as review evidence', () => {
     const context = vi.fn(() => Promise.resolve('{"identifier":"SCH-760"}'))
     const jobs = new BobJobs({
       store,
+      turns: recordingTurns().turns,
       staticDirectory: directory,
       loadPull: () => Promise.resolve(fixturePull()),
       context,

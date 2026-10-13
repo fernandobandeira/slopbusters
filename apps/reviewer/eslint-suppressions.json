@@ -26,25 +26,6 @@
       "count": 2
     }
   },
-  "server/adapters/provider.ts": {
-    "max-params": {
-      "count": 1
-    }
-  },
-  "server/adapters/repositoryTools.ts": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "complexity": {
-      "count": 1
-    },
-    "max-depth": {
-      "count": 2
-    },
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "server/adapters/reviewWorkspaces.ts": {
     "max-depth": {
       "count": 1
@@ -119,11 +100,6 @@
     },
     "max-lines-per-function": {
       "count": 1
-    }
-  },
-  "server/features/linus/linusReview.ts": {
-    "max-params": {
-      "count": 2
     }
   },
   "server/features/navigation/fileContent.ts": {
@@ -587,7 +563,7 @@
   },
   "test/linus-jobs.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
-      "count": 10
+      "count": 9
     },
     "@typescript-eslint/require-await": {
       "count": 2
@@ -598,10 +574,7 @@
   },
   "test/linus-model.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
-      "count": 5
-    },
-    "@typescript-eslint/require-await": {
-      "count": 1
+      "count": 3
     }
   },
   "test/linus-review-turns.test.ts": {
@@ -656,14 +629,6 @@
       "count": 1
     }
   },
-  "test/organization-model.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 1
-    }
-  },
   "test/persistence-lifecycle.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 3
@@ -705,41 +670,12 @@
       "count": 2
     }
   },
-  "test/repository-provider.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 5
-    },
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
-      "count": 1
-    }
-  },
   "test/review-progress.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 3
     }
   },
   "test/review-workspaces.test.ts": {
-    "@typescript-eslint/no-unsafe-argument": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unsafe-call": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
-      "count": 8
-    },
-    "@typescript-eslint/no-unsafe-return": {
-      "count": 1
-    },
-    "@typescript-eslint/require-await": {
-      "count": 1
-    },
     "max-lines-per-function": {
       "count": 1
     }

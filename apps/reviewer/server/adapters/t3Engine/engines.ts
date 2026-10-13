@@ -15,11 +15,11 @@ export interface BundledEngineSettings {
 }
 
 /**
- * The engines chats can run on: the user's T3 Code, found through its home, and the engine
- * Slopbusters bundles, kept under the reviewer's data directory. Structured turns always run on
- * the bundled engine, so they never appear in the user's T3 Code.
+ * The engines agents run on: the user's T3 Code, found through its home, and the engine
+ * Slopbusters bundles, kept under the reviewer's data directory. Chats may run on either;
+ * structured turns always run on the bundled engine, so they never appear in the user's T3 Code.
  */
-export function createChatHosts(options: {
+export function createEngines(options: {
   credentials: EngineCredentials
   dataDirectory: string
   bundled?: BundledEngineSettings

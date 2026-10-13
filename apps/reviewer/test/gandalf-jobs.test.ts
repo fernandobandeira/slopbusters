@@ -9,9 +9,11 @@ import type { GandalfTurn } from '../shared/domain/gandalf'
 import { UserError } from '../server/errors'
 import { CommandTimeoutError } from '../server/adapters/process'
 import { fixturePull } from './fixtures/pull'
+import { recordingTurns } from './fixtures/turns'
 
 const primary = { provider: Provider.codex, model: 'gpt-6.1-sol' }
 const companion = { provider: Provider.claude, model: 'claude-opus-5-5' }
+const { turns } = recordingTurns()
 const clean: GandalfTurn = {
   summary: 'No issues found.',
   approved: true,
@@ -62,7 +64,7 @@ beforeEach(() => {
   resolve.mockResolvedValue(clean)
   publish.mockResolvedValue('resolved-sha')
   loadPull.mockResolvedValue(fixturePull())
-  jobs = new GandalfJobs({ store, loadPull, openWorkspace, resolve })
+  jobs = new GandalfJobs({ store, turns, loadPull, openWorkspace, resolve })
 })
 afterEach(async () => {
   await jobs.close()
@@ -171,7 +173,7 @@ describe('Gandalf stack resolution', () => {
       return Promise.resolve({ ...pull, baseSha: published ? `resolved-${published}` : 'main-tip' })
     })
     publish.mockImplementation(() => Promise.resolve(`resolved-${++published}`))
-    jobs = new GandalfJobs({ store, loadPull, openWorkspace, resolve, plan })
+    jobs = new GandalfJobs({ store, turns, loadPull, openWorkspace, resolve, plan })
     const session = jobs.start(
       'review-room/example',
       pulls
@@ -242,7 +244,7 @@ describe('Gandalf session lifecycle', () => {
       id: 'interrupted',
       createdAt: '2999-01-01',
     })
-    const restarted = new GandalfJobs({ store, loadPull, openWorkspace, resolve })
+    const restarted = new GandalfJobs({ store, turns, loadPull, openWorkspace, resolve })
     loadPull.mockResolvedValue({ ...fixturePull(), headSha: 'resolved-sha' })
     const previousWorkspace = await openWorkspace({ ...fixturePull(), headSha: 'resolved-sha' })
     openWorkspace.mockResolvedValue({ ...previousWorkspace, needsUpdate: false })
@@ -316,7 +318,7 @@ describe('Gandalf automatic recovery', () => {
     expect(store.getGandalfSession(session.id)?.status).toBe('running')
     store.close()
     store = new ReviewerStore({ dataDirectory: directory })
-    jobs = new GandalfJobs({ store, loadPull, openWorkspace, resolve })
+    jobs = new GandalfJobs({ store, turns, loadPull, openWorkspace, resolve })
     await jobs.resume()
     expect((await completed(session.id)).id).toBe(session.id)
     expect(publish).toHaveBeenCalledTimes(1)

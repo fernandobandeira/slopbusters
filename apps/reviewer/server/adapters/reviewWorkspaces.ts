@@ -20,6 +20,13 @@ export interface WorkspaceLease {
   release: () => void
 }
 
+/** A leased review checkout an agent may read. Release it once the agent is done. */
+export interface ReviewCheckout {
+  readonly directory: string
+  readonly sha: string
+  readonly release: () => void
+}
+
 /** Each revision owns its Git metadata and objects; no user's clone is modified. */
 export class ReviewWorkspaces {
   private readonly controller = new AbortController()

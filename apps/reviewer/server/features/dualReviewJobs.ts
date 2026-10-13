@@ -5,7 +5,7 @@ import type { OrganizationPreferences } from '../../shared/domain/preferences'
 import type { PendingReview, ReviewSession } from '../../shared/domain/reviewSession'
 import type { PullRequest } from '../../shared/domain/types'
 import { publicError, UserError } from '../errors'
-import type { RepositoryContext } from '../adapters/repositoryTools'
+import type { ReviewCheckout } from '../adapters/reviewWorkspaces'
 import { pullFingerprint } from '../reviewSnapshot'
 
 interface ReviewStrategy<Advice extends { limitations: string[] }> {
@@ -17,7 +17,7 @@ interface ReviewStrategy<Advice extends { limitations: string[] }> {
   get: (id: string) => ReviewSession<Advice> | undefined
   latest: (repository: string) => ReviewSession<Advice> | undefined
   loadPull: (url: string) => Promise<PullRequest>
-  openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<RepositoryContext>
+  openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
   /** Evidence about what the PR is meant to do, such as its linked ticket. */
   context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
   review: (request: {
@@ -26,7 +26,7 @@ interface ReviewStrategy<Advice extends { limitations: string[] }> {
     skill: string
     signal: AbortSignal
     companion: boolean
-    repository?: RepositoryContext
+    repository?: ReviewCheckout
     observer?: ProviderObserver
     context?: string
   }) => Promise<Advice>
@@ -35,7 +35,7 @@ interface ReviewStrategy<Advice extends { limitations: string[] }> {
     model: OrganizationPreferences
     skill: string
     signal: AbortSignal
-    repository?: RepositoryContext
+    repository?: ReviewCheckout
     observer?: ProviderObserver
   }) => Promise<Advice>
 }
@@ -180,7 +180,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     index: number
   }): Promise<boolean> {
     const { session, signal, skill, single, index } = request
-    let repository: RepositoryContext | undefined
+    let repository: ReviewCheckout | undefined
     try {
       if (!single || !session.pending) {
         this.progress(session, `Loading PR ${String(index + 1)} of ${String(session.urls.length)}…`)
@@ -232,7 +232,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
       this.save(session)
       return true
     } finally {
-      await repository?.close()
+      repository?.release()
     }
   }
   private async prepareSource(pull: PullRequest, signal: AbortSignal) {
@@ -251,7 +251,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     pull: PullRequest
     skill: string
     signal: AbortSignal
-    repository?: RepositoryContext
+    repository?: ReviewCheckout
     context?: string
   }): Promise<PendingReview<Advice>> {
     const { session, pull, skill, signal, repository, context } = request

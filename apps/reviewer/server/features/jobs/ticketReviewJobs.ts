@@ -13,8 +13,9 @@ import {
 } from '../../../shared/domain/preferences'
 import type { Ticket } from '../../../shared/domain/tickets'
 import { Provider } from '../../../shared/domain/types'
-import type { RepositoryContext } from '../../adapters/repositoryTools'
+import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { ReviewerStore } from '../../adapters/store'
+import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { publicError, UserError } from '../../errors'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import type { TicketService } from '../tickets/tickets'
@@ -22,18 +23,19 @@ import { foldAnswers, loadJobsSkill, reconcileTicket, reviewTicket } from './tic
 
 export interface TicketReviewOptions {
   store: ReviewerStore
+  turns: StructuredTurns
   sessions?: AgentSessions
   staticDirectory: string
   skillDirectory?: string
   tickets: Pick<TicketService, 'get' | 'update'>
   evidence: (ticket: Ticket, signal: AbortSignal) => Promise<string>
-  openSource?: (repository: string, signal: AbortSignal) => Promise<RepositoryContext>
+  openSource?: (repository: string, signal: AbortSignal) => Promise<ReviewCheckout>
 }
 interface Prepared {
   ticket: Ticket
   evidence: string
   skill: string
-  repository?: RepositoryContext
+  repository?: ReviewCheckout
   limitation?: string
 }
 
@@ -205,7 +207,7 @@ export class TicketReviewJobs {
         reviewers: pending.reviews.filter((review) => review.advice).map((review) => review.model),
       })
     } finally {
-      await prepared.repository?.close()
+      prepared.repository?.release()
     }
   }
   private async fold(session: JobsSession, signal: AbortSignal) {
@@ -230,7 +232,7 @@ export class TicketReviewJobs {
         reviewers: [session.primary],
       })
     } finally {
-      await prepared.repository?.close()
+      prepared.repository?.release()
     }
   }
   private async prepare(session: JobsSession, signal: AbortSignal, keepSnapshot: boolean) {
@@ -259,6 +261,7 @@ export class TicketReviewJobs {
   }
   private request(prepared: Prepared, model: OrganizationPreferences, signal: AbortSignal) {
     return {
+      turns: this.options.turns,
       evidence: prepared.evidence,
       ticket: prepared.ticket,
       model,

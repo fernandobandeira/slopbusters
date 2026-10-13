@@ -6,20 +6,29 @@ import { loadBobSkill, reviewWithBob, reconcileWithBob } from './bobReview'
 import { DualReviewJobs } from '../dualReviewJobs'
 import { UserError } from '../../errors'
 import { fetchPull } from '../pulls/github'
-import type { RepositoryContext } from '../../adapters/repositoryTools'
+import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
+import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import type { ReviewerStore } from '../../adapters/store'
 
 export class BobJobs extends DualReviewJobs<BobAdvice> {
   constructor(options: {
     store: ReviewerStore
+    turns: StructuredTurns
     sessions?: AgentSessions
     staticDirectory: string
     skillDirectory?: string
-    openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<RepositoryContext>
+    openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
     loadPull?: typeof fetchPull
     context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
   }) {
-    const { store, staticDirectory, skillDirectory, openRepository, loadPull = fetchPull } = options
+    const {
+      store,
+      turns,
+      staticDirectory,
+      skillDirectory,
+      openRepository,
+      loadPull = fetchPull,
+    } = options
     super({
       name: 'Bob',
       sessions: options.sessions,
@@ -45,8 +54,8 @@ export class BobJobs extends DualReviewJobs<BobAdvice> {
       loadPull,
       openRepository,
       context: options.context,
-      review: reviewWithBob,
-      reconcile: reconcileWithBob,
+      review: (request) => reviewWithBob({ ...request, turns }),
+      reconcile: (request) => reconcileWithBob({ ...request, turns }),
     })
   }
 }

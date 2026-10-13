@@ -11,6 +11,7 @@ import { BaseAdvancedError } from '../server/adapters/conflictRevision'
 import type { GandalfTurn } from '../shared/domain/gandalf'
 import { Provider, type PullRequest } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
+import { recordingTurns } from './fixtures/turns'
 
 const clean: GandalfTurn = {
   summary: 'Reviewed',
@@ -291,6 +292,7 @@ function recoveryFixture(networkRetryDelaysMs = [0, 0]) {
   )
   const jobs = new GandalfJobs({
     store,
+    turns: recordingTurns().turns,
     sessions: new AgentSessions(traces),
     resolve,
     plan,

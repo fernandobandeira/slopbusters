@@ -10,6 +10,7 @@ import type { BobAdvice } from '../shared/domain/bob'
 import { Provider } from '../shared/domain/types'
 import { fixtureBobAdvice, required } from './fixtures/bob'
 import { fixturePull } from './fixtures/pull'
+import { recordingTurns } from './fixtures/turns'
 
 vi.mock('../server/features/bob/bobReview', () => ({
   loadBobSkill: vi.fn(),
@@ -27,15 +28,20 @@ beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'bob-jobs-'))
   store = new ReviewerStore({ dataDirectory: directory })
   store.savePreferences({ organization: primary, companion })
-  jobs = new BobJobs({
-    store,
-    staticDirectory: directory,
-    loadPull: vi.fn(() => Promise.resolve(fixturePull())),
-  })
+  jobs = createJobs()
   vi.mocked(loadBobSkill).mockResolvedValue('Bob skill')
   vi.mocked(reviewWithBob).mockImplementation(() => Promise.resolve(fixtureBobAdvice()))
   vi.mocked(reconcileWithBob).mockImplementation(() => Promise.resolve(fixtureBobAdvice()))
 })
+function createJobs(openRepository?: ConstructorParameters<typeof BobJobs>[0]['openRepository']) {
+  return new BobJobs({
+    store,
+    turns: recordingTurns().turns,
+    staticDirectory: directory,
+    openRepository,
+    loadPull: vi.fn(() => Promise.resolve(fixturePull())),
+  })
+}
 afterEach(async () => {
   await jobs.close()
   store.close()
@@ -74,12 +80,7 @@ describe('Bob dual review lifecycle', () => {
   })
   it('lets the user choose a partial review and preserves source failure limitations', async () => {
     const openRepository = vi.fn(() => Promise.reject(new UserError('Source unavailable')))
-    jobs = new BobJobs({
-      store,
-      staticDirectory: directory,
-      openRepository,
-      loadPull: vi.fn(() => Promise.resolve(fixturePull())),
-    })
+    jobs = createJobs(openRepository)
     vi.mocked(reviewWithBob).mockImplementation(({ model }) => {
       if (model.provider === Provider.claude)
         return Promise.reject(new UserError('Claude unavailable'))

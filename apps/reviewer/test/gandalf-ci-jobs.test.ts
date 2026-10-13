@@ -7,6 +7,7 @@ import { ReviewerStore } from '../server/adapters/store'
 import { Provider, type PullRequest } from '../shared/domain/types'
 import type { GandalfTask, GandalfTurn } from '../shared/domain/gandalf'
 import { fixturePull } from './fixtures/pull'
+import { recordingTurns } from './fixtures/turns'
 
 type Options = ConstructorParameters<typeof GandalfJobs>[0]
 const clean: GandalfTurn = {
@@ -74,6 +75,7 @@ async function fixCi(pulls: PullRequest[], state: { failing: number[]; behind: n
   const urls = pulls.map((pull) => pull.url)
   jobs = new GandalfJobs({
     store,
+    turns: recordingTurns().turns,
     resolve,
     loadFailures,
     openWorkspace,

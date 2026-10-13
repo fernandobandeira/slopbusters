@@ -11,7 +11,7 @@ import {
   createSourceProjectLoader,
 } from './features/navigation/fileContent'
 import { LocalSourceRepository } from './adapters/sourceRepository'
-import { ReviewWorkspaces } from './adapters/reviewWorkspaces'
+import { ReviewWorkspaces, type ReviewCheckout } from './adapters/reviewWorkspaces'
 import { LanguageServers } from './adapters/languageServers'
 import { LanguageServerNavigation } from './adapters/lspNavigation'
 import {
@@ -22,7 +22,6 @@ import { createSourceNavigator } from './features/navigation/navigation'
 import { configureSourceAssetsDirectory } from './adapters/treeSymbols'
 import { BobJobs } from './features/bob/bobJobs'
 import { LinusJobs } from './features/linus/linusJobs'
-import { startRepositoryTools } from './adapters/repositoryTools'
 import { OrganizationJobs } from './features/organizationJobs'
 import { GandalfJobs } from './features/gandalf/gandalfJobs'
 import { createGandalfPlanner } from './features/gandalf/gandalfPlan'
@@ -40,7 +39,8 @@ import { defaultBranchSnapshot } from './features/tickets/defaultBranch'
 import { ticketEvidence } from './features/jobs/ticketEvidence'
 import { TicketReviewJobs } from './features/jobs/ticketReviewJobs'
 import { LINEAR_CLIENT_ID } from './linearApplication'
-import { createChatHosts, type BundledEngineSettings } from './adapters/t3Engine/engines'
+import { createEngines, type BundledEngineSettings } from './adapters/t3Engine/engines'
+import type { StructuredTurns } from './adapters/t3Engine/engineTurns'
 import type { ChatHosts } from './adapters/t3Engine/chatHosts'
 import { startPullChat, startTicketChat } from './features/chat/personaChats'
 import type { PullChatRequest } from '../shared/domain/chat'
@@ -63,6 +63,8 @@ export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   bundledEngine?: BundledEngineSettings
   /** Where chats run; replaced in tests. */
   chatHosts?: ChatHosts
+  /** Where persona reviews, grouping and Gandalf run their agent turns; replaced in tests. */
+  structuredTurns?: StructuredTurns
 }
 
 export function createServices(options: ReviewerServerOptions) {
@@ -83,28 +85,33 @@ export function createServices(options: ReviewerServerOptions) {
   let languageNavigation = new LanguageServerNavigation(sourceProject, languageServers, workspaces)
   let typeScriptNavigation = new WorkspaceTypeScriptNavigation(sourceProject, workspaces, options)
   let navigator = createSourceNavigator(sourceProject, languageNavigation, typeScriptNavigation)
-  const openRepository = repositoryOpener({
-    workspaces,
-    sourceProject,
-    navigate: (pull, request) => navigator(pull, request),
+  const openRepository = checkoutOpener(workspaces)
+  const engines = createEngines({
+    credentials: store.engine,
+    dataDirectory: options.dataDirectory,
+    bundled: options.bundledEngine,
   })
+  const chatHosts = options.chatHosts ?? engines.hosts
+  const turns = options.structuredTurns ?? engines.turns ?? withoutEngine
   const linearAuth = new LinearAuth(store.tickets, {
     clientId: options.linearClientId ?? LINEAR_CLIENT_ID,
     callbackPort: options.linearCallbackPort,
   })
   const linear = options.linear ?? createLinear({ authorization: linearAuth })
   const tickets = createTicketService(linear, github)
-  const linusJobs = new LinusJobs(
+  const linusJobs = new LinusJobs({
     store,
-    options.staticDirectory,
-    options.linusSkillDirectory,
+    turns,
+    sessions: agentSessions,
+    staticDirectory: options.staticDirectory,
+    skillDirectory: options.linusSkillDirectory,
     openRepository,
-    pulls.fetchPull,
-    agentSessions,
-    tickets.contextForPull,
-  )
+    loadPull: pulls.fetchPull,
+    context: tickets.contextForPull,
+  })
   const bobJobs = new BobJobs({
     store,
+    turns,
     sessions: agentSessions,
     staticDirectory: options.staticDirectory,
     skillDirectory: options.bobSkillDirectory,
@@ -114,6 +121,7 @@ export function createServices(options: ReviewerServerOptions) {
   })
   const jobs = new TicketReviewJobs({
     store,
+    turns,
     sessions: agentSessions,
     staticDirectory: options.staticDirectory,
     skillDirectory: options.jobsSkillDirectory,
@@ -126,6 +134,7 @@ export function createServices(options: ReviewerServerOptions) {
   const gitIdentity = createGitIdentity(github)
   const gandalfJobs = new GandalfJobs({
     store,
+    turns,
     sessions: agentSessions,
     loadPull: pulls.fetchPull,
     plan: createGandalfPlanner(stacks.getStackMetadata),
@@ -147,13 +156,7 @@ export function createServices(options: ReviewerServerOptions) {
           : undefined,
       }),
   })
-  const organizationJobs = new OrganizationJobs(store, agentSessions)
-  const engines = createChatHosts({
-    credentials: store.engine,
-    dataDirectory: options.dataDirectory,
-    bundled: options.bundledEngine,
-  })
-  const chatHosts = options.chatHosts ?? engines.hosts
+  const organizationJobs = new OrganizationJobs(store, turns, agentSessions)
   const chatModel = () => {
     const model = store.getPreferences().organization
     if (!model) throw new UserError('Choose your primary model in Settings first.')
@@ -233,21 +236,27 @@ export function createServices(options: ReviewerServerOptions) {
 }
 export type Services = ReturnType<typeof createServices>
 
-function repositoryOpener(options: {
-  workspaces: ReviewWorkspaces
-  sourceProject: ReturnType<typeof createSourceProjectLoader>
-  navigate: Parameters<typeof startRepositoryTools>[3]
-}) {
-  return async (pull: PullRequest, signal: AbortSignal) => {
+/** Agent turns for a build without the bundled engine: every run fails with a reason. */
+const withoutEngine: StructuredTurns = {
+  run: () =>
+    Promise.reject(
+      new UserError(
+        'This build of Slopbusters does not include the T3 Code engine, so it cannot run agents.',
+      ),
+    ),
+}
+
+/** Lease the review checkout of a PR's head; agents read it until the lease is released. */
+function checkoutOpener(workspaces: ReviewWorkspaces) {
+  return async (pull: PullRequest, signal: AbortSignal): Promise<ReviewCheckout> => {
     signal.throwIfAborted()
-    const lease = await options.workspaces.acquire(pull, pull.headSha)
-    try {
-      signal.throwIfAborted()
-      return await startRepositoryTools(pull, lease, options.sourceProject, options.navigate)
-    } catch (error) {
+    const lease = await workspaces.acquire(pull, pull.headSha)
+    if (signal.aborted) {
       lease.release()
-      throw error
+      signal.throwIfAborted()
     }
+    const { directory, sha } = lease.workspace
+    return { directory, sha, release: lease.release }
   }
 }
 
