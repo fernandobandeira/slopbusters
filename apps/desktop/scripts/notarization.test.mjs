@@ -191,6 +191,23 @@ test('restores the exact signed app and retries ticket propagation before valida
   assert.ok(!commands.some((command) => command.includes('notarytool submit')))
 })
 
+test('keeps retrying the staple with growing waits before giving up', async (t) => {
+  const { context, run } = await fixture(t)
+  await prepareSubmission(context, run)
+  const clock = fakeClock()
+  let staples = 0
+  const unavailable = mock.fn(async (command, args, timeout) => {
+    if (args[0] === 'stapler' && args[1] === 'staple') {
+      staples += 1
+      throw new Error('xcrun failed (68).')
+    }
+    return run(command, args, timeout)
+  })
+  await assert.rejects(restoreAndStaple(context, { ...clock, run: unavailable }), /xcrun failed/)
+  assert.equal(staples, 6)
+  assert.equal(clock.now(), 405_000)
+})
+
 test('a signature or bundle version mismatch blocks submission and packaging', async (t) => {
   const { context, run } = await fixture(t)
   const wrongTeam = async (command, args, timeout) =>

@@ -1,0 +1,14 @@
+name: Set up the workspace
+description: Install pnpm, Node and the locked dependencies, reusing the pnpm store cache.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10.34.6
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: .tool-versions
+        cache: pnpm
+    - run: pnpm install --frozen-lockfile --prefer-offline
+      shell: bash

@@ -6,6 +6,9 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { promisify } from 'node:util'
 
+/** Waits between stapling attempts, about six and a half minutes in all. */
+const STAPLE_RETRY_DELAYS_MS = [15_000, 30_000, 60_000, 120_000, 180_000]
+
 const execute = promisify(execFile)
 const submissionId = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 const workflowPath = '.github/workflows/reviewer-release.yml'
@@ -177,15 +180,17 @@ export async function restoreAndStaple(context, options = {}) {
   await mkdir(join(paths.app, '..'), { recursive: true })
   await run('ditto', ['-x', '-k', paths.archive, join(paths.app, '..')], 300_000)
   await verifyApp(context, run)
+  // Apple can take minutes to publish an accepted ticket to the stapler's CDN.
   for (let attempt = 1; ; attempt++) {
     try {
       await run('xcrun', ['stapler', 'staple', paths.app])
       await run('xcrun', ['stapler', 'validate', paths.app])
       return
     } catch (error) {
-      if (attempt === 3) throw error
-      log(`Stapling attempt ${attempt} failed; retrying the accepted ticket.`)
-      await pause(15_000)
+      const wait = STAPLE_RETRY_DELAYS_MS[attempt - 1]
+      if (wait === undefined) throw error
+      log(`Stapling attempt ${attempt} failed; retrying the accepted ticket in ${wait / 1000}s.`)
+      await pause(wait)
     }
   }
 }

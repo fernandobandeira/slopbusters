@@ -16,6 +16,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/reviewer.yml'
+      - '.github/actions/**'
       - '.github/workflows/reviewer-release.yml'
   push:
     branches: [main]
@@ -33,29 +34,82 @@ on:
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/reviewer.yml'
+      - '.github/actions/**'
       - '.github/workflows/reviewer-release.yml'
 
 permissions:
   contents: read
 
+# A newer push to the same branch supersedes the run in progress.
+concurrency:
+  group: reviewer-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  check:
-    runs-on: macos-15
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
         with:
-          version: 10.34.6
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+          filters: |
+            lockfile:
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '**/package.json'
+              - '.npmrc'
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm audit:check
-      - run: pnpm dedupe:check
       - run: pnpm licenses:check
+      # Resolving the whole tree against the registry is slow and can only change with the lockfile.
+      - if: steps.changes.outputs.lockfile == 'true'
+        run: pnpm dedupe:check
+      - uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/t3code
+          key: t3code-${{ hashFiles('apps/reviewer/src/vendor/t3/manifest.json', 'apps/reviewer/vendor/t3-engine/manifest.json') }}
+          restore-keys: t3code-
       - run: pnpm t3:check
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm lint
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm test
+
+  # The desktop app ships for macOS only; its build bundles the macOS T3 Code engine.
+  desktop:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # Electron's install script downloads the runtime into this cache.
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/electron
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-${{ runner.os }}-
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm build
       - run: pnpm --dir apps/desktop test

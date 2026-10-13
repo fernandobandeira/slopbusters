@@ -65,12 +65,48 @@ jobs:
           }
           JS
           git merge-base --is-ancestor HEAD origin/main
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm audit:check
-      - run: pnpm dedupe:check
-      - run: pnpm licenses:check
-      - run: pnpm lint
-      - run: pnpm test
+      # The tagged commit was pushed to main, so CI already checked it; reuse that result.
+      - name: Wait for CI on the tagged commit
+        id: ci
+        timeout-minutes: 30
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          run=''
+          for _ in $(seq 1 12); do
+            run="$(gh run list --workflow reviewer.yml --commit "$sha" --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+            [ -n "$run" ] && break
+            sleep 10
+          done
+          if [ -z "$run" ]; then
+            echo "No CI run for $sha; checking here instead."
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh run watch "$run" --interval 20 > /dev/null || true
+          conclusion="$(gh run view "$run" --json conclusion --jq .conclusion)"
+          echo "CI run $run for $sha: $conclusion"
+          case "$conclusion" in
+            success) echo "passed=true" >> "$GITHUB_OUTPUT" ;;
+            failure) echo "CI failed for this commit; fix it before releasing." >&2; exit 1 ;;
+            *) echo "passed=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+      # Electron's install script and electron-builder download runtimes and tools into these.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: electron-release-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-release-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile --prefer-offline
+      - if: steps.ci.outputs.passed != 'true'
+        run: pnpm audit:check && pnpm dedupe:check && pnpm licenses:check
+      - if: steps.ci.outputs.passed != 'true'
+        run: pnpm lint
+      - if: steps.ci.outputs.passed != 'true'
+        run: pnpm test
       - name: Test notarization recovery
         run: node --test "$RUNNER_TEMP/reviewer-release-tools/notarization.test.mjs"
       - name: Find saved notarization submission
