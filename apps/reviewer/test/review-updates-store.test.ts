@@ -102,7 +102,7 @@ describe('durable review updates', () => {
     let store = open(path)
     const previous = sectionPull(base, base.replace('return 1', 'return 10'))
     store.savePull(previous)
-    store.saveDraft(previous.id, emptyDraft())
+    store.saveDraft(previous.id, { ...emptyDraft(), summary: 'Looks good' })
     const current = {
       ...sectionPull(base, base.replace('return 2', 'return 20')),
       id: 'current',
@@ -115,10 +115,59 @@ describe('durable review updates', () => {
     close(store)
     store = open(path)
     expect(store.getDraft(current.id).changes).toBeUndefined()
-    store.saveDraft(current.id, emptyDraft())
+    store.saveDraft(current.id, { ...emptyDraft(), summary: 'Still good' })
     const next = { ...current, id: 'next', headSha: 'next-head' }
     store.savePull(next)
     expect(store.getDraft(next.id).changes).toMatchObject({ baselineHeadSha: current.headSha })
+  })
+})
+
+describe('what counts as a review', () => {
+  it('does not compare with a revision that was only opened', () => {
+    const store = open(directory())
+    const previous = sectionPull(base, base.replace('return 1', 'return 10'))
+    store.savePull(previous)
+    store.saveDraft(previous.id, emptyDraft())
+    const current = {
+      ...sectionPull(base, base.replace('return 2', 'return 20')),
+      id: 'current',
+      headSha: 'current-head',
+    }
+    store.savePull(current)
+
+    expect(store.getDraft(current.id).changes).toBeUndefined()
+  })
+
+  it('replaces a baseline pinned to an unreviewed revision with the last reviewed one', () => {
+    const path = directory()
+    let store = open(path)
+    const reviewed = sectionPull(base, base.replace('return 1', 'return 10'))
+    store.savePull(reviewed)
+    store.saveDraft(reviewed.id, {
+      ...emptyDraft(),
+      viewedFileIds: [required(reviewed.files[0]).id],
+    })
+    const opened = { ...reviewed, id: 'opened', headSha: 'opened-head' }
+    store.savePull(opened)
+    store.saveDraft(opened.id, emptyDraft())
+    const current = {
+      ...sectionPull(base, base.replace('return 2', 'return 20')),
+      id: 'current',
+      headSha: 'current-head',
+    }
+    store.savePull(current)
+    close(store)
+    // An earlier release pinned whichever revision had a draft at all.
+    const database = new DatabaseSync(join(path, 'reviewer.sqlite'))
+    database
+      .prepare('INSERT INTO review_baselines (snapshot_id, baseline_id) VALUES (?, ?)')
+      .run(current.id, opened.id)
+    database.close()
+    store = open(path)
+
+    const changes = store.getDraft(current.id).changes
+
+    expect(changes).toMatchObject({ baselineHeadSha: reviewed.headSha })
   })
 })
 

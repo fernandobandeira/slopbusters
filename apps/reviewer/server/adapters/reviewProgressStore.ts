@@ -56,26 +56,31 @@ function increment(counts: Map<string, number>, key: string) {
   counts.set(key, (counts.get(key) ?? 0) + 1)
 }
 
-/** Pin the prior saved review once per snapshot, so reading the new revision does
+/**
+ * A draft is saved as soon as a revision is opened, so only a draft with something in it counts
+ * as a review: a comment, a summary, or a viewed file or section.
+ */
+const REVIEWED_DRAFT = `(
+  coalesce(json_array_length(drafts.draft, '$.comments'), 0) > 0
+  OR trim(coalesce(json_extract(drafts.draft, '$.summary'), '')) <> ''
+  OR coalesce(json_array_length(drafts.draft, '$.viewedFileIds'), 0) > 0
+  OR coalesce(json_array_length(drafts.draft, '$.viewedHunkIds'), 0) > 0
+)`
+
+/** Pin the prior reviewed revision once per snapshot, so reading the new revision does
  * not silently consume its update summary. Regrouping leaves this baseline alone. */
 export function readReviewChanges(
   database: DatabaseSync,
   pull: PullRequest,
 ): ReviewChanges | undefined {
-  const prior = database
-    .prepare(
-      `
-    SELECT snapshots.id FROM snapshots JOIN drafts ON drafts.snapshot_id = snapshots.id
-    WHERE snapshots.pull_identity = ?
-      AND snapshots.rowid < (SELECT rowid FROM snapshots WHERE id = ?)
-      AND (json_extract(snapshot, '$.headSha') <> ? OR json_extract(snapshot, '$.baseSha') <> ?)
-    ORDER BY snapshots.rowid DESC LIMIT 1
-  `,
-    )
-    .get(pullIdentity(pull), pull.id, pull.headSha, pull.baseSha)
   database
     .prepare('INSERT OR IGNORE INTO review_baselines (snapshot_id, baseline_id) VALUES (?, ?)')
-    .run(pull.id, prior ? String(prior.id) : null)
+    .run(pull.id, priorReview(database, pull) ?? null)
+  // Baselines pinned before a draft had to hold a review may point at a revision only opened.
+  if (pinnedBaselineUnreviewed(database, pull.id))
+    database
+      .prepare('UPDATE review_baselines SET baseline_id = ? WHERE snapshot_id = ?')
+      .run(priorReview(database, pull) ?? null, pull.id)
   const row = database
     .prepare(
       `
@@ -88,6 +93,38 @@ export function readReviewChanges(
   return row
     ? compareReviewSections(sectionedPull(JSON.parse(String(row.snapshot)) as PullRequest), pull)
     : undefined
+}
+
+/** The latest earlier revision of this PR that the user reviewed. */
+function priorReview(database: DatabaseSync, pull: PullRequest): string | undefined {
+  const row = database
+    .prepare(
+      `
+    SELECT snapshots.id FROM snapshots JOIN drafts ON drafts.snapshot_id = snapshots.id
+    WHERE snapshots.pull_identity = ?
+      AND snapshots.rowid < (SELECT rowid FROM snapshots WHERE id = ?)
+      AND (json_extract(snapshot, '$.headSha') <> ? OR json_extract(snapshot, '$.baseSha') <> ?)
+      AND ${REVIEWED_DRAFT}
+    ORDER BY snapshots.rowid DESC LIMIT 1
+  `,
+    )
+    .get(pullIdentity(pull), pull.id, pull.headSha, pull.baseSha)
+  return row ? String(row.id) : undefined
+}
+
+function pinnedBaselineUnreviewed(database: DatabaseSync, snapshotId: string): boolean {
+  return Boolean(
+    database
+      .prepare(
+        `
+    SELECT 1 FROM review_baselines
+    LEFT JOIN drafts ON drafts.snapshot_id = review_baselines.baseline_id
+    WHERE review_baselines.snapshot_id = ? AND review_baselines.baseline_id IS NOT NULL
+      AND (drafts.draft IS NULL OR NOT ${REVIEWED_DRAFT})
+  `,
+      )
+      .get(snapshotId),
+  )
 }
 
 /** Dismissing updates clears this snapshot's baseline; later revisions compare with it again. */
