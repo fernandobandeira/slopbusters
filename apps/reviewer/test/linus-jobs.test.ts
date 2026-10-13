@@ -158,6 +158,35 @@ describe('dual Linus review sessions', () => {
     expect(jobs.get(session.id).results[0]!.reviewers).toEqual([primary])
     expect(reviewWithLinus).toHaveBeenCalledTimes(2)
   })
+  it('reopens a partial review for the same PR and names it when it blocks another', async () => {
+    vi.mocked(reviewWithLinus).mockImplementation(({ model }) =>
+      model.provider === Provider.claude
+        ? Promise.reject(new Error('Companion unavailable'))
+        : Promise.resolve(advice),
+    )
+    const session = jobs.start(repository, [fixturePull().url])
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('partial')
+    })
+    const restarted = new LinusJobs({
+      store,
+      turns: recordingTurns().turns,
+      staticDirectory: directory,
+    })
+
+    const reopened = restarted.start(repository, [fixturePull().url])
+
+    expect(reopened).toMatchObject({ id: session.id, status: 'partial' })
+    expect(restarted.latest(repository)?.id).toBe(session.id)
+    const other = 'https://github.com/review-room/example/pull/129'
+    expect(() => restarted.start(repository, [other])).toThrow(
+      expect.objectContaining({
+        status: 409,
+        message: 'Finish or cancel the current Linus review of PR #128 before starting another.',
+      }) as Error,
+    )
+    expect(reviewWithLinus).toHaveBeenCalledTimes(2)
+  })
   it('preserves completed PRs on failure and retries only remaining PRs with current settings', async () => {
     const second = {
       ...fixturePull(),

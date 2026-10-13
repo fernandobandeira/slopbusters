@@ -2,7 +2,12 @@ import type { AgentSessions } from './agent-sessions/agentSessions'
 import type { ProviderObserver } from '../../shared/domain/agentSession'
 import { randomUUID } from 'node:crypto'
 import type { OrganizationPreferences } from '../../shared/domain/preferences'
-import type { PendingReview, ReviewSession } from '../../shared/domain/reviewSession'
+import {
+  blocksNewReview,
+  reviewedPullsLabel,
+  type PendingReview,
+  type ReviewSession,
+} from '../../shared/domain/reviewSession'
 import type { PullRequest } from '../../shared/domain/types'
 import { publicError, UserError } from '../errors'
 import type { ReviewCheckout } from '../adapters/reviewWorkspaces'
@@ -48,17 +53,20 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
   start(repository: string, urls: string[]): ReviewSession<Advice> {
     const { primary, companion } = this.strategy.models()
     const previous = this.latest(repository)
-    if (
-      previous?.status === 'running' &&
-      JSON.stringify(previous.urls) === JSON.stringify(urls) &&
-      JSON.stringify(previous.primary) === JSON.stringify(primary) &&
-      JSON.stringify(previous.companion) === JSON.stringify(companion)
-    )
-      return previous
-    if (previous?.status === 'running' || previous?.status === 'partial')
-      throw new UserError(
-        `Finish or cancel the current ${this.strategy.name} review before starting another.`,
+    if (previous && blocksNewReview(previous)) {
+      // Asking again for the same PRs reopens the review that is still waiting on the user.
+      if (
+        JSON.stringify(previous.urls) === JSON.stringify(urls) &&
+        (previous.status === 'partial' ||
+          JSON.stringify([previous.primary, previous.companion]) ===
+            JSON.stringify([primary, companion]))
       )
+        return previous
+      throw new UserError(
+        `Finish or cancel the current ${this.strategy.name} review of ${reviewedPullsLabel(previous.urls)} before starting another.`,
+        409,
+      )
+    }
     const session: ReviewSession<Advice> = {
       id: randomUUID(),
       repository,

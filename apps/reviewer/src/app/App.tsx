@@ -107,7 +107,12 @@ export function App() {
     target.searchParams.set('bob', sessionId)
     void navigate(target.pathname + target.search)
   }
-  const reviewLaunch = useReviewLaunch({ repository, onBobOpen: openBob, onError: setError })
+  const reviewLaunch = useReviewLaunch({
+    repository,
+    restore: route.kind === 'inbox' || route.kind === 'pull',
+    onBobOpen: openBob,
+    onError: setError,
+  })
   function startReview(companion: ReviewCompanion, url: string) {
     if (companion === 'linus') {
       setLinusReplay(undefined)

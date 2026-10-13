@@ -16,6 +16,7 @@ import {
   recommendationsPrompt,
   verdictLabels,
   type LinusResult,
+  type LinusSession,
   type LinusStep,
   type LinusReplayRequest,
 } from '../../../shared/domain/linus'
@@ -27,6 +28,7 @@ import {
   type PullRequest,
 } from '../../../shared/domain/types'
 import type { Preferences } from '../../../shared/domain/preferences'
+import { reviewedPullsLabel } from '../../../shared/domain/reviewSession'
 import { Button } from '~/components/ui/button'
 import { PullDescription } from '../review/PullDescription'
 import { ReviewDiffCodeView } from '../../components/ReviewDiffCodeView'
@@ -177,6 +179,12 @@ function LinusEvidence({
       </div>
     </section>
   )
+}
+
+/** The PR a partial review stopped on, so the user knows which review is waiting. */
+function unfinishedPull(session: LinusSession) {
+  const next = session.urls[session.results.length]
+  return reviewedPullsLabel(next ? [next] : [])
 }
 
 export function LinusCompanion({
@@ -434,7 +442,9 @@ export function LinusCompanion({
               )}
               {session?.status === 'partial' && !savedResult && (
                 <div className="linus-notice">
-                  <p>One reviewer couldn’t finish. I have the other review.</p>
+                  <p>
+                    One reviewer couldn’t finish {unfinishedPull(session)}. I have the other review.
+                  </p>
                   <p className="muted linus-small">{session.error}</p>
                   <div className="linus-actions">
                     <Button size="sm" disabled={busy} onClick={() => void act('retry')}>
