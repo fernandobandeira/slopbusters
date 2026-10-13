@@ -1,15 +1,13 @@
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import * as Effect from 'effect/Effect'
 import * as Queue from 'effect/Queue'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
-import { expect, it } from 'vitest'
+import { afterAll, expect, it } from 'vitest'
 import { z } from 'zod'
-import {
-  ClientOrchestrationCommand,
-  type OrchestrationShellStreamItem,
-  type OrchestrationThreadStreamItem,
-} from '@t3tools/contracts'
+import { ClientOrchestrationCommand, type OrchestrationThreadStreamItem } from '@t3tools/contracts'
 import type { ProviderEvent } from '../shared/domain/agentSession'
 import { Provider } from '../shared/domain/types'
 import { CommandTimeoutError } from '../server/adapters/process'
@@ -28,6 +26,21 @@ const engine: RunningEngine = {
 const claude = { provider: Provider.claude, model: 'claude-haiku-5-5' }
 const filesSchema = z.object({ files: z.array(z.string()) })
 
+/** A review checkout that carries agent configuration a repository could use to run code. */
+const checkout = mkdtempSync(join(tmpdir(), 'turns-checkout-'))
+mkdirSync(join(checkout, 'src'))
+mkdirSync(join(checkout, '.claude'))
+mkdirSync(join(checkout, '.git'))
+writeFileSync(join(checkout, 'README.md'), 'readme\n')
+writeFileSync(join(checkout, 'CLAUDE.md'), 'instructions\n')
+writeFileSync(join(checkout, 'src', 'index.ts'), 'export {}\n')
+writeFileSync(join(checkout, '.claude', 'settings.json'), '{"hooks":{}}\n')
+writeFileSync(join(checkout, '.git', 'config'), '[core]\n\tfsmonitor = touch /tmp/x\n')
+writeFileSync(join(checkout, '.mcp.json'), '{}\n')
+afterAll(() => {
+  rmSync(checkout, { recursive: true, force: true })
+})
+
 type Command = Record<string, unknown> & { type: string }
 type Item = OrchestrationThreadStreamItem
 
@@ -37,9 +50,6 @@ type Item = OrchestrationThreadStreamItem
  */
 function fakeEngine(agent: (command: Command, thread: FakeThread) => void) {
   const commands: Command[] = []
-  const projects: { id: string; title: string; workspaceRoot: string }[] = [
-    { id: 'project-1', title: 'checkout', workspaceRoot: '/reviews/checkout' },
-  ]
   const threads = new Map<string, FakeThread>()
   const thread = (id: unknown) => {
     const key = String(id)
@@ -50,22 +60,11 @@ function fakeEngine(agent: (command: Command, thread: FakeThread) => void) {
     return created
   }
   const methods: Partial<Record<keyof EngineClient, unknown>> = {
-    'orchestration.subscribeShell': () =>
-      Stream.make({
-        kind: 'snapshot',
-        snapshot: { projects: [...projects] },
-      } as unknown as OrchestrationShellStreamItem),
     'orchestration.subscribeThread': (input: { threadId: string }) =>
       thread(input.threadId).subscribe(),
     'orchestration.dispatchCommand': (input: unknown) => {
       const command = Schema.encodeUnknownSync(ClientOrchestrationCommand)(input) as Command
       commands.push(command)
-      if (command.type === 'project.create')
-        projects.push({
-          id: String(command.projectId),
-          title: String(command.title),
-          workspaceRoot: String(command.workspaceRoot),
-        })
       agent(command, thread(command.threadId))
       return Effect.succeed({ sequence: commands.length })
     },
@@ -79,7 +78,11 @@ function fakeEngine(agent: (command: Command, thread: FakeThread) => void) {
     turns: new EngineTurns(connection),
     commands,
     types: () => commands.map((command) => command.type),
-    projects,
+    /** The directory the engine project of the run was created in. */
+    workspaceRoots: () =>
+      commands
+        .filter((command) => command.type === 'project.create')
+        .map((command) => String(command.workspaceRoot)),
   }
 }
 
@@ -167,7 +170,7 @@ function request(
     prompt: 'List the top-level files.',
     schema: filesSchema,
     signal: new AbortController().signal,
-    directory: '/reviews/checkout',
+    directory: checkout,
     purpose: 'files',
     ...overrides,
   }
@@ -175,7 +178,16 @@ function request(
 
 const fenced = (value: unknown) => `Here you go:\n\n\`\`\`json\n${JSON.stringify(value)}\n\`\`\``
 
-it('runs one read-only turn in the directory project and returns the validated JSON', async () => {
+const lifecycle = (...turns: string[]) => [
+  'project.create',
+  'thread.create',
+  ...turns,
+  'thread.session.stop',
+  'thread.archive',
+  'project.delete',
+]
+
+it('runs one read-only turn in a per-run project and returns the validated JSON', async () => {
   const fake = fakeEngine((command, thread) => {
     if (command.type === 'thread.turn.start') thread.reply(command, fenced({ files: ['a.ts'] }))
   })
@@ -184,15 +196,10 @@ it('runs one read-only turn in the directory project and returns the validated J
   const result = await fake.turns.run(request({ observer: (event) => events.push(event) }))
 
   expect(result).toEqual({ files: ['a.ts'] })
-  expect(fake.types()).toEqual([
-    'thread.create',
-    'thread.turn.start',
-    'thread.session.stop',
-    'thread.archive',
-  ])
-  const [create, start] = fake.commands
+  expect(fake.types()).toEqual(lifecycle('thread.turn.start'))
+  const [project, create, start] = fake.commands
   expect(create).toMatchObject({
-    projectId: 'project-1',
+    projectId: project?.projectId,
     title: 'Slopbusters · files',
     modelSelection: { instanceId: 'claudeAgent', model: 'claude-haiku-5-5' },
     runtimeMode: 'approval-required',
@@ -205,41 +212,60 @@ it('runs one read-only turn in the directory project and returns the validated J
   expect(text).toMatch(/^List the top-level files\.\n/)
   expect(text).toContain('"files"')
   expect(text).toContain('Do not create, edit or delete files')
+  expect(fake.commands.at(-1)).toMatchObject({ projectId: project?.projectId, force: true })
   expect(events[0]).toMatchObject({ kind: 'prompt', text: 'List the top-level files.' })
   expect(events.at(-1)).toMatchObject({ kind: 'assistant', status: 'complete' })
 })
 
-it('starts Codex threads on the codex provider instance', async () => {
+it('starts Codex in the workspace-write sandbox of its throwaway copy', async () => {
   const fake = fakeEngine((command, thread) => {
     if (command.type === 'thread.turn.start') thread.reply(command, '{"files":[]}')
   })
 
   await fake.turns.run(request({ model: { provider: Provider.codex, model: 'gpt-6.1-sol' } }))
 
-  expect(fake.commands[0]).toMatchObject({
+  const create = fake.commands.find((command) => command.type === 'thread.create')
+  const start = fake.commands.find((command) => command.type === 'thread.turn.start')
+  expect(create).toMatchObject({
     modelSelection: { instanceId: 'codex', model: 'gpt-6.1-sol' },
+    runtimeMode: 'auto-accept-edits',
   })
+  expect(start).toMatchObject({ runtimeMode: 'auto-accept-edits' })
 })
 
-it('creates one project for a new directory when runs overlap', async () => {
+it('runs the agent in a scrubbed copy of the directory that it deletes afterwards', async () => {
+  let copied: string[] = []
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'thread.turn.start') return
+    const root = fake.workspaceRoots()[0] ?? ''
+    copied = ['README.md', 'CLAUDE.md', 'src/index.ts', '.claude', '.git', '.mcp.json'].filter(
+      (path) => existsSync(join(root, path)),
+    )
+    writeFileSync(join(root, 'README.md'), 'changed by the agent\n')
+    thread.reply(command, '{"files":[]}')
+  })
+
+  await fake.turns.run(request())
+
+  const [root] = fake.workspaceRoots()
+  expect(root).not.toBe(checkout)
+  expect(basename(root ?? '')).toBe(basename(checkout))
+  expect(copied).toEqual(['README.md', 'CLAUDE.md', 'src/index.ts'])
+  expect(existsSync(root ?? '')).toBe(false)
+  expect(readFileSync(join(checkout, 'README.md'), 'utf8')).toBe('readme\n')
+  expect(existsSync(join(checkout, '.claude', 'settings.json'))).toBe(true)
+})
+
+it('gives overlapping runs on one directory their own copies and projects', async () => {
   const fake = fakeEngine((command, thread) => {
     if (command.type === 'thread.turn.start') thread.reply(command, '{"files":[]}')
   })
-  const directory = '/reviews/new-checkout'
 
-  await Promise.all([
-    fake.turns.run(request({ directory })),
-    fake.turns.run(request({ directory })),
-  ])
+  await Promise.all([fake.turns.run(request()), fake.turns.run(request())])
 
-  const created = fake.commands.filter((command) => command.type === 'project.create')
-  expect(created).toHaveLength(1)
-  expect(created[0]).toMatchObject({ workspaceRoot: directory, title: 'new-checkout' })
-  const threads = fake.commands.filter((command) => command.type === 'thread.create')
-  expect(threads.map((command) => command.projectId)).toEqual([
-    created[0]?.projectId,
-    created[0]?.projectId,
-  ])
+  expect(new Set(fake.workspaceRoots()).size).toBe(2)
+  const deleted = fake.commands.filter((command) => command.type === 'project.delete')
+  expect(deleted).toHaveLength(2)
 })
 
 it('declines every approval and answers questions so the turn never waits on a person', async () => {
@@ -304,13 +330,7 @@ it('fails after the corrective turn also misses the schema, and still archives',
     'Claude did not reply with the requested JSON: The reply did not contain valid JSON.',
   )
 
-  expect(fake.types()).toEqual([
-    'thread.create',
-    'thread.turn.start',
-    'thread.turn.start',
-    'thread.session.stop',
-    'thread.archive',
-  ])
+  expect(fake.types()).toEqual(lifecycle('thread.turn.start', 'thread.turn.start'))
 })
 
 it('reports a turn the provider fails', async () => {
@@ -321,7 +341,7 @@ it('reports a turn the provider fails', async () => {
   })
 
   await expect(fake.turns.run(request())).rejects.toThrow('Claude failed: Model not available.')
-  expect(fake.types().slice(-1)).toEqual(['thread.archive'])
+  expect(fake.types().slice(-3)).toEqual(lifecycle().slice(-3))
 })
 
 it('interrupts the turn when the caller cancels', async () => {
@@ -339,13 +359,7 @@ it('interrupts the turn when the caller cancels', async () => {
     'The operation was cancelled.',
   )
 
-  expect(fake.types()).toEqual([
-    'thread.create',
-    'thread.turn.start',
-    'thread.turn.interrupt',
-    'thread.session.stop',
-    'thread.archive',
-  ])
+  expect(fake.types()).toEqual(lifecycle('thread.turn.start', 'thread.turn.interrupt'))
 })
 
 it('interrupts the turn and reports a timeout when the agent runs too long', async () => {
@@ -357,7 +371,7 @@ it('interrupts the turn and reports a timeout when the agent runs too long', asy
 
   await expect(run).rejects.toBeInstanceOf(CommandTimeoutError)
   expect(fake.types()).toContain('thread.turn.interrupt')
-  expect(fake.types().slice(-1)).toEqual(['thread.archive'])
+  expect(fake.types().slice(-3)).toEqual(lifecycle().slice(-3))
 })
 
 it('runs without a directory in a scratch project that it deletes afterwards', async () => {

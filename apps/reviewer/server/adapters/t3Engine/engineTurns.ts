@@ -13,15 +13,16 @@ import {
   ProviderInstanceId,
   ThreadId,
   type ClientOrchestrationCommand,
+  type RuntimeMode,
 } from '@t3tools/contracts'
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import { Provider } from '../../../shared/domain/types'
 import { logError } from '../../errors'
 import { PROVIDER_TIMEOUT_MS, T3_ENGINE_TURN_MARGIN_MS } from '../../limits'
+import { copyForInspection } from '../inspectionCopy'
 import { CommandTimeoutError } from '../process'
 import type { EngineClient, EngineConnection } from './engineConnection'
-import { EngineThreads } from './engineThreads'
 import { correctionPrompt, parseStructuredReply, withOutputContract } from './structuredOutput'
 import { TurnFollower, type TurnOutcome } from './turnFollower'
 
@@ -30,7 +31,10 @@ export interface StructuredTurnRequest<T> {
   readonly prompt: string
   readonly schema: z.ZodType<T>
   readonly signal: AbortSignal
-  /** A directory the agent may read. Omitted: an empty scratch directory. */
+  /**
+   * A directory the agent may read. The agent works in a disposable copy of it, so the directory
+   * is never modified. Omitted: an empty scratch directory.
+   */
   readonly directory?: string
   readonly observer?: ProviderObserver
   /** The whole run, including a corrective turn; defaults to `PROVIDER_TIMEOUT_MS`. */
@@ -47,6 +51,7 @@ export interface StructuredTurns {
 interface TurnThread {
   readonly id: string
   readonly modelSelection: { instanceId: ProviderInstanceId; model: string }
+  readonly runtimeMode: RuntimeMode
   /** Approval and question ids already answered, so no request is answered twice. */
   readonly answered: Set<string>
 }
@@ -59,20 +64,13 @@ interface Workspace {
 type FollowedTurn = TurnOutcome | { readonly status: 'cancelled' | 'timeout' }
 
 /**
- * Structured turns on a T3 Code engine. Each run is a thread in the project for its directory,
- * started in `approval-required` mode, and every approval the agent asks for is declined. Claude
- * then reads with its own read-only tools and asks before editing or running other commands;
- * Codex runs in its read-only sandbox and asks before any command it does not trust. The thread
- * is archived when the run ends.
+ * Structured turns on a T3 Code engine. Each run gets its own project in a disposable copy of the
+ * directory, scrubbed of repository agent configuration, and one thread there in which every
+ * approval the agent asks for is declined. The thread is archived, and the project and copy are
+ * deleted, when the run ends.
  */
 export class EngineTurns implements StructuredTurns {
-  private readonly threads: EngineThreads
-  /** Project lookups in flight, so concurrent runs in one directory share one project. */
-  private readonly lookups = new Map<string, Promise<string>>()
-
-  constructor(private readonly connection: Pick<EngineConnection, 'run'>) {
-    this.threads = new EngineThreads(connection)
-  }
+  constructor(private readonly connection: Pick<EngineConnection, 'run'>) {}
 
   async run<T>(request: StructuredTurnRequest<T>): Promise<T> {
     request.signal.throwIfAborted()
@@ -83,7 +81,7 @@ export class EngineTurns implements StructuredTurns {
       title: 'Instructions',
     })
     const deadline = Date.now() + (request.timeoutMs ?? PROVIDER_TIMEOUT_MS)
-    const workspace = await this.workspace(request.directory)
+    const workspace = await this.workspace(request.directory, request.signal)
     try {
       const thread = await this.createThread(workspace.projectId, request)
       try {
@@ -132,7 +130,7 @@ export class EngineTurns implements StructuredTurns {
       ...commandBase(thread.id),
       message: { messageId: MessageId.make(messageId), role: 'user', text, attachments: [] },
       modelSelection: thread.modelSelection,
-      runtimeMode: 'approval-required',
+      runtimeMode: thread.runtimeMode,
       interactionMode: 'default',
       createdAt: now(),
     }
@@ -168,6 +166,7 @@ export class EngineTurns implements StructuredTurns {
         ),
         model: request.model.model,
       },
+      runtimeMode: runtimeModeFor(request.model),
       answered: new Set(),
     }
     await this.dispatch({
@@ -176,7 +175,7 @@ export class EngineTurns implements StructuredTurns {
       projectId: ProjectId.make(projectId),
       title: `Slopbusters · ${request.purpose?.trim() || 'structured turn'}`,
       modelSelection: thread.modelSelection,
-      runtimeMode: 'approval-required',
+      runtimeMode: thread.runtimeMode,
       interactionMode: 'default',
       branch: null,
       worktreePath: null,
@@ -199,16 +198,20 @@ export class EngineTurns implements StructuredTurns {
     }
   }
 
-  private async workspace(directory: string | undefined): Promise<Workspace> {
-    if (directory)
-      return { projectId: await this.projectFor(resolve(directory)), release: async () => {} }
-    const scratch = await mkdtemp(join(tmpdir(), 'slopbusters-turn-'))
-    const removeScratch = () => rm(scratch, { recursive: true, force: true })
+  /**
+   * A per-run project in a throwaway directory: a scrubbed copy of `directory`, or an empty one.
+   * The project and the directory are deleted when the run ends.
+   */
+  private async workspace(directory: string | undefined, signal: AbortSignal): Promise<Workspace> {
+    const root = await mkdtemp(join(tmpdir(), 'slopbusters-turn-'))
+    const removeRoot = () => rm(root, { recursive: true, force: true })
     let projectId: string
     try {
-      projectId = await this.createProject(scratch, 'Slopbusters scratch')
+      const workspaceRoot = directory ? join(root, basename(resolve(directory)) || 'source') : root
+      if (directory) await copyForInspection(directory, workspaceRoot, signal)
+      projectId = await this.createProject(workspaceRoot, basename(workspaceRoot))
     } catch (error) {
-      await removeScratch()
+      await removeRoot()
       throw error
     }
     return {
@@ -222,28 +225,11 @@ export class EngineTurns implements StructuredTurns {
             force: true,
           })
         } catch (error) {
-          logError('T3 Code could not delete a scratch project', error)
+          logError('T3 Code could not delete a structured turn project', error)
         }
-        await removeScratch()
+        await removeRoot()
       },
     }
-  }
-
-  /** The engine's project for a directory, created the first time; one lookup per directory. */
-  private projectFor(directory: string): Promise<string> {
-    const inFlight = this.lookups.get(directory)
-    if (inFlight) return inFlight
-    const lookup = this.findOrCreateProject(directory).finally(() => {
-      this.lookups.delete(directory)
-    })
-    this.lookups.set(directory, lookup)
-    return lookup
-  }
-
-  private async findOrCreateProject(directory: string): Promise<string> {
-    const projects = await this.threads.projects()
-    const existing = projects.find((project) => project.workspaceRoot === directory)
-    return existing?.id ?? this.createProject(directory, basename(directory) || directory)
   }
 
   private async createProject(workspaceRoot: string, title: string): Promise<string> {
@@ -335,6 +321,17 @@ function commandBase(threadId: string) {
 
 function now() {
   return new Date().toISOString()
+}
+
+/**
+ * Claude asks before every edit and every command it does not consider read-only, and each ask is
+ * declined. Codex in that mode asks even for `ls`, so it gets T3 Code's workspace-write sandbox
+ * instead (network off, approval on request): it runs read commands in the run's copy without
+ * asking, its writes can only land in that throwaway copy, and any escalation it asks for is
+ * declined.
+ */
+function runtimeModeFor(model: OrganizationPreferences): RuntimeMode {
+  return model.provider === Provider.claude ? 'approval-required' : 'auto-accept-edits'
 }
 
 function agentName(model: OrganizationPreferences) {
