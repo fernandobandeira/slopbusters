@@ -10,7 +10,6 @@ import { InboxPullActions } from './InboxPullActions'
 import { useReviewLaunch } from './useReviewLaunch'
 import type { ReviewCompanion } from '../components/StartReviewButton'
 import { PullReviewActions } from './PullReviewActions'
-import { PullChatMenu } from '../features/chat/PullChatMenu'
 import { IssueRoute, IssuesRoute, LinkedTicketLink } from './IssueRoutes'
 import { useApiQuery } from '../lib/useApiQuery'
 import { usePullReview } from '../features/review/usePullReview'
@@ -421,7 +420,7 @@ export function App() {
                     onReload={() => void reloadPull()}
                     reloading={reloading}
                     inboxUrl={inboxPath(repository, filter)}
-                    reviewActions={(status) => (
+                    reviewActions={
                       <>
                         <LinkedTicketLink url={pull.url} />
                         <PullReviewActions
@@ -446,14 +445,8 @@ export function App() {
                             startReview(companion, pull.url)
                           }}
                         />
-                        <PullChatMenu
-                          pullId={pull.id}
-                          number={pull.number}
-                          status={status}
-                          onError={setError}
-                        />
                       </>
-                    )}
+                    }
                     renderCompanion={({ draft, setDraft, ready, openReview, focusLine }) =>
                       bobReplayId && (
                         <BobCompanion

@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import type { Chat } from '../../../shared/domain/chat'
-import { message } from '../../lib/api'
+import type { Chat } from '../../shared/domain/chat'
+import { message } from './api'
 
 const STARTED_LABEL_MS = 6000
 
 /** Starts a chat and remembers it briefly, so the button can say where it opened. */
-export function useChatStart<Persona extends string>(onError: (error: string) => void) {
-  const [starting, setStarting] = useState<Persona>()
-  const [started, setStarted] = useState<{ persona: Persona; chat: Chat }>()
+export function useChatStart() {
+  const [starting, setStarting] = useState(false)
+  const [started, setStarted] = useState<Chat>()
+  const [error, setError] = useState<string>()
 
   useEffect(() => {
     if (!started) return
@@ -19,19 +20,20 @@ export function useChatStart<Persona extends string>(onError: (error: string) =>
     }
   }, [started])
 
-  async function start(persona: Persona, open: () => Promise<Chat>) {
-    setStarting(persona)
+  async function start(open: () => Promise<Chat>) {
+    setStarting(true)
     setStarted(undefined)
+    setError(undefined)
     try {
-      setStarted({ persona, chat: await open() })
-    } catch (error) {
-      onError(message(error))
+      setStarted(await open())
+    } catch (cause) {
+      setError(message(cause))
     } finally {
-      setStarting(undefined)
+      setStarting(false)
     }
   }
 
-  return { starting, started, start }
+  return { starting, started, error, start }
 }
 
 /** Where the chat opened, for the button's label. */

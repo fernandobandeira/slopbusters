@@ -158,6 +158,9 @@
 .linus-tour-controls .linus-actions {
   gap: 4px;
 }
+.linus-continue {
+  margin-top: 10px;
+}
 .linus-footer {
   display: flex;
   flex-wrap: wrap;

@@ -1,6 +1,8 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import {
+  bobFindingMarkdown,
+  bobReviewMarkdown,
   bobSeverityLabels,
   bobSnapshotMatches,
   bobVerdictLabels,
@@ -10,7 +12,7 @@ import {
 import { DiffSide, type PullRequest, type ReviewDraft } from '../../../shared/domain/types'
 import type { ReviewLocation } from '../../../shared/domain/review'
 import { BobComment, saveBobComment } from './BobComment'
-import { BobCopyButton, bobFindingMarkdown, bobReviewMarkdown } from './BobCopy'
+import { BobCopyButton } from './BobCopy'
 import { BobText } from './BobText'
 
 export interface BobDraftContext {

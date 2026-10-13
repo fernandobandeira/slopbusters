@@ -5,9 +5,6 @@ import { handle } from './contractRouter'
 
 export function chatRouter({ chats }: Services) {
   const router = Router()
-  handle(router, routes.startPullChat, ({ params, body }) => chats.startPullChat(params.id, body))
-  handle(router, routes.startTicketChat, ({ body }) =>
-    chats.startTicketChat(body.ticket, body.repository),
-  )
+  handle(router, routes.continueInT3Code, ({ body }) => chats.continueInT3Code(body))
   return router
 }

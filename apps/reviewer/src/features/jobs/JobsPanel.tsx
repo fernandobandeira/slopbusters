@@ -11,6 +11,7 @@ import {
 } from '../../../shared/domain/jobs'
 import type { Ticket } from '../../../shared/domain/tickets'
 import { TicketMarkdown } from '../../components/TicketMarkdown'
+import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { JobsFindings } from './JobsFindings'
 import { JobsProposal } from './JobsProposal'
 import { JobsQuestions } from './JobsQuestions'
@@ -27,14 +28,11 @@ export function JobsPanel({
   repository,
   onApplied,
   renderSessionCard,
-  chatAction,
 }: {
   ticket: Ticket
   repository: string
   onApplied: () => void
   renderSessionCard: (session: JobsSession) => ReactNode
-  /** Starts a conversation about the issue, beside the review button. */
-  chatAction?: ReactNode
 }) {
   const job = useJobsSession(ticket.identifier, repository)
   const [open, setOpen] = useState(false)
@@ -54,7 +52,6 @@ export function JobsPanel({
           setOpen((value) => !value)
         }}
       />
-      {chatAction}
       {open && (
         <aside
           className="linus-companion jobs-companion linus-open"
@@ -224,6 +221,7 @@ function JobsControls({
           )}
         </>
       )}
+      <ContinueJobs session={session} />
       <span className="muted jobs-repository">
         {repository ? `Checks code in ${repository}` : 'No repository selected for code checks'}
       </span>
@@ -233,6 +231,19 @@ function JobsControls({
         </p>
       )}
     </div>
+  )
+}
+
+/** Carries Steve's latest review, or the one reviewer that finished, on in a T3 Code thread. */
+function ContinueJobs({ session }: { session: JobsSession | undefined }) {
+  const reviewed =
+    session?.status === 'partial' || (session?.status !== 'running' && latestJobsAdvice(session))
+  if (!session || !reviewed) return null
+  return (
+    <ContinueInT3CodeButton
+      request={{ persona: 'jobs', sessionId: session.id }}
+      disabled={!session.repository}
+    />
   )
 }
 

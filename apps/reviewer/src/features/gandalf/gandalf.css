@@ -83,6 +83,13 @@
 .gandalf-detail a {
   color: var(--primary);
 }
+.gandalf-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
 .gandalf-history {
   margin: 12px 0;
 }

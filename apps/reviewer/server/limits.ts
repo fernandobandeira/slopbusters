@@ -56,10 +56,8 @@ export const INSPECTION_COPY_TIMEOUT_MS = 120_000
 export const MAX_INSPECTION_LISTED_FILES = 2000
 /** How much of a schema validation failure is quoted back to the agent and in errors. */
 export const MAX_STRUCTURED_ERROR_CHARS = 2000
-/** A Gandalf chat's first message carries the failed step of each failing check. */
-export const MAX_CHAT_FAILURES = 8
-export const MAX_CHAT_FAILURE_LOG_CHARACTERS = 6_000
-export const CHAT_CONTEXT_TIMEOUT_MS = 60_000
+/** How much of a persona's review the first message of a T3 Code chat carries over. */
+export const MAX_CHAT_REVIEW_CHARACTERS = 20_000
 export const MAX_DIFF_FILE_CACHE_ENTRIES = 60
 export const MAX_SOURCE_FILE_CACHE_ENTRIES = 1000
 export const MAX_SOURCE_TREE_CACHE_ENTRIES = 20

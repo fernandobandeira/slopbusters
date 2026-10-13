@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { parsePullUrl } from '../domain/pullUrl'
+import { pullUrlSchema } from '../domain/pullUrl'
 
 export function defineRoute<
   R extends z.ZodType,
@@ -56,17 +56,6 @@ export const repositoryQuery = z.object({
     .max(300)
     .regex(/^[\w.-]+\/[\w.-]+$/),
 })
-export const pullUrlSchema = z
-  .string()
-  .min(1)
-  .max(2000)
-  .refine((url) => {
-    try {
-      parsePullUrl(url)
-      return true
-    } catch {
-      return false
-    }
-  }, 'Enter a valid GitHub pull request URL.')
+export { pullUrlSchema }
 export const urlQuery = z.object({ url: pullUrlSchema })
 export const okSchema = z.object({ ok: z.literal(true) })

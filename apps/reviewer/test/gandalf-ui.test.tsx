@@ -252,3 +252,52 @@ describe('Gandalf setup and errors', () => {
     expect(screen.getByRole<HTMLInputElement>('checkbox').checked).toBe(true)
   })
 })
+
+describe('continuing Gandalf in T3 Code', () => {
+  it('carries a finished PR on from its result and says where the chat opened', async () => {
+    const finished: GandalfSession = {
+      ...session,
+      status: 'complete',
+      progress: 'You may pass.',
+      results: [
+        {
+          url,
+          number: 1,
+          title: pull.title,
+          headSha: 'head',
+          baseSha: 'base',
+          resolvedSha: 'resolved1',
+          changedPaths: ['src/a.ts'],
+          rounds: 1,
+          published: true,
+        },
+      ],
+    }
+    const fetch = vi.fn((path: string, options?: RequestInit) =>
+      Promise.resolve(
+        options?.method === 'POST' && path === '/api/chats'
+          ? Response.json({
+              threadId: 'thread-1',
+              title: 'Gandalf · #1 Preserve both changes',
+              project: 'project',
+              location: 'slopbusters',
+              onPullRequestHead: true,
+            })
+          : Response.json({ session: finished }),
+      ),
+    )
+    vi.stubGlobal('fetch', fetch)
+    companion()
+    fireEvent.click(await screen.findByRole('button', { name: 'View last resolution' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue in T3 Code' }))
+
+    expect(await screen.findByText('Opened in a Slopbusters chat')).toBeTruthy()
+    const [, request] = fetch.mock.calls.find(([path]) => path === '/api/chats') ?? []
+    expect(JSON.parse(request?.body as string)).toEqual({
+      persona: 'gandalf',
+      sessionId: 'resolution',
+      url,
+    })
+  })
+})

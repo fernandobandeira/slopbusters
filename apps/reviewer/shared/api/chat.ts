@@ -1,22 +1,8 @@
-import { z } from 'zod'
-import { chatSchema, pullChatSchema } from '../domain/chat'
-import { ticketIdentifierSchema } from '../domain/tickets'
-import { defineRoute, idParams } from './contract'
+import { chatSchema, continueChatSchema } from '../domain/chat'
+import { defineRoute } from './contract'
 
-export const startPullChat = defineRoute('POST', '/pulls/:id/chat', {
-  params: idParams,
-  request: pullChatSchema,
-  response: chatSchema,
-})
-export const startTicketChat = defineRoute('POST', '/tickets/chat', {
-  request: z
-    .object({
-      ticket: ticketIdentifierSchema,
-      repository: z
-        .string()
-        .max(300)
-        .regex(/^[\w.-]+\/[\w.-]+$/),
-    })
-    .strict(),
+/** Carry a finished review on as a T3 Code thread that starts from its result. */
+export const continueInT3Code = defineRoute('POST', '/chats', {
+  request: continueChatSchema,
   response: chatSchema,
 })

@@ -1,16 +1,22 @@
 import { z } from 'zod'
-import { gandalfTaskSchema } from './gandalf'
+import { pullUrlSchema as pullUrl } from './pullUrl'
 
 /** Where a chat runs: the user's T3 Code, or the T3 Code engine Slopbusters bundles. */
 export type ChatLocation = 't3code' | 'slopbusters'
 
-/** Who to talk to about a pull request, and for Gandalf, what to fix. */
-export const pullChatSchema = z.discriminatedUnion('persona', [
-  z.object({ persona: z.literal('linus') }).strict(),
-  z.object({ persona: z.literal('unclebob') }).strict(),
-  z.object({ persona: z.literal('gandalf'), task: gandalfTaskSchema }).strict(),
+const sessionId = z.string().min(1).max(100)
+
+/**
+ * The review a T3 Code conversation picks up from. Linus and Gandalf sessions cover several PRs,
+ * so they also name the PR.
+ */
+export const continueChatSchema = z.discriminatedUnion('persona', [
+  z.object({ persona: z.literal('linus'), sessionId, url: pullUrl }).strict(),
+  z.object({ persona: z.literal('unclebob'), sessionId }).strict(),
+  z.object({ persona: z.literal('jobs'), sessionId }).strict(),
+  z.object({ persona: z.literal('gandalf'), sessionId, url: pullUrl }).strict(),
 ])
-export type PullChatRequest = z.infer<typeof pullChatSchema>
+export type ContinueChatRequest = z.infer<typeof continueChatSchema>
 
 /** A conversation with a persona, running as a T3 Code thread. */
 export interface Chat {

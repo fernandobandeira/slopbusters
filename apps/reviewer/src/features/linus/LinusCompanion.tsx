@@ -32,6 +32,7 @@ import { reviewedPullsLabel } from '../../../shared/domain/reviewSession'
 import { Button } from '~/components/ui/button'
 import { PullDescription } from '../review/PullDescription'
 import { ReviewDiffCodeView } from '../../components/ReviewDiffCodeView'
+import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { diffItems } from '../review/diff/diffItems'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { linusReviewTurns } from './linusReviewTurns'
@@ -185,6 +186,12 @@ function LinusEvidence({
 function unfinishedPull(session: LinusSession) {
   const next = session.urls[session.results.length]
   return reviewedPullsLabel(next ? [next] : [])
+}
+
+/** Carries Linus's review of one PR on in a T3 Code thread. */
+function ContinueLinus({ sessionId, url }: { sessionId?: string; url?: string }) {
+  if (!sessionId || !url) return null
+  return <ContinueInT3CodeButton request={{ persona: 'linus', sessionId, url }} />
 }
 
 export function LinusCompanion({
@@ -458,6 +465,7 @@ export function LinusCompanion({
                     >
                       Use available review
                     </Button>
+                    <ContinueLinus sessionId={session.id} url={session.pending?.pull.url} />
                   </div>
                 </div>
               )}
@@ -540,6 +548,9 @@ export function LinusCompanion({
                         <ChevronRight size={14} />
                       </Button>
                     </div>
+                  </div>
+                  <div className="linus-actions linus-continue">
+                    <ContinueLinus sessionId={activitySessionId} url={turn.result.pull.url} />
                   </div>
                 </>
               )}

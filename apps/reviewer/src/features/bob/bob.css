@@ -146,6 +146,10 @@
   flex-shrink: 0;
   margin-top: 14px;
 }
+.bob-continue {
+  flex-shrink: 0;
+  margin-top: 10px;
+}
 .review-focusing-line .review-body {
   padding-right: 428px;
 }

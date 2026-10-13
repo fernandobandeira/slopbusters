@@ -56,6 +56,32 @@ export const bobSeverityLabels: Record<BobFinding['severity'], string> = {
   consider: 'Consider',
 }
 
+export function bobFindingMarkdown(finding: BobFinding): string {
+  const side = finding.side === DiffSide.left ? 'original' : 'updated'
+  return [
+    `**${bobSeverityLabels[finding.severity]}: ${finding.title}**`,
+    `\`${finding.path}:${finding.line}\` · ${side} code`,
+    finding.body,
+    `**Suggested improvement**\n\n${finding.suggestion}`,
+  ].join('\n\n')
+}
+
+/** Uncle Bob's whole review as Markdown, for the clipboard and for a chat that continues it. */
+export function bobReviewMarkdown(advice: BobAdvice): string {
+  const notes = [
+    ['What reads well', advice.good],
+    ['Review limitations', advice.limitations],
+    ['Unresolved disagreements', advice.disagreements],
+  ] as const
+  return [
+    `## Uncle Bob: ${bobVerdictLabels[advice.verdict]}\n\n${advice.summary}`,
+    ...advice.findings.map(bobFindingMarkdown),
+    ...notes
+      .filter(([, entries]) => entries.length)
+      .map(([title, entries]) => `**${title}**\n\n${entries.map((e) => `- ${e}`).join('\n')}`),
+  ].join('\n\n---\n\n')
+}
+
 export function validateBobAdvice(pull: PullRequest, input: unknown): BobAdvice {
   const advice = bobAdviceSchema.parse(input)
   const ids = new Set<string>()

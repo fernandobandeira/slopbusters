@@ -1,6 +1,7 @@
 import { LoaderCircle } from 'lucide-react'
 import type { GandalfSession } from '../../../shared/domain/gandalf'
 import { Button } from '~/components/ui/button'
+import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 
 export function GandalfProgress({
   session,
@@ -40,17 +41,22 @@ export function GandalfProgress({
       )}
       {session.error && <p role="alert">{session.error}</p>}
       {session.results.map((result) => (
-        <p className="gandalf-detail" key={result.url}>
-          <a href={result.url} target="_blank" rel="noreferrer">
-            PR #{result.number}
-          </a>
-          {' · '}
-          {result.published
-            ? `Updated ${result.resolvedSha.slice(0, 8)}`
-            : session.task === 'ci'
-              ? 'No changes needed'
-              : 'Already up to date'}
-        </p>
+        <div className="gandalf-result" key={result.url}>
+          <p className="gandalf-detail">
+            <a href={result.url} target="_blank" rel="noreferrer">
+              PR #{result.number}
+            </a>
+            {' · '}
+            {result.published
+              ? `Updated ${result.resolvedSha.slice(0, 8)}`
+              : session.task === 'ci'
+                ? 'No changes needed'
+                : 'Already up to date'}
+          </p>
+          <ContinueInT3CodeButton
+            request={{ persona: 'gandalf', sessionId: session.id, url: result.url }}
+          />
+        </div>
       ))}
       <GandalfHistory turns={session.turns} />
       <div className="gandalf-actions">

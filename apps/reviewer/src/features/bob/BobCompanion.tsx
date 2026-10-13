@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
 import { LoaderCircle, X } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import { bobSnapshotMatches } from '../../../shared/domain/bob'
+import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { BobTour, type BobDraftContext } from './BobTour'
 import { useBobTour } from './useBobTour'
 import { useBobSession } from './useBobSession'
@@ -105,6 +106,11 @@ function BobPanel({
           readable tests.
         </p>
       )}
+      {result && session && (
+        <div className="linus-actions bob-continue">
+          <ContinueInT3CodeButton request={{ persona: 'unclebob', sessionId: session.id }} />
+        </div>
+      )}
       <div className="linus-footer">
         <button disabled={!canStart} onClick={() => void act('start', [context.pull.url])}>
           {result ? 'Review this PR again' : 'Review this PR'}
@@ -155,6 +161,7 @@ function BobJobControls({
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void act('continue')}>
             Use available review
           </Button>
+          <ContinueInT3CodeButton request={{ persona: 'unclebob', sessionId: session.id }} />
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act('cancel')}>
             Cancel
           </Button>

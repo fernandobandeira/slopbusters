@@ -29,7 +29,6 @@ import { openConflictWorkspace } from './adapters/conflictWorkspace'
 import { loadCiFailures } from './adapters/ciFailures'
 import { createGitIdentity } from './adapters/gitIdentity'
 import { logError, UserError } from './errors'
-import { CHAT_CONTEXT_TIMEOUT_MS } from './limits'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
 import type { PullRequest } from '../shared/domain/types'
 import { LinearAuth } from './adapters/linearAuth'
@@ -42,8 +41,8 @@ import { LINEAR_CLIENT_ID } from './linearApplication'
 import { createEngines, type BundledEngineSettings } from './adapters/t3Engine/engines'
 import type { StructuredTurns } from './adapters/t3Engine/engineTurns'
 import type { ChatHosts } from './adapters/t3Engine/chatHosts'
-import { startPullChat, startTicketChat } from './features/chat/personaChats'
-import type { PullChatRequest } from '../shared/domain/chat'
+import { continueInT3Code } from './features/chat/personaChats'
+import type { ContinueChatRequest } from '../shared/domain/chat'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   dataDirectory: string
@@ -182,23 +181,12 @@ export function createServices(options: ReviewerServerOptions) {
     tickets,
     jobs,
     chats: {
-      startPullChat: (pullId: string, request: PullChatRequest) => {
-        const model = chatModel()
-        const pull = store.getPull(pullId)
-        return startPullChat(
-          chatHosts,
-          { pull, model, request },
-          {
-            loadFailures: (failing) =>
-              loadCiFailures(github, failing, AbortSignal.timeout(CHAT_CONTEXT_TIMEOUT_MS)),
-          },
-        )
-      },
-      startTicketChat: async (identifier: string, repository: string) => {
-        const model = chatModel()
-        const ticket = await tickets.get(identifier, { refresh: true })
-        return startTicketChat(chatHosts, ticket, ticket.pulls[0]?.repository ?? repository, model)
-      },
+      continueInT3Code: (request: ContinueChatRequest) =>
+        continueInT3Code(chatHosts, {
+          sessions: { linus: linusJobs, bob: bobJobs, jobs, gandalf: gandalfJobs },
+          model: chatModel(),
+          request,
+        }),
     },
     navigateSource: (pull: PullRequest, request: Parameters<typeof navigator>[1]) =>
       navigator(pull, request),
