@@ -24,7 +24,8 @@ export function createEngines(options: {
   dataDirectory: string
   bundled?: BundledEngineSettings
 }) {
-  const user = new EngineThreads(new EngineConnection({ credentials: options.credentials }))
+  const userConnection = new EngineConnection({ credentials: options.credentials })
+  const user = new EngineThreads(userConnection)
   const executable = options.bundled?.executable ?? installedEngineExecutable()
   const home = join(options.dataDirectory, 't3-engine')
   const engine = executable ? new BundledEngine({ executable, home }) : undefined
@@ -39,10 +40,11 @@ export function createEngines(options: {
     }
   return {
     hosts: new EngineChatHosts({ threads: user }, bundled),
-    /** The bundled engine's connection, undefined when this build does not include it. */
-    bundledConnection: connection,
     turns: connection && new EngineTurns(connection),
-    close: () => engine?.close() ?? Promise.resolve(),
+    close: async () => {
+      await Promise.all([userConnection.close(), connection?.close()])
+      await engine?.close()
+    },
   }
 }
 

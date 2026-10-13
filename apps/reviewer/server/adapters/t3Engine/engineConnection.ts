@@ -2,6 +2,9 @@ import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
+import * as RcMap from 'effect/RcMap'
+import * as Schedule from 'effect/Schedule'
+import * as Scope from 'effect/Scope'
 import * as RpcClient from 'effect/unstable/rpc/RpcClient'
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
 import * as Socket from 'effect/unstable/socket/Socket'
@@ -14,6 +17,7 @@ import {
 import { logError, UserError } from '../../errors'
 import {
   T3_ENGINE_CALL_TIMEOUT_MS,
+  T3_ENGINE_IDLE_SOCKET_MS,
   T3_ENGINE_REQUEST_TIMEOUT_MS,
   T3_ENGINE_TOKEN_REFRESH_MARGIN_MS,
 } from '../../limits'
@@ -35,20 +39,34 @@ export interface EngineConnectionOptions {
   readonly pair?: (engine: RunningEngine) => Promise<EngineAccess>
   readonly fetch?: typeof fetch
   readonly now?: () => number
-  /** Opens the RPC transport; replaced in tests. */
-  readonly protocol?: (socketUrl: string) => Layer.Layer<RpcClient.Protocol>
+  /** Opens the RPC transport, reporting a closed socket through its hooks; replaced in tests. */
+  readonly protocol?: (
+    socketUrl: string,
+  ) => Layer.Layer<RpcClient.Protocol, never, RpcClient.ConnectionHooks>
 }
 
 const ticketSchema = z.object({ ticket: z.string().min(1) })
 
 /**
- * Typed access to the T3 Code engine the user is running. Each `run` locates the engine, reuses
- * or renews Slopbusters' paired session, and opens one authenticated WebSocket for its calls.
+ * Typed access to a T3 Code engine. Calls share one authenticated WebSocket per engine: it opens
+ * with a one-time ticket on first use and is replaced, with a new ticket, once it closes or the
+ * engine restarts. Each `run` still has its own timeout, interruption and error mapping.
  */
 export class EngineConnection {
   private readonly tickets: EngineTickets
+  private readonly scope = Scope.makeUnsafe()
+  private readonly sockets: RcMap.RcMap<EngineSocket, EngineClient, unknown>
+  private current: EngineSocket | undefined
+  private opened = 0
+
   constructor(private readonly options: EngineConnectionOptions) {
     this.tickets = new EngineTickets(options)
+    this.sockets = Effect.runSync(
+      RcMap.make({
+        lookup: (socket: EngineSocket) => this.open(socket),
+        idleTimeToLive: T3_ENGINE_IDLE_SOCKET_MS,
+      }).pipe(Scope.provide(this.scope)),
+    )
   }
 
   /** The engine this connection reaches, started or found; it fails if none is available. */
@@ -61,17 +79,69 @@ export class EngineConnection {
     timeoutMs = T3_ENGINE_CALL_TIMEOUT_MS,
   ): Promise<A> {
     const engine = await this.locate()
-    const ticket = await this.tickets.next(engine)
-    const protocol = (this.options.protocol ?? webSocketProtocol)(socketUrl(engine.origin, ticket))
     const exit = await Effect.runPromiseExit(
-      Effect.gen(function* () {
-        const client = yield* makeClient
-        return yield* operation(client, engine)
-      }).pipe(Effect.timeout(timeoutMs), Effect.scoped, Effect.provide(protocol)),
+      RcMap.get(this.sockets, this.socketTo(engine)).pipe(
+        Effect.flatMap((client) => operation(client, engine)),
+        Effect.timeout(timeoutMs),
+        Effect.scoped,
+      ),
     )
     if (Exit.isSuccess(exit)) return exit.value
     throw engineFailure(exit.cause)
   }
+
+  /** Close the socket and its client; calls still running are cancelled. */
+  close(): Promise<void> {
+    return Effect.runPromise(Scope.close(this.scope, Exit.void))
+  }
+
+  /** The open socket when it reaches this engine; otherwise a new one replaces it. */
+  private socketTo(engine: RunningEngine): EngineSocket {
+    const current = this.current
+    if (current && sameEngine(current.engine, engine)) return current
+    if (current) Effect.runFork(this.discard(current))
+    this.current = { engine, number: ++this.opened }
+    return this.current
+  }
+
+  /** Opens the socket with a fresh ticket; it is discarded when it closes or fails to open. */
+  private open(socket: EngineSocket): Effect.Effect<EngineClient, unknown, Scope.Scope> {
+    const { engine } = socket
+    const hooks = Layer.succeed(RpcClient.ConnectionHooks, {
+      onConnect: Effect.void,
+      onDisconnect: this.discard(socket),
+    })
+    const protocol = this.options.protocol ?? webSocketProtocol
+    return Effect.tryPromise({
+      try: () => this.tickets.next(engine),
+      catch: (error) => error,
+    }).pipe(
+      Effect.flatMap((ticket) =>
+        Layer.build(protocol(socketUrl(engine.origin, ticket)).pipe(Layer.provide(hooks))),
+      ),
+      Effect.flatMap((context) => Effect.provideContext(makeClient, context)),
+      Effect.onError(() => this.discard(socket)),
+    )
+  }
+
+  /** Stop handing out a socket; it closes once its last call ends, and the next call opens another. */
+  private discard(socket: EngineSocket): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      if (this.current === socket) this.current = undefined
+      // Forked, because a socket's own disconnect hook runs inside the scope this closes.
+      return Effect.forkDetach(RcMap.invalidate(this.sockets, socket))
+    }).pipe(Effect.asVoid)
+  }
+}
+
+/** One socket to one engine. A closed socket is never reopened: its ticket was single-use. */
+interface EngineSocket {
+  readonly engine: RunningEngine
+  readonly number: number
+}
+
+function sameEngine(a: RunningEngine, b: RunningEngine): boolean {
+  return a.origin === b.origin && a.environmentId === b.environmentId && a.pid === b.pid
 }
 
 /**
@@ -137,7 +207,9 @@ export function socketUrl(origin: string, ticket: string): string {
 }
 
 function webSocketProtocol(url: string): Layer.Layer<RpcClient.Protocol> {
-  return Layer.effect(RpcClient.Protocol, RpcClient.makeProtocolSocket()).pipe(
+  // The ticket in the URL is single-use, so a dropped socket is replaced rather than retried.
+  const protocol = RpcClient.makeProtocolSocket({ retryPolicy: Schedule.recurs(0) })
+  return Layer.effect(RpcClient.Protocol, protocol).pipe(
     Layer.provide(
       Layer.mergeAll(
         Socket.layerWebSocket(url, { openTimeout: T3_ENGINE_REQUEST_TIMEOUT_MS }).pipe(

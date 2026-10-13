@@ -39,6 +39,8 @@ export const T3_ENGINE_PAIR_TIMEOUT_MS = 60_000
 /** Preparing a pull request worktree can fetch the PR head, so engine calls get longer. */
 export const T3_ENGINE_CALL_TIMEOUT_MS = 180_000
 export const T3_ENGINE_TOKEN_REFRESH_MARGIN_MS = 24 * 60 * 60 * 1000
+/** An engine socket no call has used for this long is closed; the next call opens another. */
+export const T3_ENGINE_IDLE_SOCKET_MS = 5 * 60_000
 /** The bundled engine runs its migrations on first start. */
 export const T3_ENGINE_START_TIMEOUT_MS = 60_000
 export const T3_ENGINE_START_POLL_MS = 250
