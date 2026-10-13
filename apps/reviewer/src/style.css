@@ -976,6 +976,23 @@ pre {
   max-height: 30%;
   overflow: auto;
 }
+.transfers-summary {
+  list-style: none;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.transfers-summary::-webkit-details-marker {
+  display: none;
+}
+.transfers-chevron {
+  transition: transform 120ms ease;
+}
+.transfers[open] > .transfers-summary .transfers-chevron {
+  transform: rotate(90deg);
+}
+.transfers-list {
+  margin-top: 8px;
+}
 .transfers summary {
   display: flex;
   align-items: center;
@@ -984,7 +1001,7 @@ pre {
   font-size: 10px;
   cursor: pointer;
 }
-.transfers details + details {
+.transfers-list details + details {
   margin-top: 8px;
 }
 .transfers code {

@@ -18,9 +18,9 @@ import { createPortal } from 'react-dom'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import { Link } from 'react-router'
 
-import { Check, Copy, MessageSquare, ArrowLeft, ArrowRight } from 'lucide-react'
+import { Check, Copy, MessageSquare, ArrowLeft } from 'lucide-react'
+import { CodeTransfers } from './CodeTransfers'
 import { Button } from '~/components/ui/button'
-import { Badge } from '~/components/ui/badge'
 
 import { message } from '../../lib/api'
 
@@ -503,28 +503,7 @@ export function ReviewWorkspace({
             >
               {selected ? (
                 <>
-                  {transfers.length > 0 && (
-                    <div className="transfers">
-                      {transfers.map((transfer) => (
-                        <details key={transfer.id}>
-                          <summary>
-                            <Badge variant={transfer.kind === 'moved' ? 'info' : 'secondary'}>
-                              {transfer.kind}
-                            </Badge>
-                            <code>
-                              {transfer.fromPath}:{transfer.fromLine}
-                            </code>
-                            <ArrowRight size={12} />
-                            <code>
-                              {transfer.toPath}:{transfer.toLine}
-                            </code>
-                            <span className="muted">{transfer.lineCount} unchanged lines</span>
-                          </summary>
-                          <pre>{transfer.text}</pre>
-                        </details>
-                      ))}
-                    </div>
-                  )}
+                  <CodeTransfers transfers={transfers} />
                   {items.length ? (
                     <ReviewDiffViewer
                       key={selected.id}

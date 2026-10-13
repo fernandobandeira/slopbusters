@@ -372,9 +372,6 @@
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 1
     },
-    "@typescript-eslint/no-unsafe-enum-comparison": {
-      "count": 1
-    },
     "@typescript-eslint/use-unknown-in-catch-callback-variable": {
       "count": 3
     },
