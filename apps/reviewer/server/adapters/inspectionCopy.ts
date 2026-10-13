@@ -1,7 +1,7 @@
-import { cp, rm } from 'node:fs/promises'
+import { cp, readdir, rm } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
 import { logError } from '../errors'
-import { INSPECTION_COPY_TIMEOUT_MS } from '../limits'
+import { INSPECTION_COPY_TIMEOUT_MS, MAX_INSPECTION_LISTED_FILES } from '../limits'
 import { runCommand } from './process'
 
 /**
@@ -72,4 +72,19 @@ async function cloneTree(source: string, destination: string, signal?: AbortSign
 function isExcluded(path: string) {
   const top = path.split(sep)[0]
   return INSPECTION_EXCLUDED_PATHS.some((excluded) => excluded === top)
+}
+
+/** The files under `directory`, relative and sorted, up to the listing limit. */
+export async function listInspectionFiles(
+  directory: string,
+): Promise<{ paths: string[]; truncated: boolean }> {
+  const entries = await readdir(directory, { recursive: true, withFileTypes: true })
+  const paths = entries
+    .filter((entry) => !entry.isDirectory())
+    .map((entry) => relative(directory, join(entry.parentPath, entry.name)))
+    .sort()
+  return {
+    paths: paths.slice(0, MAX_INSPECTION_LISTED_FILES),
+    truncated: paths.length > MAX_INSPECTION_LISTED_FILES,
+  }
 }

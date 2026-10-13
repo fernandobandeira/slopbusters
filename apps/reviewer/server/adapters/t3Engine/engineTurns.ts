@@ -20,10 +20,15 @@ import type { OrganizationPreferences } from '../../../shared/domain/preferences
 import { Provider } from '../../../shared/domain/types'
 import { logError } from '../../errors'
 import { PROVIDER_TIMEOUT_MS, T3_ENGINE_TURN_MARGIN_MS } from '../../limits'
-import { copyForInspection } from '../inspectionCopy'
+import { copyForInspection, listInspectionFiles } from '../inspectionCopy'
 import { CommandTimeoutError } from '../process'
 import type { EngineClient, EngineConnection } from './engineConnection'
-import { correctionPrompt, parseStructuredReply, withOutputContract } from './structuredOutput'
+import {
+  correctionPrompt,
+  parseStructuredReply,
+  withOutputContract,
+  type InspectionFiles,
+} from './structuredOutput'
 import { TurnFollower, type TurnOutcome } from './turnFollower'
 
 export interface StructuredTurnRequest<T> {
@@ -58,6 +63,8 @@ interface TurnThread {
 
 interface Workspace {
   readonly projectId: string
+  /** The copy's files, when the run inspects a directory. */
+  readonly files?: InspectionFiles
   release(): Promise<void>
 }
 
@@ -85,7 +92,7 @@ export class EngineTurns implements StructuredTurns {
     try {
       const thread = await this.createThread(workspace.projectId, request)
       try {
-        return await this.converse(thread, request, deadline)
+        return await this.converse(thread, request, { deadline, files: workspace.files })
       } finally {
         await this.archive(thread.id)
       }
@@ -98,12 +105,16 @@ export class EngineTurns implements StructuredTurns {
   private async converse<T>(
     thread: TurnThread,
     request: StructuredTurnRequest<T>,
-    deadline: number,
+    { deadline, files }: { deadline: number; files?: InspectionFiles },
   ): Promise<T> {
-    const first = await this.turn(thread, withOutputContract(request.prompt, request.schema), {
-      request,
-      deadline,
-    })
+    const first = await this.turn(
+      thread,
+      withOutputContract(request.prompt, request.schema, request.model.provider, files),
+      {
+        request,
+        deadline,
+      },
+    )
     const reply = parseStructuredReply(first, request.schema)
     if (reply.success) return reply.data
     const correction = correctionPrompt(reply.error)
@@ -206,9 +217,13 @@ export class EngineTurns implements StructuredTurns {
     const root = await mkdtemp(join(tmpdir(), 'slopbusters-turn-'))
     const removeRoot = () => rm(root, { recursive: true, force: true })
     let projectId: string
+    let files: InspectionFiles | undefined
     try {
       const workspaceRoot = directory ? join(root, basename(resolve(directory)) || 'source') : root
-      if (directory) await copyForInspection(directory, workspaceRoot, signal)
+      if (directory) {
+        await copyForInspection(directory, workspaceRoot, signal)
+        files = await listInspectionFiles(workspaceRoot)
+      }
       projectId = await this.createProject(workspaceRoot, basename(workspaceRoot))
     } catch (error) {
       await removeRoot()
@@ -216,6 +231,7 @@ export class EngineTurns implements StructuredTurns {
     }
     return {
       projectId,
+      files,
       release: async () => {
         try {
           await this.dispatch({

@@ -1,11 +1,35 @@
 import { z } from 'zod'
 import { MAX_STRUCTURED_ERROR_CHARS } from '../../limits'
+import { Provider } from '../../../shared/domain/types'
 
 export type StructuredReply<T> =
   { readonly success: true; readonly data: T } | { readonly success: false; readonly error: string }
 
+/**
+ * How the agent can inspect the copy. Claude's shell runs outside any sandbox, so every command
+ * it asks for is declined, and Claude Code 2.1 has no Glob or Grep tool: Claude gets the copy's
+ * file list and reads files by path. Codex runs commands in a sandbox confined to the copy.
+ */
+const inspectionRules: Record<Provider, string> = {
+  claude:
+    '- Read files by path with the Read tool; any files in the working directory are listed below. Do not use Bash or any other shell tool: every shell command is declined here.',
+  codex:
+    '- Inspect files with read-only commands such as ls, rg and cat; they run in a sandbox. Never ask for approval or escalation: no one is available, and every request is declined.',
+}
+
+/** The working directory's files, for an agent that cannot list them itself. */
+export interface InspectionFiles {
+  readonly paths: readonly string[]
+  readonly truncated: boolean
+}
+
 /** The prompt, followed by the contract the agent's reply must meet. */
-export function withOutputContract(prompt: string, schema: z.ZodType): string {
+export function withOutputContract(
+  prompt: string,
+  schema: z.ZodType,
+  agent: Provider,
+  files?: InspectionFiles,
+): string {
   const jsonSchema = JSON.stringify(z.toJSONSchema(schema, { target: 'draft-7' }), null, 2)
   return [
     prompt.trimEnd(),
@@ -15,11 +39,25 @@ export function withOutputContract(prompt: string, schema: z.ZodType): string {
     'Output contract:',
     '- Reply with only one JSON object that matches this JSON Schema, inside a ```json fenced block, and nothing else.',
     '- You may read files in the working directory. Do not create, edit or delete files, and do not run commands that change anything.',
+    inspectionRules[agent],
+    '- Always reply under this contract, even when you could not inspect everything. Say what you could not check in the reply rather than asking for permission.',
     '',
     '```json',
     jsonSchema,
     '```',
+    ...(files && agent === Provider.claude ? fileListing(files) : []),
   ].join('\n')
+}
+
+function fileListing(files: InspectionFiles): string[] {
+  return [
+    '',
+    files.truncated
+      ? `Files in the working directory (the first ${String(files.paths.length)}):`
+      : 'Files in the working directory:',
+    '',
+    ...files.paths,
+  ]
 }
 
 /** The follow-up turn sent once when a reply does not meet the output contract. */
@@ -29,7 +67,7 @@ export function correctionPrompt(error: string): string {
     '',
     error,
     '',
-    'Reply again with only one JSON object that matches the JSON Schema from the output contract, inside a ```json fenced block.',
+    'Reply again with only one JSON object that matches the JSON Schema from the output contract, inside a ```json fenced block. If a tool was declined, answer from what you could read.',
   ].join('\n')
 }
 

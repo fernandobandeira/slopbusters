@@ -11,7 +11,11 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
-import { copyForInspection, INSPECTION_EXCLUDED_PATHS } from '../server/adapters/inspectionCopy'
+import {
+  copyForInspection,
+  INSPECTION_EXCLUDED_PATHS,
+  listInspectionFiles,
+} from '../server/adapters/inspectionCopy'
 
 const roots: string[] = []
 afterEach(() => {
@@ -63,4 +67,16 @@ it('leaves the source untouched when the copy changes', async () => {
   expect(readFileSync(join(source, 'README.md'), 'utf8')).toBe('readme\n')
   expect(existsSync(join(source, 'src', 'index.ts'))).toBe(true)
   for (const path of INSPECTION_EXCLUDED_PATHS) expect(existsSync(join(source, path))).toBe(true)
+})
+
+it('lists the files left in the copy, relative and sorted', async () => {
+  const { source, destination } = checkoutWithAgentConfiguration()
+  await copyForInspection(source, destination)
+
+  const files = await listInspectionFiles(destination)
+
+  expect(files).toEqual({
+    paths: ['AGENTS.md', 'README.md', 'entry.ts', 'src/.claude/notes.md', 'src/index.ts'],
+    truncated: false,
+  })
 })
