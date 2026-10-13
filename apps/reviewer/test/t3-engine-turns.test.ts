@@ -1,0 +1,405 @@
+import { existsSync } from 'node:fs'
+import * as Effect from 'effect/Effect'
+import * as Queue from 'effect/Queue'
+import * as Schema from 'effect/Schema'
+import * as Stream from 'effect/Stream'
+import { expect, it } from 'vitest'
+import { z } from 'zod'
+import {
+  ClientOrchestrationCommand,
+  type OrchestrationShellStreamItem,
+  type OrchestrationThreadStreamItem,
+} from '@t3tools/contracts'
+import type { ProviderEvent } from '../shared/domain/agentSession'
+import { Provider } from '../shared/domain/types'
+import { CommandTimeoutError } from '../server/adapters/process'
+import type { EngineClient } from '../server/adapters/t3Engine/engineConnection'
+import type { RunningEngine } from '../server/adapters/t3Engine/engineLocation'
+import { EngineTurns, type StructuredTurnRequest } from '../server/adapters/t3Engine/engineTurns'
+import { UNATTENDED_ANSWER } from '../server/adapters/t3Engine/turnFollower'
+
+const engine: RunningEngine = {
+  home: '/home/user/.t3',
+  pid: 4242,
+  origin: 'http://127.0.0.1:3773',
+  environmentId: 'environment-1',
+  serverVersion: '0.0.45',
+}
+const claude = { provider: Provider.claude, model: 'claude-haiku-5-5' }
+const filesSchema = z.object({ files: z.array(z.string()) })
+
+type Command = Record<string, unknown> & { type: string }
+type Item = OrchestrationThreadStreamItem
+
+/**
+ * A bundled engine that implements the RPCs structured turns use. Every dispatched command
+ * is encoded with the contract's schema; `agent` plays the provider by emitting thread events.
+ */
+function fakeEngine(agent: (command: Command, thread: FakeThread) => void) {
+  const commands: Command[] = []
+  const projects: { id: string; title: string; workspaceRoot: string }[] = [
+    { id: 'project-1', title: 'checkout', workspaceRoot: '/reviews/checkout' },
+  ]
+  const threads = new Map<string, FakeThread>()
+  const thread = (id: unknown) => {
+    const key = String(id)
+    const existing = threads.get(key)
+    if (existing) return existing
+    const created = new FakeThread()
+    threads.set(key, created)
+    return created
+  }
+  const methods: Partial<Record<keyof EngineClient, unknown>> = {
+    'orchestration.subscribeShell': () =>
+      Stream.make({
+        kind: 'snapshot',
+        snapshot: { projects: [...projects] },
+      } as unknown as OrchestrationShellStreamItem),
+    'orchestration.subscribeThread': (input: { threadId: string }) =>
+      thread(input.threadId).subscribe(),
+    'orchestration.dispatchCommand': (input: unknown) => {
+      const command = Schema.encodeUnknownSync(ClientOrchestrationCommand)(input) as Command
+      commands.push(command)
+      if (command.type === 'project.create')
+        projects.push({
+          id: String(command.projectId),
+          title: String(command.title),
+          workspaceRoot: String(command.workspaceRoot),
+        })
+      agent(command, thread(command.threadId))
+      return Effect.succeed({ sequence: commands.length })
+    },
+  }
+  const connection = {
+    run: <A, E>(
+      operation: (client: EngineClient, engine: RunningEngine) => Effect.Effect<A, E>,
+    ): Promise<A> => Effect.runPromise(Effect.orDie(operation(methods as EngineClient, engine))),
+  }
+  return {
+    turns: new EngineTurns(connection),
+    commands,
+    types: () => commands.map((command) => command.type),
+    projects,
+  }
+}
+
+/** One thread's event log; each subscription starts with a snapshot of the messages so far. */
+class FakeThread {
+  sequence = 0
+  private readonly messages: { id: string; role: string; text: string; streaming: boolean }[] = []
+  private push: ((item: Item) => void) | undefined
+
+  subscribe() {
+    return Stream.callback<Item>((queue) =>
+      Effect.sync(() => {
+        this.push = (item) => {
+          Queue.offerUnsafe(queue, item)
+        }
+        this.push({
+          kind: 'snapshot',
+          snapshot: {
+            snapshotSequence: this.sequence,
+            thread: { messages: [...this.messages], activities: [] },
+          },
+        } as unknown as Item)
+      }),
+    )
+  }
+
+  emit(type: string, payload: Record<string, unknown>) {
+    this.sequence += 1
+    if (type === 'thread.message-sent')
+      this.messages.push({
+        id: String(payload.messageId),
+        role: String(payload.role),
+        text: String(payload.text),
+        streaming: false,
+      })
+    this.push?.({
+      kind: 'event',
+      event: { sequence: this.sequence, type, payload },
+    } as unknown as Item)
+  }
+
+  session(status: string, extra: Record<string, unknown> = {}) {
+    this.emit('thread.session-set', {
+      session: { status, activeTurnId: status === 'running' ? 'turn-1' : null, ...extra },
+    })
+  }
+
+  activity(kind: string, payload: Record<string, unknown>, tone = 'approval') {
+    this.emit('thread.activity-appended', {
+      activity: { id: `activity-${this.sequence}`, kind, tone, summary: kind, payload },
+    })
+  }
+
+  /** The provider picks up the turn's message, replies with `text`, and settles. */
+  reply(command: Command, text: string) {
+    this.startTurn(command)
+    this.assistant(text)
+    this.session('ready')
+  }
+
+  startTurn(command: Command) {
+    const message = command.message as { messageId: string; text: string }
+    this.emit('thread.message-sent', {
+      messageId: message.messageId,
+      role: 'user',
+      text: message.text,
+      streaming: false,
+    })
+    this.session('starting')
+    this.session('running')
+  }
+
+  assistant(text: string) {
+    const messageId = `assistant-${this.sequence}`
+    this.emit('thread.message-sent', { messageId, role: 'assistant', text, streaming: true })
+    this.emit('thread.message-sent', { messageId, role: 'assistant', text: '', streaming: false })
+  }
+}
+
+function request(
+  overrides: Partial<StructuredTurnRequest<z.infer<typeof filesSchema>>> = {},
+): StructuredTurnRequest<z.infer<typeof filesSchema>> {
+  return {
+    model: claude,
+    prompt: 'List the top-level files.',
+    schema: filesSchema,
+    signal: new AbortController().signal,
+    directory: '/reviews/checkout',
+    purpose: 'files',
+    ...overrides,
+  }
+}
+
+const fenced = (value: unknown) => `Here you go:\n\n\`\`\`json\n${JSON.stringify(value)}\n\`\`\``
+
+it('runs one read-only turn in the directory project and returns the validated JSON', async () => {
+  const fake = fakeEngine((command, thread) => {
+    if (command.type === 'thread.turn.start') thread.reply(command, fenced({ files: ['a.ts'] }))
+  })
+  const events: ProviderEvent[] = []
+
+  const result = await fake.turns.run(request({ observer: (event) => events.push(event) }))
+
+  expect(result).toEqual({ files: ['a.ts'] })
+  expect(fake.types()).toEqual([
+    'thread.create',
+    'thread.turn.start',
+    'thread.session.stop',
+    'thread.archive',
+  ])
+  const [create, start] = fake.commands
+  expect(create).toMatchObject({
+    projectId: 'project-1',
+    title: 'Slopbusters · files',
+    modelSelection: { instanceId: 'claudeAgent', model: 'claude-haiku-5-5' },
+    runtimeMode: 'approval-required',
+    interactionMode: 'default',
+    branch: null,
+    worktreePath: null,
+  })
+  expect(start).toMatchObject({ runtimeMode: 'approval-required', interactionMode: 'default' })
+  const text = (start?.message as { text: string }).text
+  expect(text).toMatch(/^List the top-level files\.\n/)
+  expect(text).toContain('"files"')
+  expect(text).toContain('Do not create, edit or delete files')
+  expect(events[0]).toMatchObject({ kind: 'prompt', text: 'List the top-level files.' })
+  expect(events.at(-1)).toMatchObject({ kind: 'assistant', status: 'complete' })
+})
+
+it('starts Codex threads on the codex provider instance', async () => {
+  const fake = fakeEngine((command, thread) => {
+    if (command.type === 'thread.turn.start') thread.reply(command, '{"files":[]}')
+  })
+
+  await fake.turns.run(request({ model: { provider: Provider.codex, model: 'gpt-6.1-sol' } }))
+
+  expect(fake.commands[0]).toMatchObject({
+    modelSelection: { instanceId: 'codex', model: 'gpt-6.1-sol' },
+  })
+})
+
+it('creates one project for a new directory when runs overlap', async () => {
+  const fake = fakeEngine((command, thread) => {
+    if (command.type === 'thread.turn.start') thread.reply(command, '{"files":[]}')
+  })
+  const directory = '/reviews/new-checkout'
+
+  await Promise.all([
+    fake.turns.run(request({ directory })),
+    fake.turns.run(request({ directory })),
+  ])
+
+  const created = fake.commands.filter((command) => command.type === 'project.create')
+  expect(created).toHaveLength(1)
+  expect(created[0]).toMatchObject({ workspaceRoot: directory, title: 'new-checkout' })
+  const threads = fake.commands.filter((command) => command.type === 'thread.create')
+  expect(threads.map((command) => command.projectId)).toEqual([
+    created[0]?.projectId,
+    created[0]?.projectId,
+  ])
+})
+
+it('declines every approval and answers questions so the turn never waits on a person', async () => {
+  const fake = fakeEngine((command, thread) => {
+    if (command.type === 'thread.turn.start') {
+      thread.startTurn(command)
+      thread.activity('approval.requested', { requestId: 'write-1', requestKind: 'file-change' })
+      thread.activity('user-input.requested', {
+        requestId: 'question-1',
+        questions: [
+          { id: 'scope', header: 'Scope', question: 'Which files?', options: [] },
+          {
+            id: 'pick',
+            header: 'Pick',
+            question: 'Pick one',
+            options: [{ label: 'First', description: '' }],
+            allowCustomAnswer: false,
+          },
+        ],
+      })
+    }
+    if (command.type === 'thread.user-input.respond') {
+      thread.assistant('{"files":["README.md"]}')
+      thread.session('ready')
+    }
+  })
+
+  await expect(fake.turns.run(request())).resolves.toEqual({ files: ['README.md'] })
+
+  const approval = fake.commands.find((command) => command.type === 'thread.approval.respond')
+  expect(approval).toMatchObject({ requestId: 'write-1', decision: 'decline' })
+  const answer = fake.commands.find((command) => command.type === 'thread.user-input.respond')
+  expect(answer).toMatchObject({
+    requestId: 'question-1',
+    answers: { scope: UNATTENDED_ANSWER, pick: 'First' },
+  })
+})
+
+it('quotes the validation error in one corrective turn and returns the corrected reply', async () => {
+  let turns = 0
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'thread.turn.start') return
+    turns += 1
+    thread.reply(command, turns === 1 ? fenced({ files: 'a.ts' }) : fenced({ files: ['a.ts'] }))
+  })
+
+  await expect(fake.turns.run(request())).resolves.toEqual({ files: ['a.ts'] })
+
+  const starts = fake.commands.filter((command) => command.type === 'thread.turn.start')
+  expect(starts).toHaveLength(2)
+  const correction = (starts[1]?.message as { text: string }).text
+  expect(correction).toContain('did not match the output contract')
+  expect(correction).toContain('files')
+})
+
+it('fails after the corrective turn also misses the schema, and still archives', async () => {
+  const fake = fakeEngine((command, thread) => {
+    if (command.type === 'thread.turn.start') thread.reply(command, 'I could not find any files.')
+  })
+
+  await expect(fake.turns.run(request())).rejects.toThrow(
+    'Claude did not reply with the requested JSON: The reply did not contain valid JSON.',
+  )
+
+  expect(fake.types()).toEqual([
+    'thread.create',
+    'thread.turn.start',
+    'thread.turn.start',
+    'thread.session.stop',
+    'thread.archive',
+  ])
+})
+
+it('reports a turn the provider fails', async () => {
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'thread.turn.start') return
+    thread.startTurn(command)
+    thread.session('error', { lastError: 'Model not available.' })
+  })
+
+  await expect(fake.turns.run(request())).rejects.toThrow('Claude failed: Model not available.')
+  expect(fake.types().slice(-1)).toEqual(['thread.archive'])
+})
+
+it('interrupts the turn when the caller cancels', async () => {
+  const controller = new AbortController()
+  const fake = fakeEngine((command, thread) => {
+    if (command.type === 'thread.turn.start') {
+      thread.startTurn(command)
+      setTimeout(() => {
+        controller.abort()
+      }, 0)
+    }
+  })
+
+  await expect(fake.turns.run(request({ signal: controller.signal }))).rejects.toThrow(
+    'The operation was cancelled.',
+  )
+
+  expect(fake.types()).toEqual([
+    'thread.create',
+    'thread.turn.start',
+    'thread.turn.interrupt',
+    'thread.session.stop',
+    'thread.archive',
+  ])
+})
+
+it('interrupts the turn and reports a timeout when the agent runs too long', async () => {
+  const fake = fakeEngine((command, thread) => {
+    if (command.type === 'thread.turn.start') thread.startTurn(command)
+  })
+
+  const run = fake.turns.run(request({ timeoutMs: 20 }))
+
+  await expect(run).rejects.toBeInstanceOf(CommandTimeoutError)
+  expect(fake.types()).toContain('thread.turn.interrupt')
+  expect(fake.types().slice(-1)).toEqual(['thread.archive'])
+})
+
+it('runs without a directory in a scratch project that it deletes afterwards', async () => {
+  const fake = fakeEngine((command, thread) => {
+    if (command.type === 'thread.turn.start') thread.reply(command, '{"files":[]}')
+  })
+
+  await fake.turns.run(request({ directory: undefined }))
+
+  const created = fake.commands.find((command) => command.type === 'project.create')
+  const scratch = String(created?.workspaceRoot)
+  expect(scratch).toMatch(/slopbusters-turn-/)
+  expect(fake.commands.at(-1)).toMatchObject({
+    type: 'project.delete',
+    projectId: created?.projectId,
+    force: true,
+  })
+  expect(existsSync(scratch)).toBe(false)
+})
+
+it('ignores replayed events the snapshot already holds', async () => {
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'thread.turn.start') return
+    thread.startTurn(command)
+    thread.emit('thread.message-sent', {
+      messageId: 'reply',
+      role: 'assistant',
+      text: '{"files":["a"]}',
+      streaming: true,
+    })
+    // A live event the server buffered while reading the snapshot arrives again.
+    const replayed = thread.sequence
+    thread.sequence -= 1
+    thread.emit('thread.message-sent', {
+      messageId: 'reply',
+      role: 'assistant',
+      text: '{"files":["a"]}',
+      streaming: true,
+    })
+    thread.sequence = replayed
+    thread.session('ready')
+  })
+
+  await expect(fake.turns.run(request())).resolves.toEqual({ files: ['a'] })
+})

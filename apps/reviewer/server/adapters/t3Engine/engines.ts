@@ -5,6 +5,7 @@ import { EngineChatHosts, type BundledEngineHost } from './chatHosts'
 import { EngineConnection, type EngineCredentials } from './engineConnection'
 import { pairWithEngine } from './enginePairing'
 import { EngineThreads } from './engineThreads'
+import { EngineTurns } from './engineTurns'
 
 export interface BundledEngineSettings {
   /** The `t3` executable; development builds find it in node_modules. */
@@ -15,7 +16,8 @@ export interface BundledEngineSettings {
 
 /**
  * The engines chats can run on: the user's T3 Code, found through its home, and the engine
- * Slopbusters bundles, kept under the reviewer's data directory.
+ * Slopbusters bundles, kept under the reviewer's data directory. Structured turns always run on
+ * the bundled engine, so they never appear in the user's T3 Code.
  */
 export function createChatHosts(options: {
   credentials: EngineCredentials
@@ -37,6 +39,9 @@ export function createChatHosts(options: {
     }
   return {
     hosts: new EngineChatHosts({ threads: user }, bundled),
+    /** The bundled engine's connection, undefined when this build does not include it. */
+    bundledConnection: connection,
+    turns: connection && new EngineTurns(connection),
     close: () => engine?.close() ?? Promise.resolve(),
   }
 }

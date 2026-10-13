@@ -1,0 +1,342 @@
+import { randomUUID } from 'node:crypto'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, join, resolve } from 'node:path'
+import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
+import * as Stream from 'effect/Stream'
+import type { z } from 'zod'
+import {
+  CommandId,
+  MessageId,
+  ProjectId,
+  ProviderInstanceId,
+  ThreadId,
+  type ClientOrchestrationCommand,
+} from '@t3tools/contracts'
+import type { ProviderObserver } from '../../../shared/domain/agentSession'
+import type { OrganizationPreferences } from '../../../shared/domain/preferences'
+import { Provider } from '../../../shared/domain/types'
+import { logError } from '../../errors'
+import { PROVIDER_TIMEOUT_MS, T3_ENGINE_TURN_MARGIN_MS } from '../../limits'
+import { CommandTimeoutError } from '../process'
+import type { EngineClient, EngineConnection } from './engineConnection'
+import { EngineThreads } from './engineThreads'
+import { correctionPrompt, parseStructuredReply, withOutputContract } from './structuredOutput'
+import { TurnFollower, type TurnOutcome } from './turnFollower'
+
+export interface StructuredTurnRequest<T> {
+  readonly model: OrganizationPreferences
+  readonly prompt: string
+  readonly schema: z.ZodType<T>
+  readonly signal: AbortSignal
+  /** A directory the agent may read. Omitted: an empty scratch directory. */
+  readonly directory?: string
+  readonly observer?: ProviderObserver
+  /** The whole run, including a corrective turn; defaults to `PROVIDER_TIMEOUT_MS`. */
+  readonly timeoutMs?: number
+  /** Names the thread in the engine's sidebar, e.g. `Linus review`. */
+  readonly purpose?: string
+}
+
+/** One read-only agent turn whose reply is a JSON object validated against a schema. */
+export interface StructuredTurns {
+  run<T>(request: StructuredTurnRequest<T>): Promise<T>
+}
+
+interface TurnThread {
+  readonly id: string
+  readonly modelSelection: { instanceId: ProviderInstanceId; model: string }
+  /** Approval and question ids already answered, so no request is answered twice. */
+  readonly answered: Set<string>
+}
+
+interface Workspace {
+  readonly projectId: string
+  release(): Promise<void>
+}
+
+type FollowedTurn = TurnOutcome | { readonly status: 'cancelled' | 'timeout' }
+
+/**
+ * Structured turns on a T3 Code engine. Each run is a thread in the project for its directory,
+ * started in `approval-required` mode, and every approval the agent asks for is declined. Claude
+ * then reads with its own read-only tools and asks before editing or running other commands;
+ * Codex runs in its read-only sandbox and asks before any command it does not trust. The thread
+ * is archived when the run ends.
+ */
+export class EngineTurns implements StructuredTurns {
+  private readonly threads: EngineThreads
+  /** Project lookups in flight, so concurrent runs in one directory share one project. */
+  private readonly lookups = new Map<string, Promise<string>>()
+
+  constructor(private readonly connection: Pick<EngineConnection, 'run'>) {
+    this.threads = new EngineThreads(connection)
+  }
+
+  async run<T>(request: StructuredTurnRequest<T>): Promise<T> {
+    request.signal.throwIfAborted()
+    request.observer?.({
+      id: 'prompt',
+      kind: 'prompt',
+      text: request.prompt,
+      title: 'Instructions',
+    })
+    const deadline = Date.now() + (request.timeoutMs ?? PROVIDER_TIMEOUT_MS)
+    const workspace = await this.workspace(request.directory)
+    try {
+      const thread = await this.createThread(workspace.projectId, request)
+      try {
+        return await this.converse(thread, request, deadline)
+      } finally {
+        await this.archive(thread.id)
+      }
+    } finally {
+      await workspace.release()
+    }
+  }
+
+  /** Ask for the reply, and once more quoting the problem if it does not match the schema. */
+  private async converse<T>(
+    thread: TurnThread,
+    request: StructuredTurnRequest<T>,
+    deadline: number,
+  ): Promise<T> {
+    const first = await this.turn(thread, withOutputContract(request.prompt, request.schema), {
+      request,
+      deadline,
+    })
+    const reply = parseStructuredReply(first, request.schema)
+    if (reply.success) return reply.data
+    const correction = correctionPrompt(reply.error)
+    request.observer?.({ id: 'correction', kind: 'prompt', text: correction, title: 'Correction' })
+    const second = await this.turn(thread, correction, { request, deadline })
+    const corrected = parseStructuredReply(second, request.schema)
+    if (corrected.success) return corrected.data
+    throw new Error(
+      `${agentName(request.model)} did not reply with the requested JSON: ${corrected.error}`,
+    )
+  }
+
+  /** Send one message and follow the thread until its turn ends, is cancelled or times out. */
+  private async turn<T>(
+    thread: TurnThread,
+    text: string,
+    { request, deadline }: { request: StructuredTurnRequest<T>; deadline: number },
+  ): Promise<readonly string[]> {
+    const remaining = Math.max(0, deadline - Date.now())
+    const messageId = randomUUID()
+    const follower = new TurnFollower(thread.id, messageId, thread.answered, request.observer)
+    const start: ClientOrchestrationCommand = {
+      type: 'thread.turn.start',
+      ...commandBase(thread.id),
+      message: { messageId: MessageId.make(messageId), role: 'user', text, attachments: [] },
+      modelSelection: thread.modelSelection,
+      runtimeMode: 'approval-required',
+      interactionMode: 'default',
+      createdAt: now(),
+    }
+    const outcome = await this.connection.run(
+      (client) =>
+        followTurn(client, { start, follower, signal: request.signal, timeoutMs: remaining }),
+      remaining + T3_ENGINE_TURN_MARGIN_MS,
+    )
+    const agent = agentName(request.model)
+    switch (outcome.status) {
+      case 'completed':
+        return outcome.replies
+      case 'failed':
+        throw new Error(`${agent} failed: ${outcome.error}`)
+      case 'interrupted':
+        throw new Error(`${agent} stopped before it finished.`)
+      case 'cancelled':
+        throw new Error('The operation was cancelled.')
+      case 'timeout':
+        throw new CommandTimeoutError(agent)
+    }
+  }
+
+  private async createThread<T>(
+    projectId: string,
+    request: StructuredTurnRequest<T>,
+  ): Promise<TurnThread> {
+    const thread: TurnThread = {
+      id: randomUUID(),
+      modelSelection: {
+        instanceId: ProviderInstanceId.make(
+          request.model.provider === Provider.claude ? 'claudeAgent' : 'codex',
+        ),
+        model: request.model.model,
+      },
+      answered: new Set(),
+    }
+    await this.dispatch({
+      type: 'thread.create',
+      ...commandBase(thread.id),
+      projectId: ProjectId.make(projectId),
+      title: `Slopbusters · ${request.purpose?.trim() || 'structured turn'}`,
+      modelSelection: thread.modelSelection,
+      runtimeMode: 'approval-required',
+      interactionMode: 'default',
+      branch: null,
+      worktreePath: null,
+      createdAt: now(),
+    })
+    return thread
+  }
+
+  /** Stop the thread's agent session and archive it; a failure here only logs. */
+  private async archive(threadId: string) {
+    try {
+      await this.dispatch({
+        type: 'thread.session.stop',
+        ...commandBase(threadId),
+        createdAt: now(),
+      })
+      await this.dispatch({ type: 'thread.archive', ...commandBase(threadId) })
+    } catch (error) {
+      logError('T3 Code could not archive a structured turn thread', error)
+    }
+  }
+
+  private async workspace(directory: string | undefined): Promise<Workspace> {
+    if (directory)
+      return { projectId: await this.projectFor(resolve(directory)), release: async () => {} }
+    const scratch = await mkdtemp(join(tmpdir(), 'slopbusters-turn-'))
+    const removeScratch = () => rm(scratch, { recursive: true, force: true })
+    let projectId: string
+    try {
+      projectId = await this.createProject(scratch, 'Slopbusters scratch')
+    } catch (error) {
+      await removeScratch()
+      throw error
+    }
+    return {
+      projectId,
+      release: async () => {
+        try {
+          await this.dispatch({
+            type: 'project.delete',
+            commandId: CommandId.make(randomUUID()),
+            projectId: ProjectId.make(projectId),
+            force: true,
+          })
+        } catch (error) {
+          logError('T3 Code could not delete a scratch project', error)
+        }
+        await removeScratch()
+      },
+    }
+  }
+
+  /** The engine's project for a directory, created the first time; one lookup per directory. */
+  private projectFor(directory: string): Promise<string> {
+    const inFlight = this.lookups.get(directory)
+    if (inFlight) return inFlight
+    const lookup = this.findOrCreateProject(directory).finally(() => {
+      this.lookups.delete(directory)
+    })
+    this.lookups.set(directory, lookup)
+    return lookup
+  }
+
+  private async findOrCreateProject(directory: string): Promise<string> {
+    const projects = await this.threads.projects()
+    const existing = projects.find((project) => project.workspaceRoot === directory)
+    return existing?.id ?? this.createProject(directory, basename(directory) || directory)
+  }
+
+  private async createProject(workspaceRoot: string, title: string): Promise<string> {
+    const projectId = ProjectId.make(randomUUID())
+    await this.dispatch({
+      type: 'project.create',
+      commandId: CommandId.make(randomUUID()),
+      projectId,
+      title,
+      workspaceRoot,
+      createdAt: now(),
+    })
+    return projectId
+  }
+
+  private dispatch(command: ClientOrchestrationCommand) {
+    return this.connection.run((client) => client['orchestration.dispatchCommand'](command))
+  }
+}
+
+/**
+ * Subscribe to the thread, send the prompt once the snapshot arrives, and answer what the agent
+ * asks until the turn ends. Cancelling or running out of time interrupts the turn first.
+ */
+function followTurn(
+  client: EngineClient,
+  input: {
+    start: Extract<ClientOrchestrationCommand, { type: 'thread.turn.start' }>
+    follower: TurnFollower
+    signal: AbortSignal
+    timeoutMs: number
+  },
+): Effect.Effect<FollowedTurn, unknown> {
+  const { start, follower } = input
+  const dispatch = (command: ClientOrchestrationCommand) =>
+    client['orchestration.dispatchCommand'](command)
+  const followed = client['orchestration.subscribeThread']({
+    threadId: start.threadId,
+    reasoningMessages: true,
+  }).pipe(
+    Stream.mapEffect((item) => {
+      const step = follower.receive(item)
+      const commands = [...(step.start ? [start] : []), ...step.responses]
+      return Effect.forEach(commands, dispatch, { discard: true }).pipe(Effect.as(step.outcome))
+    }),
+    Stream.filter((outcome): outcome is TurnOutcome => outcome !== undefined),
+    Stream.runHead,
+    Effect.map(
+      Option.getOrElse((): FollowedTurn => ({
+        status: 'failed',
+        error: 'T3 Code closed the thread.',
+      })),
+    ),
+  )
+  const stopped = Effect.raceFirst(
+    whenAborted(input.signal),
+    Effect.sleep(input.timeoutMs).pipe(Effect.as('timeout' as const)),
+  ).pipe(
+    Effect.flatMap((status) =>
+      dispatch({
+        type: 'thread.turn.interrupt',
+        ...commandBase(start.threadId),
+        createdAt: now(),
+      }).pipe(Effect.ignore, Effect.as<FollowedTurn>({ status })),
+    ),
+  )
+  return Effect.raceFirst(followed, stopped)
+}
+
+function whenAborted(signal: AbortSignal): Effect.Effect<'cancelled'> {
+  return Effect.callback<'cancelled'>((resume) => {
+    const abort = () => {
+      resume(Effect.succeed('cancelled'))
+    }
+    if (signal.aborted) {
+      abort()
+      return
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    return Effect.sync(() => {
+      signal.removeEventListener('abort', abort)
+    })
+  })
+}
+
+function commandBase(threadId: string) {
+  return { commandId: CommandId.make(randomUUID()), threadId: ThreadId.make(threadId) }
+}
+
+function now() {
+  return new Date().toISOString()
+}
+
+function agentName(model: OrganizationPreferences) {
+  return model.provider === Provider.claude ? 'Claude' : 'Codex'
+}

@@ -48,6 +48,10 @@ export const T3_ENGINE_START_POLL_MS = 250
 export const T3_ENGINE_STOP_TIMEOUT_MS = 10_000
 /** The bundled engine clones a repository the first time a chat needs it. */
 export const T3_ENGINE_CLONE_TIMEOUT_MS = 15 * 60_000
+/** A structured turn's engine call outlives the turn so the interrupt can still be sent. */
+export const T3_ENGINE_TURN_MARGIN_MS = 30_000
+/** How much of a schema validation failure is quoted back to the agent and in errors. */
+export const MAX_STRUCTURED_ERROR_CHARS = 2000
 /** A Gandalf chat's first message carries the failed step of each failing check. */
 export const MAX_CHAT_FAILURES = 8
 export const MAX_CHAT_FAILURE_LOG_CHARACTERS = 6_000
