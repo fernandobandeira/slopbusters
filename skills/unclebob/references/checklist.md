@@ -2,11 +2,10 @@
 
 Use this as a thinking aid, not a form to fill in. Report only what you actually find.
 
-## Repository rules
+## Scope
 
-- [ ] Did you read every `AGENTS.md`, `CLAUDE.md`, or `CONTRIBUTING` file on the path to each changed file, and the lint config? Their rules outrank everything below.
-- [ ] Does the diff break one of those rules? That is a must-fix, cited by file and rule, whatever your own taste says.
 - [ ] Does the diff contain hunks the change didn't need (reworded comments, reordered lines, renames nobody asked for)? They cost the reviewer time to prove nothing changed.
+- [ ] Does a suggestion of yours contradict the repository's written guidance? Drop it; the `rules` reviewer enforces those rules, and the codebase's conventions outrank your taste.
 
 ## Readability and the onion
 
