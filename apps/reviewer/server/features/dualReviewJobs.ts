@@ -12,9 +12,12 @@ import type { PullRequest } from '../../shared/domain/types'
 import { publicError, UserError } from '../errors'
 import type { ReviewCheckout } from '../adapters/reviewWorkspaces'
 import { pullFingerprint } from '../reviewSnapshot'
+import { FlowJobs } from './flows/flowJobs'
+import { failedSeats, reviewSeats } from './flows/panel'
 
 interface ReviewStrategy<Advice extends { limitations: string[] }> {
   name: string
+  kind: 'bob' | 'linus'
   sessions?: AgentSessions
   models: () => { primary: OrganizationPreferences; companion: OrganizationPreferences }
   skill: () => Promise<string>
@@ -45,10 +48,24 @@ interface ReviewStrategy<Advice extends { limitations: string[] }> {
   }) => Promise<Advice>
 }
 
-/** Shared lifecycle for independent reviews, reconciliation, retry and recovery. */
+/**
+ * A panel of two seats running the same skill, one on each model, then a reconciliation on the
+ * primary model, for each PR in turn.
+ */
 export class DualReviewJobs<Advice extends { limitations: string[] }> {
-  private running = new Map<string, { controller: AbortController; done: Promise<void> }>()
-  constructor(private strategy: ReviewStrategy<Advice>) {}
+  private readonly jobs: FlowJobs<ReviewSession<Advice>>
+  constructor(private strategy: ReviewStrategy<Advice>) {
+    this.jobs = new FlowJobs({
+      save: (session) => {
+        this.save(session)
+      },
+      sessions: strategy.sessions,
+      failure: {
+        fallback: `${strategy.name} could not review these PRs.`,
+        progress: 'Review stopped. Completed recommendations are saved.',
+      },
+    })
+  }
 
   start(repository: string, urls: string[]): ReviewSession<Advice> {
     const { primary, companion } = this.strategy.models()
@@ -78,11 +95,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
       results: [],
       createdAt: new Date().toISOString(),
     }
-    this.strategy.sessions?.start(
-      session.id,
-      this.strategy.name === 'Bob' ? 'bob' : 'linus',
-      session,
-    )
+    this.strategy.sessions?.start(session.id, this.strategy.kind, session)
     this.save(session)
     this.launch(session)
     return session
@@ -108,7 +121,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     return session
   }
   cancel(id: string): ReviewSession<Advice> {
-    this.running.get(id)?.controller.abort()
+    this.jobs.abort(id)
     const session = this.get(id)
     if (session.status === 'running' || session.status === 'partial') {
       session.status = 'cancelled'
@@ -120,7 +133,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
   }
   retry(id: string): ReviewSession<Advice> {
     const session = this.get(id)
-    if (session.status === 'running' || this.running.has(id))
+    if (session.status === 'running' || this.jobs.isRunning(id))
       throw new UserError('Wait for the current review to stop before retrying.')
     Object.assign(session, this.strategy.models(), {
       status: 'running',
@@ -133,35 +146,16 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     return session
   }
   async close(): Promise<void> {
-    const jobs = [...this.running.entries()]
-    for (const [id] of jobs) this.cancel(id)
-    await Promise.allSettled(jobs.map(([, job]) => job.done))
+    await this.jobs.stop((session) => this.cancel(session.id))
   }
   private recover(session: ReviewSession<Advice>): ReviewSession<Advice> {
-    if (session.status === 'running' && !this.running.has(session.id)) {
-      session.status = 'cancelled'
-      session.progress =
-        'Review interrupted when the app stopped. Completed recommendations are saved.'
-      this.save(session)
-    }
-    return session
+    return this.jobs.recover(
+      session,
+      'Review interrupted when the app stopped. Completed recommendations are saved.',
+    )
   }
   private launch(session: ReviewSession<Advice>, single = false): void {
-    const controller = new AbortController()
-    const job = { controller, done: Promise.resolve() }
-    this.running.set(session.id, job)
-    job.done = this.run(session, controller.signal, single)
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) return
-        this.strategy.sessions?.diagnostic(session.id, session.progress, cause)
-        session.status = 'failed'
-        session.error = publicError(cause, `${this.strategy.name} could not review these PRs.`)
-        session.progress = 'Review stopped. Completed recommendations are saved.'
-        this.save(session)
-      })
-      .finally(() => {
-        if (this.running.get(session.id) === job) this.running.delete(session.id)
-      })
+    this.jobs.launch(session, (signal) => this.run(session, signal, single))
   }
   private async run(
     session: ReviewSession<Advice>,
@@ -265,8 +259,12 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     const { session, pull, skill, signal, repository, context } = request
     this.progress(session, `Two reviewers are looking at PR #${String(pull.number)}…`)
     const models = [session.primary, session.companion] as const
-    const outcomes = await Promise.allSettled(
-      models.map((model, reviewer) => {
+    const outcomes = await reviewSeats([0, 1] as const, {
+      signal,
+      concurrency: models.length,
+      failure: () => 'Reviewer failed.',
+      review: (reviewer) => {
+        const model = models[reviewer]
         const execute = (observer?: ProviderObserver) =>
           this.strategy.review({
             pull,
@@ -289,33 +287,26 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
               execute,
             )
           : execute()
-      }),
-    )
-    signal.throwIfAborted()
+      },
+    })
     return {
       pull,
       fingerprint: pullFingerprint(pull),
       ...(context ? { context } : {}),
       reviews: outcomes.map((outcome, reviewer) => ({
         model: models[reviewer === 0 ? 0 : 1],
-        ...(outcome.status === 'fulfilled'
-          ? { advice: outcome.value }
-          : { error: publicError(outcome.reason, 'Reviewer failed.') }),
+        ...outcome,
       })),
     }
   }
   private canReconcile(session: ReviewSession<Advice>): boolean {
-    const reviews = session.pending?.reviews ?? []
-    const successes = reviews.filter((review) => review.advice).length
-    if (!successes)
-      throw new UserError(
-        reviews
-          .map((review) => `${review.model.provider}: ${review.error ?? 'No review returned.'}`)
-          .join('\n'),
-      )
-    if (successes === 2) return true
+    const failed = failedSeats(
+      session.pending?.reviews ?? [],
+      (review) => `${review.model.provider}: ${review.error ?? 'No review returned.'}`,
+    )
+    if (!failed.length) return true
     session.status = 'partial'
-    session.error = reviews.find((review) => review.error)?.error
+    session.error = failed.find((review) => review.error)?.error
     this.progress(
       session,
       'One reviewer failed. Retry both reviewers or continue with the available review.',
@@ -335,10 +326,9 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
   }
   private save(session: ReviewSession<Advice>) {
     this.strategy.save(session)
-    this.strategy.sessions?.sync(this.strategy.name === 'Bob' ? 'bob' : 'linus', session)
+    this.strategy.sessions?.sync(this.strategy.kind, session)
   }
   private progress(session: ReviewSession<Advice>, progress: string): void {
-    session.progress = progress
-    this.save(session)
+    this.jobs.progress(session, progress)
   }
 }

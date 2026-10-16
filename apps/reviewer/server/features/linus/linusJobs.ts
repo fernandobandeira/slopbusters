@@ -24,6 +24,7 @@ export class LinusJobs extends DualReviewJobs<LinusAdvice> {
     const { store, turns, staticDirectory, skillDirectory, loadPull = fetchPull } = options
     super({
       name: 'Linus',
+      kind: 'linus',
       sessions: options.sessions,
       models: () => {
         const { organization: primary, companion } = store.getPreferences()

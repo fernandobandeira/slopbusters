@@ -31,6 +31,7 @@ export class BobJobs extends DualReviewJobs<BobAdvice> {
     } = options
     super({
       name: 'Bob',
+      kind: 'bob',
       sessions: options.sessions,
       models: () => {
         const { organization: primary, companion } = store.getPreferences()

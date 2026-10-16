@@ -18,6 +18,8 @@ import {
   MAX_GANDALF_TIMEOUT_RETRIES,
 } from '../../limits'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
+import { debate, unanimousApproval, type DebateMove } from '../flows/debate'
+import { FlowJobs } from '../flows/flowJobs'
 import { resolveWithGandalf } from './gandalfResolution'
 import { completion, publishedResult, saveResult, unchangedResult } from './gandalfResults'
 
@@ -38,18 +40,27 @@ interface Options {
   networkRetryDelaysMs?: readonly number[]
 }
 
+const roles = ['primary', 'secondary'] as const
+
+/**
+ * Gandalf resolves each PR of a stack with a debate between the two models on one workspace,
+ * publishing a PR once both approve it unchanged.
+ */
 export class GandalfJobs {
-  private running = new Map<
-    string,
-    {
-      controller: AbortController
-      done: Promise<void>
-      repository: string
-      session: GandalfSession
-    }
-  >()
+  private readonly jobs: FlowJobs<GandalfSession>
   private suspended = false
-  constructor(private options: Options) {}
+  constructor(private options: Options) {
+    this.jobs = new FlowJobs({
+      save: (session) => {
+        this.save(session)
+      },
+      sessions: options.sessions,
+      failure: {
+        fallback: 'Gandalf stopped on an unexpected error. Retry the remaining PRs.',
+        progress: 'Resolution stopped. Completed PR updates are saved.',
+      },
+    })
+  }
 
   start(repository: string, urls: string[], task: GandalfTask = 'conflicts'): GandalfSession {
     this.requireAwake()
@@ -59,7 +70,7 @@ export class GandalfJobs {
         return previous
       throw new UserError('Finish or cancel the current Gandalf session first.')
     }
-    if ([...this.running.values()].some((job) => job.repository === repository))
+    if (this.busy(repository))
       throw new UserError('Wait for the previous Gandalf session to stop before starting another.')
     const session: GandalfSession = {
       id: randomUUID(),
@@ -90,7 +101,7 @@ export class GandalfJobs {
   retry(id: string): GandalfSession {
     this.requireAwake()
     const session = this.get(id)
-    if ([...this.running.values()].some((job) => job.repository === session.repository))
+    if (this.busy(session.repository))
       throw new UserError('Wait for the current Gandalf session to stop before retrying.')
     Object.assign(session, this.models(), {
       status: 'running',
@@ -105,36 +116,29 @@ export class GandalfJobs {
     return session
   }
   cancel(id: string): GandalfSession {
-    const job = this.running.get(id)
-    const session = job?.session ?? this.get(id)
+    const session = this.jobs.session(id) ?? this.get(id)
     if (session.status === 'running') {
       session.status = 'cancelled'
       session.progress = 'Resolution cancelled. Completed PR updates are saved.'
       this.save(session)
     }
-    job?.controller.abort()
+    this.jobs.abort(id)
     return session
   }
   async suspend() {
     this.suspended = true
-    const jobs = [...this.running.values()]
-    for (const job of jobs) {
-      job.controller.abort()
-      if (job.session.status === 'running')
-        this.progress(job.session, 'Resolution paused. It will resume when the app is awake.')
-    }
-    await Promise.allSettled(jobs.map((job) => job.done))
+    await this.jobs.stop((session) => {
+      this.jobs.abort(session.id)
+      if (session.status === 'running')
+        this.progress(session, 'Resolution paused. It will resume when the app is awake.')
+    })
   }
   async resume() {
     this.suspended = false
-    await Promise.allSettled(
-      [...this.running.values()]
-        .filter((job) => job.controller.signal.aborted)
-        .map((job) => job.done),
-    )
+    await this.jobs.settleAborted()
     if (!this.isAwake()) return
     for (const session of this.options.store.pendingGandalfSessions()) {
-      if ([...this.running.values()].some((job) => job.repository === session.repository)) continue
+      if (this.busy(session.repository)) continue
       this.progress(session, 'Resuming resolution. Rechecking the current stack…')
       this.launch(session)
     }
@@ -148,6 +152,9 @@ export class GandalfJobs {
   private isAwake() {
     return !this.suspended
   }
+  private busy(repository: string) {
+    return this.jobs.active().some((session) => session.repository === repository)
+  }
   private models() {
     const { organization: primary, companion } = this.options.store.getPreferences()
     if (!primary) throw new UserError('Choose your primary model in Settings first.')
@@ -158,12 +165,7 @@ export class GandalfJobs {
     }
   }
   private launch(session: GandalfSession) {
-    const controller = new AbortController()
-    const job = { controller, done: Promise.resolve(), repository: session.repository, session }
-    this.running.set(session.id, job)
-    job.done = this.runWithRecovery(session, controller.signal).finally(() => {
-      this.running.delete(session.id)
-    })
+    this.jobs.launch(session, (signal) => this.runWithRecovery(session, signal))
   }
   private async runWithRecovery(session: GandalfSession, signal: AbortSignal) {
     for (;;) {
@@ -307,65 +309,66 @@ export class GandalfJobs {
       throw error
     }
   }
-  private async roundRobin(request: {
-    session: GandalfSession
-    pull: PullRequest
-    workspace: ConflictWorkspace
-    failures: CiFailure[]
-    signal: AbortSignal
-  }) {
-    const { session, pull, workspace, failures, signal } = request
-    const approvals = new Set<string>()
-    for (let index = 0; index < MAX_GANDALF_TURNS; index++) {
-      signal.throwIfAborted()
-      const role = index % 2 === 0 ? 'primary' : 'secondary'
-      this.progress(
-        session,
-        `${role === 'primary' ? 'Primary' : 'Secondary'} ${index ? 'reviewing and fixing' : session.task === 'ci' ? 'fixing CI for' : 'resolving'} PR #${pull.number} · turn ${index + 1}…`,
-      )
-      const snapshot = await workspace.inspect()
-      signal.throwIfAborted()
-      const request: Parameters<typeof resolveWithGandalf>[0] = {
-        turns: this.options.turns,
-        pull,
-        task: session.task,
-        role,
-        initial: index === 0,
-        model: session[role === 'primary' ? 'primary' : 'companion'],
-        workspace,
-        snapshot,
-        failures,
-        history: session.turns,
-        signal,
-      }
-      const turn = await this.modelTurn(session.id, index, request)
-      signal.throwIfAborted()
-      await workspace.apply(turn.edits, turn.selections)
-      const next = await workspace.inspect()
-      const changed = snapshot.revision !== next.revision
-      const approved = approvesTurn(turn, index, changed)
-      if (changed || turn.edits.length || turn.selections.length) approvals.clear()
-      if (approved) approvals.add(role)
-      else approvals.delete(role)
-      session.turns.push({
-        url: pull.url,
-        role,
-        round: index + 1,
-        summary: turn.summary,
-        issues: turn.issues,
-        approved,
-        changedPaths: [
-          ...turn.edits.map((edit) => edit.path),
-          ...turn.selections.map((selection) => selection.path),
-        ],
-        revision: next.revision,
-      })
-      this.save(session)
-      if (approvals.size === 2) return index + 1
-    }
-    throw new UserError(
-      'The models have not agreed after 20 turns. Review their findings and retry; this PR was not updated.',
+  /** The two models take turns on the workspace until both approve it unchanged. */
+  private roundRobin(request: Debate) {
+    return debate({
+      roles,
+      maxTurns: MAX_GANDALF_TURNS,
+      signal: request.signal,
+      consensus: unanimousApproval(roles),
+      turn: (role, index) => this.takeTurn(request, role, index),
+      stalled: () =>
+        new UserError(
+          'The models have not agreed after 20 turns. Review their findings and retry; this PR was not updated.',
+        ),
+    })
+  }
+  /** One model's turn: inspect, edit or approve, and record it in the session's trail. */
+  private async takeTurn(
+    { session, pull, workspace, failures, signal }: Debate,
+    role: (typeof roles)[number],
+    index: number,
+  ): Promise<DebateMove> {
+    this.progress(
+      session,
+      `${role === 'primary' ? 'Primary' : 'Secondary'} ${index ? 'reviewing and fixing' : session.task === 'ci' ? 'fixing CI for' : 'resolving'} PR #${pull.number} · turn ${index + 1}…`,
     )
+    const snapshot = await workspace.inspect()
+    signal.throwIfAborted()
+    const request: Parameters<typeof resolveWithGandalf>[0] = {
+      turns: this.options.turns,
+      pull,
+      task: session.task,
+      role,
+      initial: index === 0,
+      model: session[role === 'primary' ? 'primary' : 'companion'],
+      workspace,
+      snapshot,
+      failures,
+      history: session.turns,
+      signal,
+    }
+    const turn = await this.modelTurn(session.id, index, request)
+    signal.throwIfAborted()
+    await workspace.apply(turn.edits, turn.selections)
+    const next = await workspace.inspect()
+    const changed = snapshot.revision !== next.revision
+    const approved = approvesTurn(turn, index, changed)
+    session.turns.push({
+      url: pull.url,
+      role,
+      round: index + 1,
+      summary: turn.summary,
+      issues: turn.issues,
+      approved,
+      changedPaths: [
+        ...turn.edits.map((edit) => edit.path),
+        ...turn.selections.map((selection) => selection.path),
+      ],
+      revision: next.revision,
+    })
+    this.save(session)
+    return { changed: changed || turn.edits.length > 0 || turn.selections.length > 0, approved }
   }
   private async modelTurn(
     sessionId: string,
@@ -392,9 +395,16 @@ export class GandalfJobs {
     this.options.sessions?.sync('gandalf', session)
   }
   private progress(session: GandalfSession, progress: string) {
-    session.progress = progress
-    this.save(session)
+    this.jobs.progress(session, progress)
   }
+}
+
+interface Debate {
+  session: GandalfSession
+  pull: PullRequest
+  workspace: ConflictWorkspace
+  failures: CiFailure[]
+  signal: AbortSignal
 }
 
 function approvesTurn(turn: GandalfTurn, index: number, changed: boolean) {

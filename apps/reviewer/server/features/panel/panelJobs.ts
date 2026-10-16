@@ -17,6 +17,8 @@ import { publicError, UserError } from '../../errors'
 import { PANEL_REVIEWER_CONCURRENCY } from '../../limits'
 import { pullFingerprint } from '../../reviewSnapshot'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
+import { FlowJobs } from '../flows/flowJobs'
+import { failedSeats, reviewSeats } from '../flows/panel'
 import type { PanelMembers } from './panelMembers'
 import { judgePanel, reviewAsPanelist } from './panelReview'
 
@@ -41,8 +43,19 @@ type RunMode = 'fresh' | 'retry' | 'judge'
  * then a judge verifies their findings against the code and merges them into one result.
  */
 export class PanelJobs {
-  private running = new Map<string, { controller: AbortController; done: Promise<void> }>()
-  constructor(private readonly options: Options) {}
+  private readonly jobs: FlowJobs<PanelSession>
+  constructor(private readonly options: Options) {
+    this.jobs = new FlowJobs({
+      save: (session) => {
+        this.save(session)
+      },
+      sessions: options.sessions,
+      failure: {
+        fallback: 'The panel could not review these PRs.',
+        progress: 'Panel review stopped. Judged PRs are saved.',
+      },
+    })
+  }
 
   async start(
     repository: string,
@@ -94,12 +107,12 @@ export class PanelJobs {
   /** Rerun only the reviewers that failed, or the whole PR when nothing is waiting. */
   retry(id: string): PanelSession {
     const session = this.get(id)
-    if (session.status === 'running' || this.running.has(id))
+    if (session.status === 'running' || this.jobs.isRunning(id))
       throw new UserError('Wait for the current panel review to stop before retrying.')
     return this.relaunch(session, 'retry', 'Retrying the reviewers that did not finish…')
   }
   cancel(id: string): PanelSession {
-    this.running.get(id)?.controller.abort()
+    this.jobs.abort(id)
     const session = this.get(id)
     if (session.status === 'running' || session.status === 'partial') {
       session.status = 'cancelled'
@@ -110,9 +123,7 @@ export class PanelJobs {
     return session
   }
   async close(): Promise<void> {
-    const jobs = [...this.running.entries()]
-    for (const [id] of jobs) this.cancel(id)
-    await Promise.allSettled(jobs.map(([, job]) => job.done))
+    await this.jobs.stop((session) => this.cancel(session.id))
   }
 
   private relaunch(session: PanelSession, mode: RunMode, progress: string): PanelSession {
@@ -124,29 +135,13 @@ export class PanelJobs {
     return session
   }
   private recover(session: PanelSession): PanelSession {
-    if (session.status === 'running' && !this.running.has(session.id)) {
-      session.status = 'cancelled'
-      session.progress = 'Panel review interrupted when the app stopped. Judged PRs are saved.'
-      this.save(session)
-    }
-    return session
+    return this.jobs.recover(
+      session,
+      'Panel review interrupted when the app stopped. Judged PRs are saved.',
+    )
   }
   private launch(session: PanelSession, mode: RunMode): void {
-    const controller = new AbortController()
-    const job = { controller, done: Promise.resolve() }
-    this.running.set(session.id, job)
-    job.done = this.run(session, controller.signal, mode)
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) return
-        this.options.sessions?.diagnostic(session.id, session.progress, cause)
-        session.status = 'failed'
-        session.error = publicError(cause, 'The panel could not review these PRs.')
-        session.progress = 'Panel review stopped. Judged PRs are saved.'
-        this.save(session)
-      })
-      .finally(() => {
-        if (this.running.get(session.id) === job) this.running.delete(session.id)
-      })
+    this.jobs.launch(session, (signal) => this.run(session, signal, mode))
   }
   private async run(session: PanelSession, signal: AbortSignal, mode: RunMode): Promise<void> {
     for (let index = session.results.length; index < session.urls.length; index++) {
@@ -253,11 +248,15 @@ export class PanelJobs {
       (reviewer) => !pending.reviews.some((review) => review.reviewer === reviewer.id),
     )
     this.reportReviewers(session, pending)
-    await eachLimited(waiting, PANEL_REVIEWER_CONCURRENCY, async (reviewer) => {
-      const review = await this.reviewOne(session, pending, reviewer, run)
-      run.signal.throwIfAborted()
-      pending.reviews.push(review)
-      this.reportReviewers(session, pending)
+    await reviewSeats(waiting, {
+      signal: run.signal,
+      concurrency: PANEL_REVIEWER_CONCURRENCY,
+      review: (reviewer) => this.reviewOne(session, pending, reviewer, run),
+      failure: (reviewer) => `${reviewer.name} failed.`,
+      landed: (reviewer, outcome) => {
+        pending.reviews.push({ reviewer: reviewer.id, ...outcome })
+        this.reportReviewers(session, pending)
+      },
     })
   }
   private async reviewOne(
@@ -265,37 +264,28 @@ export class PanelJobs {
     pending: PanelPending,
     reviewer: PanelReviewer,
     { signal, repository }: { signal: AbortSignal; repository?: ReviewCheckout },
-  ): Promise<PanelReview> {
-    try {
-      const model = reviewer.model ?? session.model
-      const member = await this.options.members.load(reviewer, model.provider)
-      const execute = (observer?: ProviderObserver) =>
-        reviewAsPanelist({
-          turns: this.options.turns,
-          model,
-          signal,
-          repository,
-          observer,
-          member,
-          pull: pending.pull,
-          context: pending.context,
-        })
-      const label = `${reviewer.name} review`
-      const advice = await this.track(session, { label, url: pending.pull.url, model }, execute)
-      return { reviewer: reviewer.id, advice }
-    } catch (error) {
-      signal.throwIfAborted()
-      return { reviewer: reviewer.id, error: publicError(error, `${reviewer.name} failed.`) }
-    }
+  ) {
+    const model = reviewer.model ?? session.model
+    const member = await this.options.members.load(reviewer, model.provider)
+    const execute = (observer?: ProviderObserver) =>
+      reviewAsPanelist({
+        turns: this.options.turns,
+        model,
+        signal,
+        repository,
+        observer,
+        member,
+        pull: pending.pull,
+        context: pending.context,
+      })
+    const label = `${reviewer.name} review`
+    return this.track(session, { label, url: pending.pull.url, model }, execute)
   }
   private canJudge(session: PanelSession, pending: PanelPending, mode: RunMode): boolean {
-    const failed = pending.reviews.filter((review) => !review.advice)
-    if (!pending.reviews.some((review) => review.advice))
-      throw new UserError(
-        failed
-          .map((review) => `${nameOf(session, review)}: ${review.error ?? 'No review.'}`)
-          .join('\n'),
-      )
+    const failed = failedSeats(
+      pending.reviews,
+      (review) => `${nameOf(session, review)}: ${review.error ?? 'No review.'}`,
+    )
     if (!failed.length || mode === 'judge') return true
     session.status = 'partial'
     session.error = failed
@@ -349,13 +339,4 @@ function nameOf(session: PanelSession, review: PanelReview) {
   return (
     session.reviewers.find((reviewer) => reviewer.id === review.reviewer)?.name ?? review.reviewer
   )
-}
-
-/** Run `work` over every item with at most `limit` running at once; the first failure rejects. */
-async function eachLimited<T>(items: T[], limit: number, work: (item: T) => Promise<void>) {
-  const queue = [...items]
-  const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
-    for (let item = queue.shift(); item !== undefined; item = queue.shift()) await work(item)
-  })
-  await Promise.all(workers)
 }

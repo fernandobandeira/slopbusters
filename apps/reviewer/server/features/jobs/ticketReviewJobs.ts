@@ -18,6 +18,8 @@ import type { ReviewerStore } from '../../adapters/store'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { publicError, UserError } from '../../errors'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
+import { FlowJobs } from '../flows/flowJobs'
+import { failedSeats, reviewSeats } from '../flows/panel'
 import type { TicketService } from '../tickets/tickets'
 import { foldAnswers, loadJobsSkill, reconcileTicket, reviewTicket } from './ticketReview'
 
@@ -44,8 +46,19 @@ const changedTicket =
 
 /** Jobs reviews one ticket with two models, then folds the owner's answers with the primary. */
 export class TicketReviewJobs {
-  private running = new Map<string, { controller: AbortController; done: Promise<void> }>()
-  constructor(private readonly options: TicketReviewOptions) {}
+  private readonly jobs: FlowJobs<JobsSession>
+  constructor(private readonly options: TicketReviewOptions) {
+    this.jobs = new FlowJobs({
+      save: (session) => {
+        this.save(session)
+      },
+      sessions: options.sessions,
+      failure: {
+        fallback: 'Jobs could not review this ticket.',
+        progress: 'Review stopped. Earlier proposals are saved.',
+      },
+    })
+  }
 
   start(ticket: string, repository = ''): JobsSession {
     const { primary, companion } = this.models()
@@ -124,7 +137,7 @@ export class TicketReviewJobs {
   }
   retry(id: string): JobsSession {
     const session = this.get(id)
-    if (session.status === 'running' || this.running.has(id))
+    if (session.status === 'running' || this.jobs.isRunning(id))
       throw new UserError('Wait for the current review to stop before retrying.')
     Object.assign(session, this.models(), { status: 'running', error: undefined })
     if (session.pending?.kind !== 'answers') session.pending = undefined
@@ -133,7 +146,7 @@ export class TicketReviewJobs {
     return session
   }
   cancel(id: string): JobsSession {
-    this.running.get(id)?.controller.abort()
+    this.jobs.abort(id)
     const session = this.get(id)
     if (session.status === 'running' || session.status === 'partial') {
       session.status = 'cancelled'
@@ -143,9 +156,7 @@ export class TicketReviewJobs {
     return session
   }
   async close(): Promise<void> {
-    const jobs = [...this.running.entries()]
-    for (const [id] of jobs) this.cancel(id)
-    await Promise.allSettled(jobs.map(([, job]) => job.done))
+    await this.jobs.stop((session) => this.cancel(session.id))
   }
 
   private models() {
@@ -160,32 +171,18 @@ export class TicketReviewJobs {
     }
   }
   private recover(session: JobsSession): JobsSession {
-    if (session.status === 'running' && !this.running.has(session.id)) {
-      session.status = 'cancelled'
-      session.progress = 'Review interrupted when the app stopped. Earlier proposals are saved.'
-      this.save(session)
-    }
-    return session
+    return this.jobs.recover(
+      session,
+      'Review interrupted when the app stopped. Earlier proposals are saved.',
+    )
   }
+  /** One panel round on the ticket, or folding the owner's answers into the last proposal. */
   private launch(session: JobsSession): void {
-    const controller = new AbortController()
-    const job = { controller, done: Promise.resolve() }
-    this.running.set(session.id, job)
-    const work =
+    this.jobs.launch(session, (signal) =>
       session.pending?.kind === 'answers'
-        ? this.fold(session, controller.signal)
-        : this.review(session, controller.signal)
-    job.done = work
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) return
-        this.options.sessions?.diagnostic(session.id, session.progress, cause)
-        session.status = 'failed'
-        session.error = publicError(cause, 'Jobs could not review this ticket.')
-        this.progress(session, 'Review stopped. Earlier proposals are saved.')
-      })
-      .finally(() => {
-        if (this.running.get(session.id) === job) this.running.delete(session.id)
-      })
+        ? this.fold(session, signal)
+        : this.review(session, signal),
+    )
   }
   private async review(session: JobsSession, signal: AbortSignal) {
     const prepared = await this.prepare(session, signal, Boolean(session.pending))
@@ -272,26 +269,29 @@ export class TicketReviewJobs {
   }
   private async reviewPair(session: JobsSession, prepared: Prepared, signal: AbortSignal) {
     const models = [session.primary, session.companion] as const
-    const outcomes = await Promise.allSettled(
-      models.map((model, reviewer) =>
-        this.pass(session, model, reviewer ? 'Companion review' : 'Primary review', (observer) =>
-          reviewTicket({
-            ...this.request(prepared, model, signal),
-            companion: reviewer === 1,
-            observer,
-          }),
+    const outcomes = await reviewSeats([0, 1] as const, {
+      signal,
+      concurrency: models.length,
+      failure: () => 'Reviewer failed.',
+      review: (reviewer) =>
+        this.pass(
+          session,
+          models[reviewer],
+          reviewer ? 'Companion review' : 'Primary review',
+          (observer) =>
+            reviewTicket({
+              ...this.request(prepared, models[reviewer], signal),
+              companion: reviewer === 1,
+              observer,
+            }),
         ),
-      ),
-    )
-    signal.throwIfAborted()
+    })
     return {
       kind: 'review' as const,
       answers: [],
       reviews: outcomes.map((outcome, reviewer) => ({
         model: models[reviewer === 0 ? 0 : 1],
-        ...(outcome.status === 'fulfilled'
-          ? { advice: outcome.value }
-          : { error: publicError(outcome.reason, 'Reviewer failed.') }),
+        ...outcome,
       })),
     }
   }
@@ -305,17 +305,13 @@ export class TicketReviewJobs {
     return sessions ? sessions.run(session.id, { model, label }, execute) : execute()
   }
   private canReconcile(session: JobsSession): boolean {
-    const reviews = session.pending?.reviews ?? []
-    const successes = reviews.filter((review) => review.advice).length
-    if (!successes)
-      throw new UserError(
-        reviews
-          .map((review) => `${review.model.provider}: ${review.error ?? 'No review.'}`)
-          .join('\n'),
-      )
-    if (successes === 2) return true
+    const failed = failedSeats(
+      session.pending?.reviews ?? [],
+      (review) => `${review.model.provider}: ${review.error ?? 'No review.'}`,
+    )
+    if (!failed.length) return true
     session.status = 'partial'
-    session.error = reviews.find((review) => review.error)?.error
+    session.error = failed.find((review) => review.error)?.error
     this.progress(session, 'One reviewer failed. Retry both reviewers or continue with one.')
     return false
   }
@@ -348,8 +344,7 @@ export class TicketReviewJobs {
     })
   }
   private progress(session: JobsSession, progress: string) {
-    session.progress = progress
-    this.save(session)
+    this.jobs.progress(session, progress)
   }
 }
 
