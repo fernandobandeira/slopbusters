@@ -474,6 +474,7 @@ export function App() {
                           provider={preferences?.organization?.provider}
                           review={panel.reviewFor(pull.url)}
                           onOpen={panel.open}
+                          onSettled={panel.reload}
                           asking={panel.asking}
                           onDismissAsk={panel.dismissAsk}
                         />

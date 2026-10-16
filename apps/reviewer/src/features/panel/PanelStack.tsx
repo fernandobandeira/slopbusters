@@ -15,22 +15,28 @@ interface StackedFace {
 /**
  * Everyone on the panel at once, overlapping: while it runs, each face shows its reviewer's
  * state; on the summary, they all share the verdict's mood. A reviewer running on both providers
- * appears once.
+ * appears once. `compact` fits the stack inside a button.
  */
 export function PanelStack({
   session,
   mood,
   teammates,
+  compact = false,
 }: {
   session: PanelSession
   mood: Mood
   teammates?: Teammate[]
+  compact?: boolean
 }) {
   const faces = stackedFaces(session, mood)
   const shown = faces.slice(0, MAX_FACES)
   const hidden = faces.length - shown.length
   return (
-    <span className="panel-stack" role="img" aria-label={stackLabel(faces, session)}>
+    <span
+      className={`panel-stack${compact ? ' panel-stack-compact' : ''}`}
+      role="img"
+      aria-label={stackLabel(faces, session)}
+    >
       {shown.map((face, index) => (
         <span
           key={face.id}
@@ -40,7 +46,7 @@ export function PanelStack({
           <ReviewerFace
             name={face.name}
             src={reviewerFaceSrc(face.id, face.mood, teammates)}
-            size={64}
+            size={compact ? 18 : 64}
           />
         </span>
       ))}

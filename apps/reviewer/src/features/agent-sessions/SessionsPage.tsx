@@ -52,7 +52,7 @@ function SessionDetail({ id, repository }: { id: string; repository?: string }) 
       </div>
     )
   const run = selectPass(session.runs, selected)
-  const subject = sessionSubject(session.kind, run?.url ?? session.urls[0])
+  const subject = sessionSubject(session, run?.url ?? session.urls[0])
   return (
     <div className="session-page">
       <header className="session-heading">

@@ -8,6 +8,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 import { AgentSessionCard } from '../src/features/agent-sessions/AgentSessionCard'
 import { SessionsPage } from '../src/features/agent-sessions/SessionsPage'
+import { sessionSubject } from '../src/features/agent-sessions/sessionPresentation'
 import { SessionMarkdown } from '../src/components/SessionMarkdown'
 import { Provider } from '../shared/domain/types'
 import type { AgentRun, AgentEvent } from '../shared/domain/agentSession'
@@ -261,3 +262,14 @@ it.each(['gandalf', 'bob', 'linus'] as const)(
     expect(card.getAttribute('href')).toBe('/sessions/session?repository=example%2Fproject')
   },
 )
+it('opens a panel session on its PR with the panel showing, even while it runs', () => {
+  const subject = sessionSubject(
+    { id: 'panel-1', kind: 'panel' },
+    'https://github.com/example/project/pull/2',
+  )
+
+  expect(subject).toMatchObject({
+    to: '/repos/example/project/pulls/2?inbox=mine&panel=panel-1',
+    label: 'Open panel',
+  })
+})

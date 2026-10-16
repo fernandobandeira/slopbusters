@@ -56,8 +56,10 @@ export function inboxPath(repository: string, filter: InboxFilter = 'mine'): str
   return `${path}?${new URLSearchParams({ inbox: filter })}`
 }
 
-export function reviewPath(params: { url: string; filter: InboxFilter }): string {
+/** A PR's review page; `panel` opens the review panel companion on that session. */
+export function reviewPath(params: { url: string; filter: InboxFilter; panel?: string }): string {
   const query = new URLSearchParams({ inbox: params.filter })
+  if (params.panel) query.set('panel', params.panel)
   const pr = parsePullUrl(params.url)
   return `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}?${query}`
 }

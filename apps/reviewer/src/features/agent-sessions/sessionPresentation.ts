@@ -15,11 +15,15 @@ export function modelName(model: OrganizationPreferences) {
   if (model.model === 'claude-opus-5-5') return 'Opus 5.5'
   return model.model.replace(/^claude-/, '').replace(/-/g, ' ')
 }
-/** Where a session's subject opens: the PR it reviewed, or the Linear issue Jobs read. */
+/**
+ * Where a session's subject opens: the PR it reviewed, the panel on that PR, which shows a panel
+ * still running, or the Linear issue Jobs read.
+ */
 export function sessionSubject(
-  kind: AgentSession['kind'],
+  session: Pick<AgentSession, 'id' | 'kind'>,
   url?: string,
 ): { to: string; label: string; noun: string } | undefined {
+  const { kind } = session
   if (!url) return undefined
   if (kind === 'jobs') {
     const identifier = /\/issue\/([A-Za-z][A-Za-z0-9]*-\d+)/.exec(url)?.[1]?.toUpperCase()
@@ -27,6 +31,12 @@ export function sessionSubject(
       ? { to: issuePath(identifier), label: 'Open issue', noun: 'issue' }
       : undefined
   }
+  if (kind === 'panel')
+    return {
+      to: reviewPath({ url, filter: 'mine', panel: session.id }),
+      label: 'Open panel',
+      noun: 'PR',
+    }
   return { to: reviewPath({ url, filter: 'mine' }), label: 'Open PR', noun: 'PR' }
 }
 export function sessionPath(id?: string, repository?: string) {
