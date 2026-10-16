@@ -65,7 +65,7 @@ function reply(request: StructuredTurnRequest<unknown>) {
     : fixturePanelAdvice()
 }
 
-const everyone: ReviewerId[] = ['unclebob', 'rules', 'teammate:avery']
+const everyone: ReviewerId[] = ['unclebob', 'terminator', 'teammate:avery']
 
 describe('a panel review', () => {
   it('runs each reviewer once on the primary model with its own skill, then the judge', async () => {
@@ -128,7 +128,7 @@ describe('a panel review', () => {
 describe('a panel reviewer that fails', () => {
   it('waits on the user when a reviewer fails, then judges with the reviews that finished', async () => {
     const { turns, requests } = recordingTurns((request) => {
-      if (request.purpose?.startsWith('Rules')) throw new Error('Rules timed out')
+      if (request.purpose?.startsWith('Terminator')) throw new Error('Terminator timed out')
       return reply(request)
     })
     const jobs = panel(turns)
@@ -137,7 +137,7 @@ describe('a panel reviewer that fails', () => {
     await vi.waitFor(() => {
       expect(jobs.get(session.id).status).toBe('partial')
     })
-    expect(jobs.get(session.id).progress).toMatch(/^Rules could not finish/)
+    expect(jobs.get(session.id).progress).toMatch(/^Terminator could not finish/)
     expect(requests.some(isJudge)).toBe(false)
 
     jobs.continue(session.id)
@@ -146,16 +146,17 @@ describe('a panel reviewer that fails', () => {
     })
 
     const judge = requests.find(isJudge)
-    expect(judge?.prompt).not.toContain('- rules:')
+    expect(judge?.prompt).not.toContain('- terminator:')
     expect(jobs.get(session.id).results[0]?.advice.limitations.join(' ')).toMatch(
       /the judge saw 2 of 3 reviews/,
     )
   })
 
   it('retries only the reviewers that failed', async () => {
-    let rulesFails = true
+    let terminatorFails = true
     const { turns, requests } = recordingTurns((request) => {
-      if (request.purpose?.startsWith('Rules') && rulesFails) throw new Error('Rules timed out')
+      if (request.purpose?.startsWith('Terminator') && terminatorFails)
+        throw new Error('Terminator timed out')
       return reply(request)
     })
     const jobs = panel(turns)
@@ -163,7 +164,7 @@ describe('a panel reviewer that fails', () => {
     await vi.waitFor(() => {
       expect(jobs.get(session.id).status).toBe('partial')
     })
-    rulesFails = false
+    terminatorFails = false
     const before = requests.length
 
     jobs.retry(session.id)
@@ -172,7 +173,7 @@ describe('a panel reviewer that fails', () => {
     })
 
     expect(requests.slice(before).map((request) => request.purpose?.split(' ')[0])).toEqual([
-      'Rules',
+      'Terminator',
       'Panel',
     ])
   })
@@ -188,7 +189,7 @@ describe('a reviewer on both providers', () => {
     const session = await jobs.start(
       repository,
       [url],
-      [{ id: 'unclebob', providers: [Provider.claude, Provider.codex] }, 'rules'],
+      [{ id: 'unclebob', providers: [Provider.claude, Provider.codex] }, 'terminator'],
     )
     await vi.waitFor(() => {
       expect(jobs.get(session.id).status).toBe('complete')
@@ -201,7 +202,7 @@ describe('a reviewer on both providers', () => {
       expect.arrayContaining([
         ['Uncle Bob (Claude)', Provider.claude],
         ['Uncle Bob (Codex)', Provider.codex],
-        ['Rules', Provider.claude],
+        ['Terminator', Provider.claude],
       ]),
     )
     expect(requests.find(isJudge)?.model).toEqual(primary)
@@ -209,7 +210,7 @@ describe('a reviewer on both providers', () => {
     expect(jobs.get(session.id).reviewers.map((seat) => [seat.id, seat.model])).toEqual([
       ['unclebob@claude', primary],
       ['unclebob@codex', companion],
-      ['rules', primary],
+      ['terminator', primary],
     ])
     expect(jobs.get(session.id).results[0]?.advice.findings[0]?.raisedBy).toEqual([
       'unclebob@codex',

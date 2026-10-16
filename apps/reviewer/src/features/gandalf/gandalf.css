@@ -50,10 +50,11 @@
   margin-right: 8px;
 }
 .gandalf-portrait {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 132px;
   height: 145px;
-  object-fit: contain;
-  filter: drop-shadow(0 4px 12px #0003);
 }
 .gandalf-picks {
   display: grid;

@@ -23,7 +23,8 @@ export function TeammateSettings() {
       <h2 id="teammates-title">Teammates</h2>
       <p className="muted">
         Reviewers built from skills you installed for Claude Code or Codex, such as a colleague’s
-        review persona. Pick them with Uncle Bob and Rules when you ask the review panel about a PR.
+        review persona. Pick them with Uncle Bob and the Terminator when you ask the review panel
+        about a PR.
       </p>
       {query.error && <p role="alert">{query.error}</p>}
       {!query.loading && !teammates.length && !query.error && (

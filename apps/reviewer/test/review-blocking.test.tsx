@@ -7,7 +7,6 @@ import * as routes from '../shared/api'
 import { Provider } from '../shared/domain/types'
 import { useApiQuery } from '../src/lib/useApiQuery'
 import { useBobSession } from '../src/features/bob/useBobSession'
-import { usePanelSession } from '../src/features/panel/usePanelSession'
 import { App } from '../src/app/App'
 import { call } from '../src/lib/api'
 import type { ReviewWorkspace } from '../src/features/review/ReviewWorkspace'
@@ -16,7 +15,6 @@ import { fixturePull } from './fixtures/pull'
 const pull = fixturePull()
 const repository = `${pull.owner}/${pull.repo}`
 const model = { provider: Provider.codex, model: 'gpt-6.1-sol' }
-const otherUrl = `https://github.com/${repository}/pull/131`
 
 vi.mock('../src/lib/api', async (original) => ({ ...(await original()), call: vi.fn() }))
 vi.mock('../src/lib/usePreferences', () => ({
@@ -44,7 +42,6 @@ vi.mock('../src/features/linus/useLinusRecommendations', () => ({
   useLinusRecommendations: () => ({ recommendations: [] }),
 }))
 vi.mock('../src/features/bob/useBobSession', () => ({ useBobSession: vi.fn() }))
-vi.mock('../src/features/panel/usePanelSession', () => ({ usePanelSession: vi.fn() }))
 vi.mock('../src/features/review/usePullReview', () => ({
   usePullReview: (route: { kind: string }) => ({ pull: route.kind === 'pull' ? pull : undefined }),
 }))
@@ -109,7 +106,7 @@ function openPage(path = `/repos/${repository}/pulls?inbox=mine`) {
     ),
   )
 }
-async function choose(companion: 'Review panel' | 'Linus') {
+async function choose(companion: 'Linus') {
   fireEvent.click(screen.getByRole('button', { name: `Start review of PR #${pull.number}` }))
   fireEvent.click(await screen.findByRole('menuitem', { name: new RegExp(companion) }))
 }
@@ -118,14 +115,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   savedLatestLinus()
   vi.mocked(useBobSession).mockReturnValue({
-    session: undefined,
-    loading: false,
-    busy: false,
-    error: '',
-    act: vi.fn(),
-    reload: vi.fn(),
-  })
-  vi.mocked(usePanelSession).mockReturnValue({
     session: undefined,
     loading: false,
     busy: false,
@@ -216,35 +205,5 @@ describe('A Linus review that blocks a new one', () => {
       )
     })
     expect(screen.queryByRole('complementary', { name: 'Linus PR companion' })).toBeNull()
-  })
-})
-
-describe('A panel review that blocks a new one', () => {
-  it('opens the running panel review on its own PR when it blocks another', async () => {
-    vi.mocked(call).mockImplementation((route) => {
-      if (route === routes.startPanel)
-        return Promise.reject(
-          new Error(
-            'Finish or cancel the current panel review of PR #131 before starting another.',
-          ),
-        )
-      if (route === routes.latestPanel)
-        return Promise.resolve({ session: blockingReview('running', otherUrl) })
-      return Promise.resolve({ results: [] })
-    })
-    openPage()
-
-    await choose('Review panel')
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Current path').textContent).toBe(
-        `/repos/${repository}/pulls/131`,
-      )
-    })
-    expect(call).toHaveBeenCalledWith(routes.latestPanel, { query: { repository } })
-    expect(usePanelSession).toHaveBeenLastCalledWith('blocking-review')
-    expect(screen.getByRole('alert').textContent).toContain(
-      'The panel’s review of PR #131 is still running, so it is open now.',
-    )
   })
 })

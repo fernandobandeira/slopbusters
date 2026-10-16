@@ -4,34 +4,27 @@ import { blocksNewReview, reviewedPullsLabel } from '../../shared/domain/reviewS
 import type { ReviewCompanion } from '../components/StartReviewButton'
 import { call, message } from '../lib/api'
 import { useApiQuery } from '../lib/useApiQuery'
-import { savedPanelSelection } from '../features/panel/panelSelection'
 
 interface LaunchedSession {
   id: string
   urls: string[]
   status: 'running' | 'partial' | 'complete' | 'failed' | 'cancelled'
-  results: unknown[]
-}
-
-const reviewNames: Record<ReviewCompanion, string> = {
-  panel: 'The panel’s review',
-  linus: 'Linus’s review',
 }
 
 /**
- * Starts persona reviews and keeps the review that blocks a new one reachable: a running or
- * partial Linus review reopens after a reload, and a refused start opens the review in the way.
- * A panel review opens on its PR page; it runs the reviewers the user last picked there.
+ * Starts Linus and keeps the review that blocks a new one reachable: a running or partial Linus
+ * review reopens after a reload, and a refused start opens the review in the way. The review
+ * panel never starts from here: it opens the PR with its picker, so the user confirms who runs.
  */
 export function useReviewLaunch({
   repository,
   restore,
-  onPanelOpen,
+  onAskPanel,
   onError,
 }: {
   repository: string
   restore: boolean
-  onPanelOpen: (url: string, sessionId: string) => void
+  onAskPanel: (url: string) => void
   onError: (error: string) => void
 }) {
   const pending = useRef(false)
@@ -40,27 +33,27 @@ export function useReviewLaunch({
   const restored = useRestoredLinus(repository, restore)
 
   async function start(companion: ReviewCompanion, url: string) {
+    if (companion === 'panel') {
+      onAskPanel(url)
+      return
+    }
     if (pending.current) return
     pending.current = true
     setStarting(url)
     onError('')
     try {
-      const session = await startSession(companion, repository, url)
-      open(companion, session.id, url)
+      const session = await call(routes.startLinus, { body: { repository, urls: [url] } })
+      setLaunched({ repository, id: session.id })
     } catch (cause) {
-      const blocking = await blockingSession(companion, repository)
+      const blocking = await blockingLinus(repository)
       if (blocking) {
-        open(companion, blocking.id, reviewedUrl(blocking))
-        onError(blockedMessage(companion, blocking))
+        setLaunched({ repository, id: blocking.id })
+        onError(blockedMessage(blocking))
       } else onError(message(cause))
     } finally {
       pending.current = false
       setStarting(undefined)
     }
-  }
-  function open(companion: ReviewCompanion, id: string, url: string) {
-    if (companion === 'linus') setLaunched({ repository, id })
-    else onPanelOpen(url, id)
   }
   return {
     start,
@@ -90,27 +83,9 @@ function useRestoredLinus(repository: string, enabled: boolean) {
   return { session, dismiss: setDismissed }
 }
 
-function startSession(
-  companion: ReviewCompanion,
-  repository: string,
-  url: string,
-): Promise<LaunchedSession> {
-  const body = { repository, urls: [url] }
-  return companion === 'panel'
-    ? call(routes.startPanel, { body: { ...body, reviewers: savedPanelSelection() } })
-    : call(routes.startLinus, { body })
-}
-
-async function blockingSession(
-  companion: ReviewCompanion,
-  repository: string,
-): Promise<LaunchedSession | undefined> {
-  const input = { query: { repository } }
+async function blockingLinus(repository: string): Promise<LaunchedSession | undefined> {
   try {
-    const { session } =
-      companion === 'panel'
-        ? await call(routes.latestPanel, input)
-        : await call(routes.latestLinus, input)
+    const { session } = await call(routes.latestLinus, { query: { repository } })
     return session && blocksNewReview(session) ? session : undefined
   } catch {
     // The start error is still shown, so a failed lookup only loses the shortcut to the review.
@@ -118,12 +93,7 @@ async function blockingSession(
   }
 }
 
-function blockedMessage(companion: ReviewCompanion, session: LaunchedSession) {
+function blockedMessage(session: LaunchedSession) {
   const what = session.status === 'partial' ? 'is waiting on you' : 'is still running'
-  return `${reviewNames[companion]} of ${reviewedPullsLabel(session.urls)} ${what}, so it is open now. Finish or cancel it before starting another.`
-}
-
-/** The PR a panel companion should open on: the one under review, or the first. */
-function reviewedUrl(session: LaunchedSession) {
-  return session.urls[session.results.length] ?? session.urls[0] ?? ''
+  return `Linus’s review of ${reviewedPullsLabel(session.urls)} ${what}, so it is open now. Finish or cancel it before starting another.`
 }

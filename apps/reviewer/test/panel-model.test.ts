@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  seatReviewer,
   normalizeJudgeAdvice,
   normalizePanelAdvice,
   panelCommentBody,
@@ -52,7 +53,7 @@ describe('the judge’s advice', () => {
     const advice = fixtureJudgeAdvice(['unclebob', 'teammate:ghost'])
     advice.findings.push({ ...fixturePanelFinding({ id: 'invented' }), raisedBy: ['judge'] })
 
-    const judged = normalizeJudgeAdvice(pull, advice, ['unclebob', 'rules'])
+    const judged = normalizeJudgeAdvice(pull, advice, ['unclebob', 'terminator'])
 
     expect(judged.findings.map((finding) => [finding.id, finding.raisedBy])).toEqual([
       ['reuse-audit-helper', ['unclebob']],
@@ -86,7 +87,7 @@ describe('ranking and comments', () => {
   })
 
   it('tells a continuing reviewer which of its findings the judge kept and set aside', () => {
-    const judged = fixtureJudgeAdvice(['rules'])
+    const judged = fixtureJudgeAdvice(['terminator'])
     judged.setAside.push({
       title: 'Rename the helper',
       body: 'A taste call.',
@@ -99,5 +100,14 @@ describe('ranking and comments', () => {
 
     expect(markdown).toContain('The judge kept none of your findings.')
     expect(markdown).toContain('*Set aside:* No rule asks for it.')
+  })
+})
+
+describe('seats', () => {
+  it('maps a seat to its reviewer, reading the Terminator’s old name from earlier sessions', () => {
+    expect(seatReviewer('unclebob@codex')).toBe('unclebob')
+    expect(seatReviewer('teammate:avery@claude')).toBe('teammate:avery')
+    expect(seatReviewer('rules')).toBe('terminator')
+    expect(seatReviewer('rules@codex')).toBe('terminator')
   })
 })

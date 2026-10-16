@@ -48,7 +48,7 @@ beforeEach(async () => {
     dataDirectory: data,
     staticDirectory: data,
     skillRoots: roots,
-    rulesSkillDirectory: fileURLToPath(new URL('../../../skills/rules', import.meta.url)),
+    terminatorSkillDirectory: fileURLToPath(new URL('../../../skills/terminator', import.meta.url)),
     structuredTurns: turns,
     port: 0,
   })
@@ -117,7 +117,7 @@ describe('the review panel over HTTP', () => {
     const started = await send('POST', '/panel', {
       repository,
       urls: [fixturePull().url],
-      reviewers: ['teammate:avery', 'rules'],
+      reviewers: ['teammate:avery', 'terminator'],
     })
     expect(started.status).toBe(202)
     const { id } = routes.startPanel.response.parse(await started.json())
@@ -135,11 +135,11 @@ describe('the review panel over HTTP', () => {
       expect.objectContaining({
         sessionId: id,
         findingCount: 1,
-        reviewers: ['teammate:avery', 'rules'],
+        reviewers: ['teammate:avery', 'terminator'],
       }),
     ])
-    expect(requests.find((request) => request.purpose?.startsWith('Rules'))?.prompt).toContain(
-      '# Rules Review',
+    expect(requests.find((request) => request.purpose?.startsWith('Terminator'))?.prompt).toContain(
+      '# Terminator Review',
     )
   })
 })

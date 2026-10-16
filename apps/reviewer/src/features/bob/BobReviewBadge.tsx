@@ -1,6 +1,8 @@
 import { History } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import { bobVerdictLabels, type BobReviewSummary } from '../../../shared/domain/bob'
+import { ReviewerFace } from '../../components/ReviewerFace'
+import { personaFaceSrc } from '../../lib/reviewerFaces'
 
 export function BobReviewBadge({
   review,
@@ -23,7 +25,7 @@ export function BobReviewBadge({
       title={`${summary}${revision}`}
       onClick={onOpen}
     >
-      <img src="/unclebob/neutral.png" alt="" />
+      <ReviewerFace name="Uncle Bob" src={personaFaceSrc('unclebob', 'neutral')} size={18} />
       <span className="tabular-nums">{review.findingCount}</span>
       {stale && <History size={12} className="muted" aria-hidden="true" />}
     </Button>

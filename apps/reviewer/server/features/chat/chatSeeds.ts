@@ -12,6 +12,7 @@ import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import type { ReviewSession } from '../../../shared/domain/reviewSession'
 import {
   reviewerTeammate,
+  seatReviewer,
   type PanelReviewer,
   type PanelSession,
 } from '../../../shared/domain/panel'
@@ -184,7 +185,7 @@ function panelSeed(session: PanelSession, url: string, reviewerId: string): Chat
 function panelInvocation(reviewer: PanelReviewer, provider: Provider): string {
   const prefix = provider === Provider.claude ? '/' : '$'
   if (reviewerTeammate(reviewer.id)) return `${prefix}${reviewer.skill ?? reviewer.id}`
-  return `${prefix}slopbusters:${reviewer.id}`
+  return `${prefix}slopbusters:${seatReviewer(reviewer.id)}`
 }
 
 /** A PR's reconciled review, or for a partial session the advice of the reviewer that finished. */

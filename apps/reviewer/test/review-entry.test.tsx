@@ -142,46 +142,29 @@ describe('Review entry points', () => {
     expect(Boolean(screen.queryByRole('button', { name: /Start review/ }))).toBe(filter === 'mine')
   })
 
-  it.each([
-    {
-      companion: 'Review panel',
-      route: routes.startPanel,
-      body: { repository, urls: [pull.url], reviewers: [{ id: 'unclebob' }, { id: 'rules' }] },
-      aside: 'Review panel companion',
-      close: 'Close the review panel',
-    },
-    {
-      companion: 'Linus',
-      route: routes.startLinus,
-      body: { repository, urls: [pull.url] },
-      aside: 'Linus PR companion',
-      close: 'Close Linus',
-    },
-  ] as const)('starts the $companion on the selected PR from My PRs', async (entry) => {
+  it('starts Linus on the selected PR from My PRs', async () => {
     openPage()
-    await choose(entry.companion)
+    await choose('Linus')
     await waitFor(() => {
-      expect(call).toHaveBeenCalledWith(entry.route, { body: entry.body })
+      expect(call).toHaveBeenCalledWith(routes.startLinus, {
+        body: { repository, urls: [pull.url] },
+      })
     })
-    expect(await screen.findByRole('complementary', { name: entry.aside })).toBeTruthy()
-    if (entry.companion === 'Linus')
-      expect(useLinusSession).toHaveBeenCalledWith(repository, 'new-review')
-    else expect(usePanelSession).toHaveBeenCalledWith('new-review')
-    fireEvent.click(screen.getByRole('button', { name: entry.close }))
+    expect(await screen.findByRole('complementary', { name: 'Linus PR companion' })).toBeTruthy()
+    expect(useLinusSession).toHaveBeenCalledWith(repository, 'new-review')
+    fireEvent.click(screen.getByRole('button', { name: 'Close Linus' }))
     await waitFor(() => {
-      expect(screen.queryByRole('complementary', { name: entry.aside })).toBeNull()
+      expect(screen.queryByRole('complementary', { name: 'Linus PR companion' })).toBeNull()
     })
   })
 
-  it('starts the panel with the reviewers last picked in the PR header', async () => {
-    localStorage.setItem('slopbusters:panel-reviewers', JSON.stringify(['teammate:avery']))
+  it('opens the PR with the panel picker instead of starting a panel review', async () => {
     openPage()
     await choose('Review panel')
-    await waitFor(() => {
-      expect(call).toHaveBeenCalledWith(routes.startPanel, {
-        body: { repository, urls: [pull.url], reviewers: [{ id: 'teammate:avery' }] },
-      })
-    })
+
+    expect(await screen.findByText(`Who should review PR #${String(pull.number)}?`)).toBeTruthy()
+    expect(call).not.toHaveBeenCalledWith(routes.startPanel, expect.anything())
+    expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
   })
 
   it('reopens Uncle Bob from a saved badge after closing the panel', async () => {
@@ -200,12 +183,12 @@ describe('Review entry points', () => {
   it('reports a failed start without opening a companion and allows retry', async () => {
     vi.mocked(call).mockRejectedValueOnce(new Error('Choose a primary model first.'))
     openPage()
-    await choose('Review panel')
+    await choose('Linus')
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByText('Choose a primary model first.')).toBeTruthy()
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
-    await choose('Review panel')
-    expect(await screen.findByRole('button', { name: 'Close the review panel' })).toBeTruthy()
+    await choose('Linus')
+    expect(await screen.findByRole('button', { name: 'Close Linus' })).toBeTruthy()
   })
 })
 

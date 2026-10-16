@@ -1,6 +1,8 @@
 import { History } from 'lucide-react'
 import { verdictLabels, type LinusRecommendation } from '../../../shared/domain/linus'
 import { Button } from '~/components/ui/button'
+import { ReviewerFace } from '../../components/ReviewerFace'
+import { personaFaceSrc } from '../../lib/reviewerFaces'
 
 export function LinusRecommendationBadge({
   recommendation,
@@ -25,7 +27,7 @@ export function LinusRecommendationBadge({
       title={`${summary}${revision} Replay Linus’s review and copy the recommendations.`}
       onClick={onOpen}
     >
-      <img src="/linus/neutral.png" alt="" />
+      <ReviewerFace name="Linus" src={personaFaceSrc('linus', 'neutral')} size={18} />
       {split && <span>Split</span>}
       <span className="tabular-nums">{count}</span>
       {stale && <History size={12} className="muted" aria-hidden="true" />}

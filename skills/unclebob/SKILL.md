@@ -39,7 +39,7 @@ The diff alone is not enough. For each meaningful change:
 
 - Read the full function or file around the changed lines, not only the hunk.
 - Read the PR description, commit messages, or ask what the change is for if the intent is unclear.
-- **Skim the repository's own guidance for its vocabulary and idioms** (`AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING`). Enforcing those written rules is the `rules` reviewer's job, not yours: when one of them disagrees with your taste, the codebase wins and you drop the finding.
+- **Skim the repository's own guidance for its vocabulary and idioms** (`AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING`). Enforcing those written rules is the `terminator` reviewer's job, not yours: when one of them disagrees with your taste, the codebase wins and you drop the finding.
 - **Search the codebase for existing helpers, utilities, and patterns** that do what the new code does. Reusability findings must be backed by a real file and symbol, not a guess.
 - **Search for the words, too.** When the diff introduces a term, look for the concept it names elsewhere in the codebase. If the codebase already has a word for it, that is the word.
 - Look at how neighboring code is written. Recommend the codebase's own conventions over your personal taste.

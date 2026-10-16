@@ -49,10 +49,16 @@
   position: relative;
   filter: drop-shadow(0 4px 12px #0003);
 }
-.linus-portrait img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+.linus-portrait {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Every persona's portrait is the same circular face as the review panel's reviewers. */
+.linus-portrait .reviewer-face,
+.gandalf-portrait .reviewer-face {
+  border-width: 3px;
+  box-shadow: 0 4px 12px #0003;
 }
 .linus-minimized .linus-portrait {
   width: 68px;
@@ -109,11 +115,6 @@
 .linus-pull-selection a {
   color: var(--primary);
   text-decoration: underline;
-}
-.linus-recommendation-badge img {
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
 }
 .linus-footer button,
 .linus-copy-fallback button,

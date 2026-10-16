@@ -41,10 +41,10 @@ export default defineConfig({
         })
         this.emitFile({
           type: 'asset',
-          fileName: 'rules-skill.md',
+          fileName: 'terminator-skill.md',
           source: ['SKILL.md', 'references/checklist.md']
             .map((file) =>
-              readFileSync(new URL(`../../skills/rules/${file}`, import.meta.url), 'utf8'),
+              readFileSync(new URL(`../../skills/terminator/${file}`, import.meta.url), 'utf8'),
             )
             .join('\n\n'),
         })

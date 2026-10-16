@@ -5,7 +5,7 @@ Use this as a thinking aid, not a form to fill in. Report only what you actually
 ## Scope
 
 - [ ] Does the diff contain hunks the change didn't need (reworded comments, reordered lines, renames nobody asked for)? They cost the reviewer time to prove nothing changed.
-- [ ] Does a suggestion of yours contradict the repository's written guidance? Drop it; the `rules` reviewer enforces those rules, and the codebase's conventions outrank your taste.
+- [ ] Does a suggestion of yours contradict the repository's written guidance? Drop it; the `terminator` reviewer enforces those rules, and the codebase's conventions outrank your taste.
 
 ## Readability and the onion
 

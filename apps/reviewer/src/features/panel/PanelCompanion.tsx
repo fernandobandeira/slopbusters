@@ -7,6 +7,7 @@ import { seatRequests, type PanelSession } from '../../../shared/domain/panel'
 import type { Teammate } from '../../../shared/domain/teammates'
 import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { ReviewerFace } from '../../components/ReviewerFace'
+import { PanelStack } from './PanelStack'
 import { ProviderMark } from './ProviderMark'
 import { call, message } from '../../lib/api'
 import { reviewerFaceSrc } from '../../lib/reviewerFaces'
@@ -298,7 +299,7 @@ function ReviewAgain({
   )
 }
 
-/** The judge speaks for the summary; on a finding, the first reviewer who raised it does. */
+/** The whole panel while it works and on the summary; on a finding, whoever raised it first. */
 function Portrait({
   session,
   tour,
@@ -325,9 +326,9 @@ function Portrait({
           size={112}
           label={`${name}, ${tour.mood}`}
         />
-      ) : (
-        <img src="/slopbusters.png" alt="The panel's judge" />
-      )}
+      ) : session ? (
+        <PanelStack session={session} mood={tour.mood} teammates={teammates} />
+      ) : null}
     </button>
   )
 }

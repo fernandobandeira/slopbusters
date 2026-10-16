@@ -7,7 +7,7 @@ const server = await startReviewerServer({
   bobSkillDirectory: resolve('../../skills/unclebob'),
   linusSkillDirectory: resolve('../../skills/linus'),
   jobsSkillDirectory: resolve('../../skills/jobs'),
-  rulesSkillDirectory: resolve('../../skills/rules'),
+  terminatorSkillDirectory: resolve('../../skills/terminator'),
   port: 4311,
   allowedOrigins: ['http://127.0.0.1:4310', 'http://localhost:4310'],
 })

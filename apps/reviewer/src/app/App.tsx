@@ -120,10 +120,15 @@ export function App() {
     target.searchParams.set('panel', sessionId)
     void navigate(target.pathname + target.search)
   }
+  function askPanel(url: string) {
+    const target = new URL(reviewPath({ url, filter }), window.location.origin)
+    target.searchParams.set('ask', 'panel')
+    void navigate(target.pathname + target.search)
+  }
   const reviewLaunch = useReviewLaunch({
     repository,
     restore: route.kind === 'inbox' || route.kind === 'pull',
-    onPanelOpen: openPanel,
+    onAskPanel: askPanel,
     onError: setError,
   })
   function startReview(companion: ReviewCompanion, url: string) {
@@ -469,6 +474,8 @@ export function App() {
                           provider={preferences?.organization?.provider}
                           review={panel.reviewFor(pull.url)}
                           onOpen={panel.open}
+                          asking={panel.asking}
+                          onDismissAsk={panel.dismissAsk}
                         />
                       </>
                     }

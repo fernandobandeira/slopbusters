@@ -40,6 +40,8 @@ import { LinusPullSelection, type LinusPullSelectionState } from './LinusPullSel
 import { useLinusSession } from './useLinusSession'
 import { call, message } from '../../lib/api'
 import { reviewPath } from '../../lib/routes'
+import { ReviewerFace } from '../../components/ReviewerFace'
+import { personaFaceSrc } from '../../lib/reviewerFaces'
 import '../../linus.css'
 
 function LinusDiffEvidence({
@@ -621,7 +623,12 @@ export function LinusCompanion({
           )}
         </div>
         <button className="linus-portrait" aria-label="Minimize Linus" onClick={close}>
-          <img src={`/linus/${emotion}.png`} alt={`Linus, ${emotion}`} />
+          <ReviewerFace
+            name="Linus"
+            src={personaFaceSrc('linus', emotion)}
+            size={112}
+            label={`Linus, ${emotion}`}
+          />
         </button>
       </aside>
     </>

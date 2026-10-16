@@ -6,6 +6,8 @@ import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { BobTour, type BobDraftContext } from './BobTour'
 import { useBobTour } from './useBobTour'
 import { useBobSession } from './useBobSession'
+import { ReviewerFace } from '../../components/ReviewerFace'
+import { personaFaceSrc } from '../../lib/reviewerFaces'
 import '../../linus.css'
 import '../../findingTour.css'
 
@@ -66,7 +68,12 @@ export function BobCompanion(
         renderSessionCard={context.renderSessionCard}
       />
       <button className="linus-portrait" aria-label="Minimize Uncle Bob" onClick={close}>
-        <img src={`/unclebob/${tour.emotion}.png`} alt={`Uncle Bob, ${tour.emotion}`} />
+        <ReviewerFace
+          name="Uncle Bob"
+          src={personaFaceSrc('unclebob', tour.emotion)}
+          size={112}
+          label={`Uncle Bob, ${tour.emotion}`}
+        />
       </button>
     </aside>
   )

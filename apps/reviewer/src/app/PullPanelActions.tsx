@@ -10,12 +10,17 @@ export function PullPanelActions({
   provider,
   review,
   onOpen,
+  asking = false,
+  onDismissAsk,
 }: {
   repository: string
   pull: { url: string; number: number; headSha: string }
   provider?: Provider
   review?: PanelReviewSummary
   onOpen: (sessionId: string) => void
+  /** Open the picker straight away, as when the PR list asked for the panel. */
+  asking?: boolean
+  onDismissAsk?: () => void
 }) {
   return (
     <>
@@ -28,7 +33,14 @@ export function PullPanelActions({
           }}
         />
       )}
-      <PanelPicker repository={repository} pull={pull} provider={provider} onOpen={onOpen} />
+      <PanelPicker
+        repository={repository}
+        pull={pull}
+        provider={provider}
+        onOpen={onOpen}
+        openOnMount={asking}
+        onClose={onDismissAsk}
+      />
     </>
   )
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { BobResult, BobSession } from '../../../shared/domain/bob'
 import type { PullRequest } from '../../../shared/domain/types'
+import type { Mood } from '../../../shared/domain/teammates'
 
 export function useBobTour(pull: PullRequest, session?: BobSession) {
   const [cursor, setCursor] = useState<{ fingerprint: string; index: number }>()
@@ -32,7 +33,7 @@ function portraitEmotion(
   session: BobSession | undefined,
   result: BobResult | undefined,
   index: number,
-) {
+): Mood {
   if (session?.status === 'running') return 'thinking'
   if (session?.status === 'failed') return 'resigned'
   if (result?.advice.findings[index - 1]?.severity === 'must-fix') return 'angry'

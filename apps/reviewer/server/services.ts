@@ -57,7 +57,7 @@ export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   bobSkillDirectory?: string
   linusSkillDirectory?: string
   jobsSkillDirectory?: string
-  rulesSkillDirectory?: string
+  terminatorSkillDirectory?: string
   /** Where Claude Code and Codex keep the user's own skills; replaced in tests. */
   skillRoots?: SkillRoots
   port?: number

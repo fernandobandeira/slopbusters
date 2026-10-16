@@ -26,17 +26,18 @@ export interface Candidate {
   unavailable?: string
 }
 
-const DEFAULT_SELECTION: PanelChoice[] = [{ id: 'unclebob' }, { id: 'rules' }]
+const DEFAULT_SELECTION: PanelChoice[] = [{ id: 'unclebob' }, { id: 'terminator' }]
 
-/** The reviewers the user last asked; Uncle Bob and Rules until they choose. */
+/** The reviewers the user last asked; Uncle Bob and the Terminator until they choose. */
 export function savedPanelSelection(): PanelChoice[] {
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(SELECTION_KEY) ?? 'null')
     if (!Array.isArray(saved) || !saved.length) return DEFAULT_SELECTION
-    // Earlier versions saved bare ids, which ran on the primary model.
-    return saved.map((entry: unknown) =>
-      typeof entry === 'string' ? { id: entry as ReviewerId } : (entry as PanelChoice),
-    )
+    // Earlier versions saved bare ids, which ran on the primary model, and called the Terminator rules.
+    return saved.map((entry: unknown) => {
+      const choice = (typeof entry === 'string' ? { id: entry } : entry) as { id: string }
+      return { ...choice, id: choice.id === 'rules' ? 'terminator' : choice.id } as PanelChoice
+    })
   } catch {
     return DEFAULT_SELECTION
   }
@@ -50,7 +51,7 @@ export function savePanelSelection(selection: PanelChoice[]) {
   }
 }
 
-/** Uncle Bob and Rules first, then every teammate with where its skill is installed. */
+/** Uncle Bob and the Terminator first, then every teammate with where its skill is installed. */
 export function panelCandidates(teammates: readonly Teammate[]): Candidate[] {
   const everywhere = { [Provider.claude]: true, [Provider.codex]: true }
   return [

@@ -7,6 +7,7 @@ import type { ApiContract } from '../shared/api/contract'
 import type { InstalledSkill, Teammate } from '../shared/domain/teammates'
 import { Provider } from '../shared/domain/types'
 import { PanelPicker } from '../src/features/panel/PanelPicker'
+import { savedPanelSelection } from '../src/features/panel/panelSelection'
 import { TeammateSettings } from '../src/features/teammates/TeammateSettings'
 import { call } from '../src/lib/api'
 
@@ -157,7 +158,7 @@ describe('asking the panel', () => {
         urls: ['https://github.com/review-room/example/pull/128'],
         reviewers: [
           { id: 'unclebob', providers: [Provider.codex, Provider.claude] },
-          { id: 'rules', providers: [Provider.codex] },
+          { id: 'terminator', providers: [Provider.codex] },
           { id: 'teammate:riley', providers: [Provider.claude] },
         ],
       },
@@ -167,11 +168,47 @@ describe('asking the panel', () => {
   it('takes a reviewer off when its last provider is turned off', async () => {
     openPicker()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Rules on Codex' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Terminator on Codex' }))
 
-    expect(screen.getByRole('checkbox', { name: /Rules/ }).getAttribute('aria-checked')).toBe(
+    expect(screen.getByRole('checkbox', { name: /Terminator/ }).getAttribute('aria-checked')).toBe(
       'false',
     )
     expect(screen.getByRole('button', { name: 'Review with 1 reviewer' })).toBeTruthy()
+  })
+})
+
+describe('a panel that is already running', () => {
+  it('opens the running panel and says why when another cannot start', async () => {
+    vi.mocked(call).mockImplementation((route: ApiContract) => {
+      if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
+      if (route === routes.startPanel)
+        return Promise.reject(new Error('Finish or cancel the current panel review of PR #131.'))
+      if (route === routes.latestPanel)
+        return Promise.resolve({ session: { id: 'running-panel', status: 'running' } })
+      return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
+    })
+    const onOpen = vi.fn()
+    render(
+      <MemoryRouter>
+        <PanelPicker
+          repository="review-room/example"
+          pull={{ url: 'https://github.com/review-room/example/pull/128', number: 128 }}
+          provider={Provider.codex}
+          onOpen={onOpen}
+          openOnMount
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Review with 2 reviewers' }))
+
+    expect(await screen.findByText(/Finish or cancel the current panel review/)).toBeTruthy()
+    expect(onOpen).toHaveBeenCalledWith('running-panel')
+  })
+
+  it('reads picks saved before the Terminator was renamed', () => {
+    localStorage.setItem('slopbusters:panel-reviewers', JSON.stringify(['unclebob', 'rules']))
+
+    expect(savedPanelSelection()).toEqual([{ id: 'unclebob' }, { id: 'terminator' }])
   })
 })

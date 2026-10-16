@@ -28,14 +28,22 @@ export function PanelPicker({
   pull,
   provider,
   onOpen,
+  openOnMount = false,
+  onClose,
 }: {
   repository: string
   pull: { url: string; number: number }
   /** The primary model's provider; teammates need their skill installed for it. */
   provider?: Provider
   onOpen: (sessionId: string) => void
+  openOnMount?: boolean
+  onClose?: () => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(openOnMount)
+  function changeOpen(next: boolean) {
+    setOpen(next)
+    if (!next) onClose?.()
+  }
   const teammates = useApiQuery(routes.listTeammates, {}, { enabled: open })
   const candidates = panelCandidates(teammates.data?.teammates ?? [])
   const [selected, setSelected] = useState(savedPanelSelection)
@@ -46,7 +54,7 @@ export function PanelPicker({
     savePanelSelection(next)
   }
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root open={open} onOpenChange={changeOpen}>
       <Popover.Trigger
         render={<Button size="sm" variant="outline" />}
         aria-label={`Ask the review panel about PR #${String(pull.number)}`}
@@ -76,6 +84,7 @@ export function PanelPicker({
               provider={provider}
               start={start}
               onStarted={() => {
+                // Opening the new panel already clears the request that opened the picker.
                 setOpen(false)
               }}
             />

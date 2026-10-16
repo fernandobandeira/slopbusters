@@ -6,6 +6,8 @@ import type { GandalfSession, GandalfTask } from '../../../shared/domain/gandalf
 import { useGandalfSession } from './useGandalfSession'
 import { GandalfSelection } from './GandalfSelection'
 import { GandalfProgress } from './GandalfProgress'
+import { ReviewerFace } from '../../components/ReviewerFace'
+import { personaFaceSrc } from '../../lib/reviewerFaces'
 import './gandalf.css'
 
 interface GandalfProps {
@@ -89,11 +91,7 @@ export function GandalfCompanion({
           />
         )}
       </div>
-      <img
-        className="gandalf-portrait"
-        src={`/gandalf/${emotion}.png`}
-        alt={`Gandalf, ${emotion}`}
-      />
+      <GandalfPortrait emotion={emotion} />
     </aside>
   )
 }
@@ -101,6 +99,19 @@ export function GandalfCompanion({
 const labels = {
   conflicts: { companion: 'Gandalf conflict companion', header: 'GANDALF · CONFLICT RESOLUTION' },
   ci: { companion: 'Gandalf CI companion', header: 'GANDALF · FIX CI' },
+}
+
+function GandalfPortrait({ emotion }: { emotion: ReturnType<typeof gandalfEmotion> }) {
+  return (
+    <span className="gandalf-portrait">
+      <ReviewerFace
+        name="Gandalf"
+        src={personaFaceSrc('gandalf', emotion)}
+        size={112}
+        label={`Gandalf, ${emotion}`}
+      />
+    </span>
+  )
 }
 
 function gandalfEmotion(session: GandalfSession | undefined) {

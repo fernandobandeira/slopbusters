@@ -31,9 +31,17 @@ export function usePanelReview({
     error: saved.error,
     sessionId: query.get('panel') ?? undefined,
     reload: saved.reload,
+    /** The PR list asked for the panel: the picker opens itself until the user closes it. */
+    asking: query.get('ask') === 'panel',
+    dismissAsk: () => {
+      const next = new URLSearchParams(location.search)
+      next.delete('ask')
+      go(next, true)
+    },
     open: (sessionId: string) => {
       const next = new URLSearchParams(location.search)
       next.delete('bob')
+      next.delete('ask')
       next.set('panel', sessionId)
       go(next)
     },

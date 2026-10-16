@@ -16,6 +16,8 @@ import { JobsFindings } from './JobsFindings'
 import { JobsProposal } from './JobsProposal'
 import { JobsQuestions } from './JobsQuestions'
 import { useJobsSession } from './useJobsSession'
+import { ReviewerFace } from '../../components/ReviewerFace'
+import { personaFaceSrc } from '../../lib/reviewerFaces'
 import '../../linus.css'
 import '../../components/startReview.css'
 import './jobs.css'
@@ -73,7 +75,12 @@ export function JobsPanel({
             />
           </div>
           <button className="linus-portrait" aria-label="Minimize Steve Jobs" onClick={close}>
-            <img src={`/jobs/${expression}.png`} alt={`Steve Jobs, ${expression}`} />
+            <ReviewerFace
+              name="Steve Jobs"
+              src={personaFaceSrc('jobs', expression)}
+              size={112}
+              label={`Steve Jobs, ${expression}`}
+            />
           </button>
         </aside>
       )}
@@ -95,7 +102,11 @@ function JobsButton({
   const questions = revision?.advice.questions.length ?? 0
   return (
     <Button size="sm" variant="outline" aria-expanded={open} onClick={onToggle}>
-      <img className="review-companion-icon" src={`/jobs/${jobsExpression(session)}.png`} alt="" />
+      <ReviewerFace
+        name="Steve Jobs"
+        src={personaFaceSrc('jobs', jobsExpression(session))}
+        size={18}
+      />
       {working && <LoaderCircle size={13} className="animate-spin" />}
       {working
         ? 'Steve is reading…'

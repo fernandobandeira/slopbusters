@@ -118,3 +118,46 @@ describe('the review panel companion', () => {
     ])
   })
 })
+
+describe('the review panel portrait', () => {
+  it('stacks every reviewer once while the panel runs, each face showing its state', async () => {
+    const running: PanelSession = {
+      ...session(),
+      status: 'running',
+      results: [],
+      reviewers: [
+        { id: 'unclebob@claude', name: 'Uncle Bob (Claude)', maxFindings: 10 },
+        { id: 'unclebob@codex', name: 'Uncle Bob (Codex)', maxFindings: 10 },
+        { id: 'terminator', name: 'Terminator', maxFindings: 10 },
+      ],
+      pending: {
+        pull,
+        fingerprint: 'f',
+        reviews: [{ reviewer: 'terminator', advice: fixturePanelAdvice() }],
+      },
+    }
+    vi.mocked(call).mockImplementation((route: ApiContract) =>
+      route === routes.getPanel ? Promise.resolve(running) : Promise.resolve({ teammates: [] }),
+    )
+    render(
+      <MemoryRouter>
+        <PanelCompanion
+          sessionId="panel-1"
+          pull={pull}
+          draft={{ comments: [], summary: '', viewedFileIds: [] }}
+          setDraft={vi.fn()}
+          ready
+          openReview={vi.fn()}
+          focusLine={vi.fn()}
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    const stack = await screen.findByRole('img', { name: 'Uncle Bob and Terminator, reviewing' })
+    const faces = [...stack.querySelectorAll('img')].map((face) => face.getAttribute('src'))
+    expect(faces).toEqual(['/unclebob/thinking.png', '/terminator/neutral.png'])
+    expect(screen.queryByAltText("The panel's judge")).toBeNull()
+  })
+})

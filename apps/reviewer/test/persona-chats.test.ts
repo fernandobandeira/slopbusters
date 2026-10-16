@@ -344,36 +344,36 @@ describe('continuing a Jobs review in T3 Code', () => {
   })
 })
 
-describe('continuing one reviewer from a review panel', () => {
-  const reviewers = [
-    { id: 'unclebob' as const, name: 'Uncle Bob', maxFindings: 10 },
-    { id: 'teammate:avery' as const, name: 'Avery', skill: 'AveryReview', maxFindings: 16 },
-  ]
-  function panelSession(overrides: Partial<PanelSession> = {}): PanelSession {
-    return {
-      id: 'panel-1',
-      repository: 'review-room/example',
-      urls: [pull.url],
-      model: claude,
-      reviewers,
-      status: 'complete',
-      progress: '',
-      createdAt: '2026-10-16T00:00:00Z',
-      results: [
-        {
-          pull,
-          fingerprint: 'f',
-          advice: fixtureJudgeAdvice(['teammate:avery']),
-          reviews: [
-            { reviewer: 'unclebob', advice: fixturePanelAdvice([]) },
-            { reviewer: 'teammate:avery', advice: fixturePanelAdvice() },
-          ],
-        },
-      ],
-      ...overrides,
-    }
+const reviewers = [
+  { id: 'unclebob' as const, name: 'Uncle Bob', maxFindings: 10 },
+  { id: 'teammate:avery' as const, name: 'Avery', skill: 'AveryReview', maxFindings: 16 },
+]
+function panelSession(overrides: Partial<PanelSession> = {}): PanelSession {
+  return {
+    id: 'panel-1',
+    repository: 'review-room/example',
+    urls: [pull.url],
+    model: claude,
+    reviewers,
+    status: 'complete',
+    progress: '',
+    createdAt: '2026-10-16T00:00:00Z',
+    results: [
+      {
+        pull,
+        fingerprint: 'f',
+        advice: fixtureJudgeAdvice(['teammate:avery']),
+        reviews: [
+          { reviewer: 'unclebob', advice: fixturePanelAdvice([]) },
+          { reviewer: 'teammate:avery', advice: fixturePanelAdvice() },
+        ],
+      },
+    ],
+    ...overrides,
   }
+}
 
+describe('continuing one reviewer from a review panel', () => {
   it('invokes a teammate by its installed skill and hands it what the judge kept', async () => {
     const { firstMessage, startThread } = await continueWith(
       { panel: panelSession() },
@@ -415,5 +415,19 @@ describe('continuing one reviewer from a review panel', () => {
         { persona: 'panel', sessionId: 'panel-1', url: pull.url, reviewer: 'unclebob' },
       ),
     ).rejects.toThrow('Uncle Bob has not finished reviewing this PR yet.')
+  })
+})
+
+describe('continuing a built-in reviewer that ran as a seat', () => {
+  it.each(['terminator@codex', 'rules'])('invokes the Terminator’s skill for %s', async (seat) => {
+    const session = panelSession({ reviewers: [{ id: seat, name: 'Terminator', maxFindings: 10 }] })
+    session.results[0]?.reviews.push({ reviewer: seat, advice: fixturePanelAdvice() })
+
+    const { firstMessage } = await continueWith(
+      { panel: session },
+      { persona: 'panel', sessionId: 'panel-1', url: pull.url, reviewer: seat },
+    )
+
+    expect(firstMessage().startsWith('/slopbusters:terminator Review PR #128')).toBe(true)
   })
 })

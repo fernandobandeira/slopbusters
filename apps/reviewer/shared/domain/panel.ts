@@ -9,12 +9,11 @@ export const builtInReviewers = {
   unclebob: {
     name: 'Uncle Bob',
     description: 'Clean code: readability, structure, reuse, cognitive load and tests.',
-    face: '/unclebob',
   },
-  rules: {
-    name: 'Rules',
-    description: 'The repository’s written rules and the conventions its code applies.',
-    face: undefined,
+  terminator: {
+    name: 'Terminator',
+    description:
+      'Repository rules: what AGENTS.md and lint config say, and conventions the code applies.',
   },
 } as const
 export type BuiltInReviewer = keyof typeof builtInReviewers
@@ -43,10 +42,12 @@ export function reviewerTeammate(id: string): string | undefined {
 export const seatIdSchema = z
   .string()
   .max(80)
-  .regex(/^(?:unclebob|rules|teammate:[a-z0-9]+(?:-[a-z0-9]+)*)(?:@(?:claude|codex))?$/)
+  .regex(/^(?:unclebob|terminator|rules|teammate:[a-z0-9]+(?:-[a-z0-9]+)*)(?:@(?:claude|codex))?$/)
 
+/** The reviewer a seat belongs to. Sessions from before 0.5 call the Terminator `rules`. */
 export function seatReviewer(seat: string): string {
-  return seat.replace(/@(?:claude|codex)$/, '')
+  const reviewer = seat.replace(/@(?:claude|codex)$/, '')
+  return reviewer === 'rules' ? 'terminator' : reviewer
 }
 
 /** Which reviewer to ask, and on which providers; without providers, the primary model's. */
