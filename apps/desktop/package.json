@@ -1,7 +1,7 @@
 {
   "name": "@slopbusters/desktop",
   "productName": "Slopbusters",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "Slopbusters desktop code review workspace.",
   "author": "Fernando Bandeira",
