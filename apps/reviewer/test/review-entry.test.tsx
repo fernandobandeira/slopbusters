@@ -146,7 +146,7 @@ describe('Review entry points', () => {
     {
       companion: 'Review panel',
       route: routes.startPanel,
-      body: { repository, urls: [pull.url], reviewers: ['unclebob', 'rules'] },
+      body: { repository, urls: [pull.url], reviewers: [{ id: 'unclebob' }, { id: 'rules' }] },
       aside: 'Review panel companion',
       close: 'Close the review panel',
     },
@@ -179,7 +179,7 @@ describe('Review entry points', () => {
     await choose('Review panel')
     await waitFor(() => {
       expect(call).toHaveBeenCalledWith(routes.startPanel, {
-        body: { repository, urls: [pull.url], reviewers: ['teammate:avery'] },
+        body: { repository, urls: [pull.url], reviewers: [{ id: 'teammate:avery' }] },
       })
     })
   })

@@ -116,12 +116,7 @@ describe('the teammate wizard', () => {
 })
 
 describe('asking the panel', () => {
-  it('offers only teammates installed for the primary model’s provider and starts the chosen ones', async () => {
-    teammates = [
-      teammate(),
-      teammate({ id: 'riley', name: 'Riley', skill: 'RileyReview', locations: { claude: '/c' } }),
-    ]
-    const onOpen = vi.fn()
+  function openPicker(onOpen = vi.fn()) {
     render(
       <MemoryRouter>
         <PanelPicker
@@ -133,15 +128,25 @@ describe('asking the panel', () => {
       </MemoryRouter>,
     )
     fireEvent.click(screen.getByRole('button', { name: /Ask the review panel/ }))
+    return onOpen
+  }
 
-    const riley = await screen.findByRole('checkbox', { name: /Riley/ })
-    expect(riley.hasAttribute('disabled')).toBe(true)
-    expect(riley.textContent).toContain('Claude only')
-    expect(screen.getByRole('checkbox', { name: /Uncle Bob/ }).getAttribute('aria-checked')).toBe(
-      'true',
+  it('runs each reviewer on the primary model’s provider unless another is picked', async () => {
+    teammates = [
+      teammate(),
+      teammate({ id: 'riley', name: 'Riley', skill: 'RileyReview', locations: { claude: '/c' } }),
+    ]
+    const onOpen = openPicker()
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Riley/ }))
+    expect(screen.getByRole('button', { name: 'Riley on Codex' }).hasAttribute('disabled')).toBe(
+      true,
     )
-    fireEvent.click(screen.getByRole('checkbox', { name: /Avery/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Review with 3 reviewers' }))
+    expect(
+      screen.getByRole('button', { name: 'Riley on Claude' }).getAttribute('aria-pressed'),
+    ).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Uncle Bob on Claude' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review with 3 reviewers, 4 runs' }))
 
     await waitFor(() => {
       expect(onOpen).toHaveBeenCalledWith('panel-1')
@@ -150,8 +155,23 @@ describe('asking the panel', () => {
       body: {
         repository: 'review-room/example',
         urls: ['https://github.com/review-room/example/pull/128'],
-        reviewers: ['unclebob', 'rules', 'teammate:avery'],
+        reviewers: [
+          { id: 'unclebob', providers: [Provider.codex, Provider.claude] },
+          { id: 'rules', providers: [Provider.codex] },
+          { id: 'teammate:riley', providers: [Provider.claude] },
+        ],
       },
     })
+  })
+
+  it('takes a reviewer off when its last provider is turned off', async () => {
+    openPicker()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Rules on Codex' }))
+
+    expect(screen.getByRole('checkbox', { name: /Rules/ }).getAttribute('aria-checked')).toBe(
+      'false',
+    )
+    expect(screen.getByRole('button', { name: 'Review with 1 reviewer' })).toBeTruthy()
   })
 })

@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { findingCommentId, findingDraftComment, pointsAtChange } from './findings'
-import type { OrganizationPreferences } from './preferences'
+import { organizationSchema, type OrganizationPreferences } from './preferences'
 import { teammateIdSchema } from './teammates'
-import { DiffSide, type DraftComment, type PullRequest } from './types'
+import { DiffSide, Provider, type DraftComment, type PullRequest } from './types'
 
 /** The reviewers Slopbusters ships; teammates join them as `teammate:<id>`. */
 export const builtInReviewers = {
@@ -29,18 +29,61 @@ export type ReviewerId = z.infer<typeof reviewerIdSchema>
 export function teammateReviewerId(id: string): ReviewerId {
   return `teammate:${id}` as ReviewerId
 }
+/** The teammate behind a reviewer or seat id, such as `avery` for `teammate:avery@codex`. */
 export function reviewerTeammate(id: string): string | undefined {
-  return id.startsWith('teammate:') ? id.slice('teammate:'.length) : undefined
+  const reviewer = seatReviewer(id)
+  return reviewer.startsWith('teammate:') ? reviewer.slice('teammate:'.length) : undefined
 }
 
-/** A panel member as the session saw it, so results still render after a teammate is removed. */
+/**
+ * A seat is one reviewer on one provider. A reviewer asked on a single provider keeps its own id;
+ * one asked on both gets a seat per provider, `<reviewer>@claude` and `<reviewer>@codex`, and the
+ * judge weighs them as two reviewers.
+ */
+export const seatIdSchema = z
+  .string()
+  .max(80)
+  .regex(/^(?:unclebob|rules|teammate:[a-z0-9]+(?:-[a-z0-9]+)*)(?:@(?:claude|codex))?$/)
+
+export function seatReviewer(seat: string): string {
+  return seat.replace(/@(?:claude|codex)$/, '')
+}
+
+/** Which reviewer to ask, and on which providers; without providers, the primary model's. */
+export const panelSeatRequestSchema = z.union([
+  reviewerIdSchema,
+  z
+    .object({
+      id: reviewerIdSchema,
+      providers: z.array(z.enum(Provider)).min(1).max(2).optional(),
+    })
+    .strict(),
+])
+export type PanelSeatRequest = z.infer<typeof panelSeatRequestSchema>
+
+/** Ask the same seats again: each reviewer on the providers it ran on last time. */
+export function seatRequests(
+  reviewers: readonly PanelReviewer[],
+  fallback: Provider,
+): PanelSeatRequest[] {
+  const providers = new Map<ReviewerId, Provider[]>()
+  for (const seat of reviewers) {
+    const id = seatReviewer(seat.id) as ReviewerId
+    providers.set(id, [...(providers.get(id) ?? []), seat.model?.provider ?? fallback])
+  }
+  return [...providers].map(([id, list]) => ({ id, providers: list }))
+}
+
+/** A panel seat as the session saw it, so results still render after a teammate is removed. */
 export const panelReviewerSchema = z.object({
-  id: reviewerIdSchema,
+  id: seatIdSchema,
   name: z.string(),
   description: z.string().optional(),
   /** The installed skill a teammate runs, by folder name. */
   skill: z.string().optional(),
   maxFindings: z.number().int().positive(),
+  /** The model this seat reviews on; sessions saved before seats used the session's model. */
+  model: organizationSchema.optional(),
 })
 export type PanelReviewer = z.infer<typeof panelReviewerSchema>
 
@@ -216,7 +259,8 @@ export function panelCommentBody(finding: PanelFinding): string {
 }
 
 export interface PanelReview {
-  reviewer: ReviewerId
+  /** The seat that wrote it. */
+  reviewer: string
   advice?: PanelAdvice
   error?: string
 }

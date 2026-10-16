@@ -178,7 +178,7 @@ export function createServices(options: ReviewerServerOptions) {
     turns,
     sessions: agentSessions,
     members: panelMembers,
-    model: () => chatModel(),
+    models: () => ({ primary: chatModel(), companion: store.getPreferences().companion }),
     loadPull: pulls.fetchPull,
     openRepository,
     context: tickets.contextForPull,

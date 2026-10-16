@@ -1,12 +1,15 @@
 import {
   builtInReviewers,
   reviewerTeammate,
+  seatReviewer,
   type BuiltInReviewer,
   type PanelReviewer,
+  type PanelSeatRequest,
   type ReviewerId,
 } from '../../../shared/domain/panel'
+import { modelForProvider, type OrganizationPreferences } from '../../../shared/domain/preferences'
 import { DEFAULT_TEAMMATE_FINDINGS, installedFor } from '../../../shared/domain/teammates'
-import type { Provider } from '../../../shared/domain/types'
+import { Provider } from '../../../shared/domain/types'
 import { UserError } from '../../errors'
 import { MAX_PANEL_REVIEWERS } from '../../limits'
 import type { Teammates } from '../teammates/teammates'
@@ -23,12 +26,42 @@ export class PanelMembers {
     },
   ) {}
 
-  /** The reviewers a panel will run, checked before it starts so a missing skill fails early. */
-  async describe(ids: readonly ReviewerId[], provider: Provider): Promise<PanelReviewer[]> {
-    if (new Set(ids).size !== ids.length) throw new UserError('Pick each reviewer only once.')
-    if (!ids.length || ids.length > MAX_PANEL_REVIEWERS)
+  /**
+   * The seats a panel will run: each reviewer once per provider asked, on that provider's model.
+   * Checked before the panel starts, so a skill missing for a provider fails early.
+   */
+  async describe(
+    requests: readonly PanelSeatRequest[],
+    models: { primary: OrganizationPreferences; companion?: OrganizationPreferences },
+  ): Promise<PanelReviewer[]> {
+    const asked = requests.map((request) =>
+      typeof request === 'string'
+        ? { id: request, providers: [models.primary.provider] }
+        : {
+            id: request.id,
+            providers: [...new Set(request.providers ?? [models.primary.provider])],
+          },
+    )
+    if (new Set(asked.map((entry) => entry.id)).size !== asked.length)
+      throw new UserError('Pick each reviewer only once.')
+    if (!asked.length || asked.length > MAX_PANEL_REVIEWERS)
       throw new UserError(`Pick between 1 and ${String(MAX_PANEL_REVIEWERS)} reviewers.`)
-    return Promise.all(ids.map((id) => this.reviewer(id, provider)))
+    const seats = await Promise.all(
+      asked.flatMap(({ id, providers }) =>
+        providers.map(async (provider) => {
+          const reviewer = await this.reviewer(id, provider)
+          const model = modelForProvider(provider, models)
+          if (providers.length === 1) return { ...reviewer, model }
+          return {
+            ...reviewer,
+            id: `${id}@${provider}`,
+            name: `${reviewer.name} (${providerName(provider)})`,
+            model,
+          }
+        }),
+      ),
+    )
+    return seats
   }
 
   /** A reviewer's instructions as of now; a teammate whose skill was uninstalled fails here. */
@@ -37,7 +70,7 @@ export class PanelMembers {
     if (!teammate)
       return {
         ...reviewer,
-        instructions: await this.options.builtIn(reviewer.id as BuiltInReviewer),
+        instructions: await this.options.builtIn(seatReviewer(reviewer.id) as BuiltInReviewer),
       }
     const skill = await this.options.teammates.skill(teammate, provider)
     return { ...reviewer, instructions: skill.text, directory: skill.directory }
@@ -68,7 +101,7 @@ export class PanelMembers {
     const teammate = await this.options.teammates.get(teammateId)
     if (!installedFor(teammate.locations, provider))
       throw new UserError(
-        `${teammate.name}'s skill, ${teammate.skill}, is not installed for your primary model's provider. Install it there or choose another primary model in Settings.`,
+        `${teammate.name}'s skill, ${teammate.skill}, is not installed for ${providerName(provider)}. Install it there or ask ${teammate.name} on the other provider.`,
       )
     const description = teammate.title ?? teammate.description
     return {
@@ -79,4 +112,8 @@ export class PanelMembers {
       ...(description ? { description: description.slice(0, MAX_DESCRIPTION_CHARACTERS) } : {}),
     }
   }
+}
+
+function providerName(provider: Provider) {
+  return provider === Provider.claude ? 'Claude' : 'Codex'
 }

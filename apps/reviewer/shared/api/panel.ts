@@ -4,7 +4,8 @@ import {
   panelAdviceSchema,
   panelReviewerSchema,
   panelReviewSummarySchema,
-  reviewerIdSchema,
+  panelSeatRequestSchema,
+  seatIdSchema,
   type PanelSession,
 } from '../domain/panel'
 import { organizationSchema } from '../domain/preferences'
@@ -12,7 +13,7 @@ import { defineRoute, idParams, pullUrlSchema, repositoryQuery } from './contrac
 import { pullSchema } from './reviewSchemas'
 
 const review = z.object({
-  reviewer: reviewerIdSchema,
+  reviewer: seatIdSchema,
   advice: panelAdviceSchema.optional(),
   error: z.string().optional(),
 })
@@ -57,7 +58,7 @@ export const startPanel = defineRoute('POST', '/panel', {
   request: repositoryQuery
     .extend({
       urls: z.array(pullUrlSchema).min(1).max(20),
-      reviewers: z.array(reviewerIdSchema).min(1).max(8),
+      reviewers: z.array(panelSeatRequestSchema).min(1).max(8),
     })
     .strict(),
   response: session,

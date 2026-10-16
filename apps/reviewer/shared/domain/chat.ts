@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { reviewerIdSchema } from './panel'
+import { seatIdSchema } from './panel'
 import { pullUrlSchema as pullUrl } from './pullUrl'
 
 /** Where a chat runs: the user's T3 Code, or the T3 Code engine Slopbusters bundles. */
@@ -17,7 +17,7 @@ export const continueChatSchema = z.discriminatedUnion('persona', [
   z.object({ persona: z.literal('jobs'), sessionId }).strict(),
   z.object({ persona: z.literal('gandalf'), sessionId, url: pullUrl }).strict(),
   z
-    .object({ persona: z.literal('panel'), sessionId, url: pullUrl, reviewer: reviewerIdSchema })
+    .object({ persona: z.literal('panel'), sessionId, url: pullUrl, reviewer: seatIdSchema })
     .strict(),
 ])
 export type ContinueChatRequest = z.infer<typeof continueChatSchema>

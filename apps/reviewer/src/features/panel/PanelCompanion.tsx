@@ -3,10 +3,11 @@ import { Check, CircleAlert, LoaderCircle, X } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
 import { snapshotMatches } from '../../../shared/domain/findings'
-import type { PanelSession } from '../../../shared/domain/panel'
+import { seatRequests, type PanelSession } from '../../../shared/domain/panel'
 import type { Teammate } from '../../../shared/domain/teammates'
 import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { ReviewerFace } from '../../components/ReviewerFace'
+import { ProviderMark } from './ProviderMark'
 import { call, message } from '../../lib/api'
 import { reviewerFaceSrc } from '../../lib/reviewerFaces'
 import { useApiQuery } from '../../lib/useApiQuery'
@@ -210,6 +211,7 @@ function ReviewerRoster({ session, teammates }: { session: PanelSession; teammat
               size={24}
             />
             <span>{reviewer.name}</span>
+            <ProviderMark reviewer={reviewer} />
             {state === 'done' && <Check size={13} aria-label="finished" />}
             {state === 'failed' && <CircleAlert size={13} aria-label="failed" />}
             {state === 'working' && session.status === 'running' && (
@@ -275,7 +277,7 @@ function ReviewAgain({
     setBusy(true)
     setError('')
     try {
-      const reviewers = session.reviewers.map((reviewer) => reviewer.id)
+      const reviewers = seatRequests(session.reviewers, session.model.provider)
       const next = await call(routes.startPanel, {
         body: { repository: session.repository, urls: [url], reviewers },
       })

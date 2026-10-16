@@ -1,37 +1,26 @@
 import { Popover } from '@base-ui/react/popover'
-import { Check, LoaderCircle, Users } from 'lucide-react'
+import { LoaderCircle, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
-import {
-  builtInReviewerIds,
-  builtInReviewers,
-  teammateReviewerId,
-  type ReviewerId,
-} from '../../../shared/domain/panel'
 import { blocksNewReview } from '../../../shared/domain/reviewSession'
-import {
-  availabilityLabels,
-  installedFor,
-  skillAvailability,
-  type Teammate,
-} from '../../../shared/domain/teammates'
+import type { Teammate } from '../../../shared/domain/teammates'
 import type { Provider } from '../../../shared/domain/types'
-import { ReviewerFace } from '../../components/ReviewerFace'
 import { call, message } from '../../lib/api'
-import { reviewerFaceSrc } from '../../lib/reviewerFaces'
 import { useApiQuery } from '../../lib/useApiQuery'
-import { savedPanelSelection, savePanelSelection } from './panelSelection'
+import { CandidateRow } from './CandidateRow'
+import {
+  panelCandidates,
+  resolveChoices,
+  savedPanelSelection,
+  savePanelSelection,
+  toggleProvider,
+  toggleReviewer,
+  type Candidate,
+  type PanelChoice,
+} from './panelSelection'
 import './panel.css'
-
-interface Candidate {
-  id: ReviewerId
-  name: string
-  description?: string
-  /** Why the reviewer cannot run now, such as a skill installed only for the other provider. */
-  unavailable?: string
-}
 
 /** "Ask the panel": choose reviewers for this PR and start them. Nothing runs until the click. */
 export function PanelPicker({
@@ -48,14 +37,11 @@ export function PanelPicker({
 }) {
   const [open, setOpen] = useState(false)
   const teammates = useApiQuery(routes.listTeammates, {}, { enabled: open })
-  const candidates = panelCandidates(teammates.data?.teammates ?? [], provider)
+  const candidates = panelCandidates(teammates.data?.teammates ?? [])
   const [selected, setSelected] = useState(savedPanelSelection)
-  const chosen = selected.filter((id) =>
-    candidates.some((candidate) => candidate.id === id && !candidate.unavailable),
-  )
+  const chosen = provider ? resolveChoices(selected, candidates, provider) : []
   const start = usePanelStart({ repository, url: pull.url, onOpen })
-  function toggle(id: ReviewerId) {
-    const next = selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]
+  function choose(next: Required<PanelChoice>[]) {
     setSelected(next)
     savePanelSelection(next)
   }
@@ -81,7 +67,12 @@ export function PanelPicker({
               candidates={candidates}
               teammates={teammates}
               chosen={chosen}
-              toggle={toggle}
+              onToggle={(candidate) => {
+                if (provider) choose(toggleReviewer(chosen, candidate, provider))
+              }}
+              onToggleProvider={(id, picked) => {
+                choose(toggleProvider(chosen, id, picked))
+              }}
               provider={provider}
               start={start}
               onStarted={() => {
@@ -100,7 +91,8 @@ function PickerBody({
   candidates,
   teammates,
   chosen,
-  toggle,
+  onToggle,
+  onToggleProvider,
   provider,
   start,
   onStarted,
@@ -108,8 +100,9 @@ function PickerBody({
   number: number
   candidates: Candidate[]
   teammates: { data?: { teammates: Teammate[] }; loading: boolean; error?: string }
-  chosen: ReviewerId[]
-  toggle: (id: ReviewerId) => void
+  chosen: Required<PanelChoice>[]
+  onToggle: (candidate: Candidate) => void
+  onToggleProvider: (id: Candidate['id'], provider: Provider) => void
   provider?: Provider
   start: ReturnType<typeof usePanelStart>
   onStarted: () => void
@@ -118,18 +111,21 @@ function PickerBody({
     <>
       <Popover.Title className="panel-picker-title">Who should review PR #{number}?</Popover.Title>
       <Popover.Description className="muted">
-        Each reviewer reviews on your primary model, then a judge checks their findings against the
-        code.
+        Each reviewer runs on Codex, Claude, or both, then a judge on your primary model checks
+        their findings against the code.
       </Popover.Description>
       <div role="group" aria-label="Reviewers" className="panel-candidates">
         {candidates.map((candidate) => (
-          <CandidateToggle
+          <CandidateRow
             key={candidate.id}
             candidate={candidate}
             teammates={teammates.data?.teammates}
-            checked={chosen.includes(candidate.id)}
+            providers={chosen.find((choice) => choice.id === candidate.id)?.providers ?? []}
             onToggle={() => {
-              toggle(candidate.id)
+              onToggle(candidate)
+            }}
+            onToggleProvider={(picked) => {
+              onToggleProvider(candidate.id, picked)
             }}
           />
         ))}
@@ -155,46 +151,19 @@ function PickerBody({
         }}
       >
         {start.starting && <LoaderCircle size={13} className="animate-spin" />}
-        Review with {chosen.length} {chosen.length === 1 ? 'reviewer' : 'reviewers'}
+        {startLabel(chosen)}
       </Button>
     </>
   )
 }
 
-function CandidateToggle({
-  candidate,
-  teammates,
-  checked,
-  onToggle,
-}: {
-  candidate: Candidate
-  teammates?: Teammate[]
-  checked: boolean
-  onToggle: () => void
-}) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      className="panel-candidate"
-      disabled={Boolean(candidate.unavailable)}
-      onClick={onToggle}
-    >
-      <ReviewerFace
-        name={candidate.name}
-        src={reviewerFaceSrc(candidate.id, 'neutral', teammates)}
-        size={32}
-      />
-      <span className="panel-candidate-text">
-        <strong>{candidate.name}</strong>
-        <span className="muted">{candidate.unavailable ?? candidate.description}</span>
-      </span>
-      <span className="panel-candidate-check" aria-hidden="true">
-        {checked && <Check size={14} />}
-      </span>
-    </button>
-  )
+/** "Review with 3 reviewers", or with the number of runs when some run on both providers. */
+function startLabel(chosen: Required<PanelChoice>[]) {
+  const runs = chosen.reduce((total, choice) => total + choice.providers.length, 0)
+  const reviewers = `${String(chosen.length)} ${chosen.length === 1 ? 'reviewer' : 'reviewers'}`
+  return runs > chosen.length
+    ? `Review with ${reviewers}, ${String(runs)} runs`
+    : `Review with ${reviewers}`
 }
 
 /** Start the panel; when another panel is in the way, open that one and say why. */
@@ -209,7 +178,7 @@ function usePanelStart({
 }) {
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
-  async function run(reviewers: ReviewerId[]): Promise<boolean> {
+  async function run(reviewers: PanelChoice[]): Promise<boolean> {
     setStarting(true)
     setError('')
     try {
@@ -230,27 +199,4 @@ function usePanelStart({
     }
   }
   return { run, starting, error }
-}
-
-/** Uncle Bob and Rules first, then every teammate; teammates not installed for the provider are off. */
-export function panelCandidates(teammates: readonly Teammate[], provider?: Provider): Candidate[] {
-  return [
-    ...builtInReviewerIds.map((id) => ({
-      id,
-      name: builtInReviewers[id].name,
-      description: builtInReviewers[id].description,
-    })),
-    ...teammates.map((teammate) => {
-      const availability = skillAvailability(teammate.locations)
-      const ready = provider
-        ? installedFor(teammate.locations, provider)
-        : availability !== 'missing'
-      return {
-        id: teammateReviewerId(teammate.id),
-        name: teammate.name,
-        description: teammate.title ?? teammate.skill,
-        ...(ready ? {} : { unavailable: `${teammate.skill}: ${availabilityLabels[availability]}` }),
-      }
-    }),
-  ]
 }

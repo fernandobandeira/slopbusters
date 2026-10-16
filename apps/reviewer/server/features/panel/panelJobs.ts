@@ -5,7 +5,7 @@ import type {
   PanelReview,
   PanelReviewer,
   PanelSession,
-  ReviewerId,
+  PanelSeatRequest,
 } from '../../../shared/domain/panel'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import { blocksNewReview, reviewedPullsLabel } from '../../../shared/domain/reviewSession'
@@ -24,7 +24,8 @@ interface Options {
   store: PanelSessionStore
   turns: StructuredTurns
   members: PanelMembers
-  model: () => OrganizationPreferences
+  /** The primary model judges; each seat reviews on the model for its provider. */
+  models: () => { primary: OrganizationPreferences; companion?: OrganizationPreferences }
   loadPull: (url: string) => Promise<PullRequest>
   sessions?: AgentSessions
   openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
@@ -36,18 +37,23 @@ interface Options {
 type RunMode = 'fresh' | 'retry' | 'judge'
 
 /**
- * A panel review: every chosen reviewer reviews each PR on the primary model, a few at a time,
+ * A panel review: every chosen seat reviews each PR on its provider's model, a few at a time,
  * then a judge verifies their findings against the code and merges them into one result.
  */
 export class PanelJobs {
   private running = new Map<string, { controller: AbortController; done: Promise<void> }>()
   constructor(private readonly options: Options) {}
 
-  async start(repository: string, urls: string[], ids: ReviewerId[]): Promise<PanelSession> {
-    const model = this.options.model()
+  async start(
+    repository: string,
+    urls: string[],
+    requests: PanelSeatRequest[],
+  ): Promise<PanelSession> {
+    const models = this.options.models()
+    const reviewers = await this.options.members.describe(requests, models)
     const previous = this.latest(repository)
     if (previous && blocksNewReview(previous)) {
-      if (sameRequest(previous, urls, ids)) return previous
+      if (sameRequest(previous, urls, reviewers)) return previous
       throw new UserError(
         `Finish or cancel the current panel review of ${reviewedPullsLabel(previous.urls)} before starting another.`,
         409,
@@ -57,8 +63,8 @@ export class PanelJobs {
       id: randomUUID(),
       repository,
       urls,
-      model,
-      reviewers: await this.options.members.describe(ids, model.provider),
+      model: models.primary,
+      reviewers,
       status: 'running',
       progress: 'Loading PR snapshots…',
       results: [],
@@ -255,11 +261,12 @@ export class PanelJobs {
     { signal, repository }: { signal: AbortSignal; repository?: ReviewCheckout },
   ): Promise<PanelReview> {
     try {
-      const member = await this.options.members.load(reviewer, session.model.provider)
+      const model = reviewer.model ?? session.model
+      const member = await this.options.members.load(reviewer, model.provider)
       const execute = (observer?: ProviderObserver) =>
         reviewAsPanelist({
           turns: this.options.turns,
-          model: session.model,
+          model,
           signal,
           repository,
           observer,
@@ -268,7 +275,7 @@ export class PanelJobs {
           context: pending.context,
         })
       const label = `${reviewer.name} review`
-      const advice = await this.track(session, { label, url: pending.pull.url }, execute)
+      const advice = await this.track(session, { label, url: pending.pull.url, model }, execute)
       return { reviewer: reviewer.id, advice }
     } catch (error) {
       signal.throwIfAborted()
@@ -303,11 +310,15 @@ export class PanelJobs {
   }
   private track<T>(
     session: PanelSession,
-    pass: { label: string; url: string },
+    pass: { label: string; url: string; model?: OrganizationPreferences },
     execute: (observer?: ProviderObserver) => Promise<T>,
   ): Promise<T> {
     return this.options.sessions
-      ? this.options.sessions.run(session.id, { model: session.model, ...pass }, execute)
+      ? this.options.sessions.run(
+          session.id,
+          { ...pass, model: pass.model ?? session.model },
+          execute,
+        )
       : execute()
   }
   private save(session: PanelSession) {
@@ -320,10 +331,11 @@ export class PanelJobs {
   }
 }
 
-function sameRequest(session: PanelSession, urls: string[], ids: ReviewerId[]) {
+function sameRequest(session: PanelSession, urls: string[], reviewers: PanelReviewer[]) {
+  const seats = (list: PanelReviewer[]) => list.map((reviewer) => [reviewer.id, reviewer.model])
   return (
     JSON.stringify(session.urls) === JSON.stringify(urls) &&
-    JSON.stringify(session.reviewers.map((reviewer) => reviewer.id)) === JSON.stringify(ids)
+    JSON.stringify(seats(session.reviewers)) === JSON.stringify(seats(reviewers))
   )
 }
 

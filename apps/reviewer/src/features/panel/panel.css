@@ -27,24 +27,60 @@
 .panel-candidate {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
+  gap: 4px;
+  padding-right: 6px;
   border: 1px solid transparent;
   border-radius: 6px;
+}
+.panel-candidate:hover {
+  background: var(--accent);
+}
+.panel-candidate-checked {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+.panel-candidate-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 0;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
 }
-.panel-candidate:hover:not(:disabled) {
-  background: var(--accent);
-}
-.panel-candidate[aria-checked='true'] {
-  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
-}
-.panel-candidate:disabled {
+.panel-candidate-main:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+.panel-candidate-providers {
+  display: flex;
+  gap: 2px;
+}
+.panel-provider {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  opacity: 0.45;
+  cursor: pointer;
+}
+.panel-provider[aria-pressed='true'] {
+  opacity: 1;
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.panel-provider:disabled {
+  opacity: 0.15;
+  cursor: not-allowed;
 }
 .panel-candidate-text {
   display: grid;

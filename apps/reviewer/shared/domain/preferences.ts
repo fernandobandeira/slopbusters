@@ -41,3 +41,16 @@ export const organizationDefaults: Record<Provider, { model: string; label: stri
 export function providerLabel(provider: Provider) {
   return provider === Provider.codex ? 'Codex' : 'Claude'
 }
+
+/**
+ * The model to run on `provider`: the primary model or the companion when either uses that
+ * provider, and otherwise the provider's default.
+ */
+export function modelForProvider(
+  provider: Provider,
+  models: { primary: OrganizationPreferences; companion?: OrganizationPreferences },
+): OrganizationPreferences {
+  if (models.primary.provider === provider) return models.primary
+  if (models.companion?.provider === provider) return models.companion
+  return { provider, model: organizationDefaults[provider].model }
+}
