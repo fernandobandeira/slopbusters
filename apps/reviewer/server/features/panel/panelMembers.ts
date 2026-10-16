@@ -76,6 +76,25 @@ export class PanelMembers {
     return { ...reviewer, instructions: skill.text, directory: skill.directory }
   }
 
+  /**
+   * Each teammate seat's skill folder, on the provider it reviewed with, for the judge to check
+   * findings that cite it. A teammate uninstalled since its review is left out.
+   */
+  async skillFolders(
+    reviewers: readonly PanelReviewer[],
+    fallback: Provider,
+  ): Promise<Map<string, string>> {
+    const folders = new Map<string, string>()
+    for (const reviewer of reviewers) {
+      const teammate = reviewerTeammate(reviewer.id)
+      if (!teammate) continue
+      const provider = reviewer.model?.provider ?? fallback
+      const skill = await this.options.teammates.skill(teammate, provider).catch(() => undefined)
+      if (skill) folders.set(reviewer.id, skill.directory)
+    }
+    return folders
+  }
+
   /** A chat continues a reviewer through its installed skill, so the chat's provider needs it. */
   async requireChat(reviewer: PanelReviewer, provider: Provider): Promise<void> {
     const teammateId = reviewerTeammate(reviewer.id)

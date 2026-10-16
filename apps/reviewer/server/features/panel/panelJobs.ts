@@ -181,6 +181,13 @@ export class PanelJobs {
         session,
         `The judge is weighing the reviews of PR #${String(pending.pull.number)}…`,
       )
+      const reviewers = session.reviewers.filter((reviewer) =>
+        pending.reviews.some((review) => review.reviewer === reviewer.id && review.advice),
+      )
+      const skillFolders = await this.options.members.skillFolders(
+        reviewers,
+        session.model.provider,
+      )
       const execute = (observer?: ProviderObserver) =>
         judgePanel({
           turns: this.options.turns,
@@ -189,9 +196,8 @@ export class PanelJobs {
           repository,
           observer,
           pending,
-          reviewers: session.reviewers.filter((reviewer) =>
-            pending.reviews.some((review) => review.reviewer === reviewer.id && review.advice),
-          ),
+          reviewers,
+          skillFolders,
         })
       const advice = await this.track(session, { label: 'Judge', url: pending.pull.url }, execute)
       signal.throwIfAborted()

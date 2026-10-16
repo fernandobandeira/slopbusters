@@ -1,3 +1,4 @@
+import { ownProcedureOnly } from '../server/features/reviewPrompts'
 import { describe, expect, it, vi } from 'vitest'
 import { reconcileWithBob, reviewWithBob } from '../server/features/bob/bobReview'
 import { Provider } from '../shared/domain/types'
@@ -59,6 +60,7 @@ describe('Bob model prompts and reconciliation', () => {
 
     expect(request.prompt).toContain(JSON.stringify(reviews))
     expect(request.prompt).toContain('Deduplicate')
+    expect(request.prompt).toContain(ownProcedureOnly)
     expect(request.directory).toBeUndefined()
     expect(request.purpose).toBe('Uncle Bob reconciliation · review-room/example#128')
     expect(advice.limitations.join(' ')).toContain('Single-model review')

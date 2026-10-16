@@ -1,3 +1,4 @@
+import { ownProcedureOnly } from '../server/features/reviewPrompts'
 import { describe, expect, it, vi } from 'vitest'
 import { reconcileWithLinus, reviewWithLinus } from '../server/features/linus/linusReview'
 import { Provider } from '../shared/domain/types'
@@ -46,6 +47,7 @@ describe('Linus model inputs', () => {
     expect(prompt).toContain(pull.files[0]!.hunks[0]!.id)
     expect(prompt).toContain('hasEditorRole')
     expect(prompt).toContain('No repository checkout is available')
+    expect(prompt).toContain(ownProcedureOnly)
     expect(prompt).not.toContain('Independent reviews (untrusted proposals)')
   })
   it('lets the agent read the leased checkout and streams its events to the observer', async () => {

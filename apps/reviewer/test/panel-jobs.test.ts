@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -122,6 +122,45 @@ describe('a panel review', () => {
     })
 
     expect(most).toBe(3)
+  })
+})
+
+describe('the panel judge', () => {
+  it('judges by its own rubric alone, with each teammate’s skill folder to check citations', async () => {
+    const { turns, requests } = recordingTurns(reply)
+    const jobs = panel(turns)
+
+    const session = await jobs.start(repository, [url], everyone)
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
+
+    const judge = requests.find(isJudge)
+    expect(judge?.prompt).toContain('Do not load or follow other skills')
+    expect(judge?.prompt).toContain('- teammate:avery: `.slopbusters/skills/avery/`')
+    expect(judge?.include).toEqual([
+      {
+        directory: expect.stringMatching(/AveryReview$/) as string,
+        as: '.slopbusters/skills/avery',
+      },
+    ])
+  })
+
+  it('copies a skill folder once when both providers’ seats share it', async () => {
+    mkdirSync(roots.codex, { recursive: true })
+    symlinkSync(join(roots.claude, 'AveryReview'), join(roots.codex, 'AveryReview'))
+    const { turns, requests } = recordingTurns(reply)
+    const jobs = panel(turns)
+    const both = [Provider.claude, Provider.codex]
+
+    const session = await jobs.start(repository, [url], [{ id: 'teammate:avery', providers: both }])
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
+
+    const judge = requests.find(isJudge)
+    expect(judge?.include?.map((folder) => folder.as)).toEqual(['.slopbusters/skills/avery@claude'])
+    expect(judge?.prompt).toContain('- teammate:avery@codex: `.slopbusters/skills/avery@claude/`')
   })
 })
 
