@@ -5,6 +5,9 @@ import { GandalfCompanion } from '../features/gandalf/GandalfCompanion'
 import type { GandalfTask } from '../../shared/domain/gandalf'
 import { inboxSections } from '../features/inbox/inboxSections'
 import { BobCompanion } from '../features/bob/BobCompanion'
+import { PanelCompanion } from '../features/panel/PanelCompanion'
+import { PullPanelActions } from './PullPanelActions'
+import { usePanelReview } from './usePanelReview'
 import { AppSidebar } from './AppSidebar'
 import { InboxPullActions } from './InboxPullActions'
 import { useReviewLaunch } from './useReviewLaunch'
@@ -40,6 +43,7 @@ import { inboxPulls } from '../features/inbox/inbox'
 import { ReviewWorkspace } from '../features/review/ReviewWorkspace'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { OrganizationSettings } from '../features/settings/OrganizationSettings'
+import { TeammateSettings } from '../features/teammates/TeammateSettings'
 
 import { StackDialog } from '../features/stacks/StackPanel'
 import { PullStatusDialog } from '../features/pull-status/PullStatusDialog'
@@ -103,13 +107,23 @@ export function App() {
       pull?.url === url ? location.pathname + location.search : reviewPath({ url, filter }),
       window.location.origin,
     )
+    target.searchParams.delete('panel')
     target.searchParams.set('bob', sessionId)
+    void navigate(target.pathname + target.search)
+  }
+  function openPanel(url: string, sessionId: string) {
+    const target = new URL(
+      pull?.url === url ? location.pathname + location.search : reviewPath({ url, filter }),
+      window.location.origin,
+    )
+    target.searchParams.delete('bob')
+    target.searchParams.set('panel', sessionId)
     void navigate(target.pathname + target.search)
   }
   const reviewLaunch = useReviewLaunch({
     repository,
     restore: route.kind === 'inbox' || route.kind === 'pull',
-    onBobOpen: openBob,
+    onPanelOpen: openPanel,
     onError: setError,
   })
   function startReview(companion: ReviewCompanion, url: string) {
@@ -158,6 +172,11 @@ export function App() {
     navigate,
     setError,
   )
+  const panel = usePanelReview({
+    repository,
+    enabled: Boolean(repository) && (route.kind === 'inbox' || route.kind === 'pull'),
+    refresh: refresh + linusRefresh,
+  })
   const { inbox, inboxLoading, inboxError, inboxStatusLoading } = useInbox(repository, {
     filter,
     refresh,
@@ -227,6 +246,10 @@ export function App() {
           reviewStartDisabled={Boolean(reviewLaunch.starting)}
           onBobReplay={(review) => {
             openBob(pr.url, review.sessionId)
+          }}
+          panelReview={panel.reviewFor(pr.url)}
+          onPanelReplay={(review) => {
+            openPanel(pr.url, review.sessionId)
           }}
           onReplay={(recommendation) => {
             setLinusSelection(undefined)
@@ -370,6 +393,7 @@ export function App() {
                   status={status}
                   onSave={saveOrganization}
                   onSaveCompanion={saveCompanion}
+                  teammates={<TeammateSettings />}
                 />
               }
             />
@@ -425,7 +449,6 @@ export function App() {
                         <LinkedTicketLink url={pull.url} />
                         <PullReviewActions
                           pull={pull}
-                          startCompanion="bob"
                           bobReview={bobReviews.get(pull.url)}
                           recommendation={recommendations.get(pull.url)}
                           onBobReplay={(review) => {
@@ -439,22 +462,25 @@ export function App() {
                               url: pull.url,
                             })
                           }}
-                          reviewStarting={Boolean(reviewLaunch.starting)}
-                          reviewStartDisabled={savedBob.loading}
-                          onStartReview={(companion) => {
-                            startReview(companion, pull.url)
-                          }}
+                        />
+                        <PullPanelActions
+                          repository={repository}
+                          pull={pull}
+                          provider={preferences?.organization?.provider}
+                          review={panel.reviewFor(pull.url)}
+                          onOpen={panel.open}
                         />
                       </>
                     }
                     renderCompanion={({ draft, setDraft, ready, openReview, focusLine }) =>
-                      bobReplayId && (
-                        <BobCompanion
+                      panel.sessionId ? (
+                        <PanelCompanion
                           renderSessionCard={renderSessionCard}
-                          key={`${pull.id}:${bobReplayId}`}
-                          replaySessionId={bobReplayId}
-                          onClose={closeBob}
-                          onSessionUpdate={refreshLinus}
+                          key={`${pull.id}:${panel.sessionId}`}
+                          sessionId={panel.sessionId}
+                          onOpen={panel.open}
+                          onClose={panel.close}
+                          onSessionUpdate={panel.reload}
                           pull={pull}
                           draft={draft}
                           setDraft={setDraft}
@@ -462,6 +488,22 @@ export function App() {
                           openReview={openReview}
                           focusLine={focusLine}
                         />
+                      ) : (
+                        bobReplayId && (
+                          <BobCompanion
+                            renderSessionCard={renderSessionCard}
+                            key={`${pull.id}:${bobReplayId}`}
+                            replaySessionId={bobReplayId}
+                            onClose={closeBob}
+                            onSessionUpdate={refreshLinus}
+                            pull={pull}
+                            draft={draft}
+                            setDraft={setDraft}
+                            ready={ready}
+                            openReview={openReview}
+                            focusLine={focusLine}
+                          />
+                        )
                       )
                     }
                     titlebarTarget={titlebarTarget}

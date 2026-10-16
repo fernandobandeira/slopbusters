@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { reviewerIdSchema } from './panel'
 import { pullUrlSchema as pullUrl } from './pullUrl'
 
 /** Where a chat runs: the user's T3 Code, or the T3 Code engine Slopbusters bundles. */
@@ -7,14 +8,17 @@ export type ChatLocation = 't3code' | 'slopbusters'
 const sessionId = z.string().min(1).max(100)
 
 /**
- * The review a T3 Code conversation picks up from. Linus and Gandalf sessions cover several PRs,
- * so they also name the PR.
+ * The review a T3 Code conversation picks up from. Linus, Gandalf and panel sessions cover several
+ * PRs, so they also name the PR; a panel chat continues one of its reviewers.
  */
 export const continueChatSchema = z.discriminatedUnion('persona', [
   z.object({ persona: z.literal('linus'), sessionId, url: pullUrl }).strict(),
   z.object({ persona: z.literal('unclebob'), sessionId }).strict(),
   z.object({ persona: z.literal('jobs'), sessionId }).strict(),
   z.object({ persona: z.literal('gandalf'), sessionId, url: pullUrl }).strict(),
+  z
+    .object({ persona: z.literal('panel'), sessionId, url: pullUrl, reviewer: reviewerIdSchema })
+    .strict(),
 ])
 export type ContinueChatRequest = z.infer<typeof continueChatSchema>
 

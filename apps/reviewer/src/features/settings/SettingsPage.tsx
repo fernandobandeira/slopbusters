@@ -1,4 +1,5 @@
 import { ArrowLeft } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ThemePicker } from './ThemePicker'
 import { LanguageServerSettings } from './LanguageServerSettings'
@@ -18,6 +19,7 @@ export function SettingsPage({
   status,
   onSave,
   onSaveCompanion,
+  teammates,
 }: {
   inboxUrl: string
   organization?: OrganizationPreferences
@@ -25,6 +27,8 @@ export function SettingsPage({
   status?: AppStatus
   onSave: (organization: OrganizationPreferences) => Promise<void>
   onSaveCompanion: (companion: OrganizationPreferences) => Promise<void>
+  /** The Teammates section, composed by the app. */
+  teammates?: ReactNode
 }) {
   return (
     <div className="settings-content">
@@ -51,6 +55,7 @@ export function SettingsPage({
           companion
         />
       </section>
+      {teammates}
       <LinearSettings />
       <LanguageServerSettings />
       <ReviewWorkspaceSettings />

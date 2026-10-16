@@ -1,8 +1,8 @@
 import { Check, Copy } from 'lucide-react'
 import { Button } from '~/components/ui/button'
-import { useClipboard } from '../../lib/useClipboard'
+import { useClipboard } from '../lib/useClipboard'
 
-export function BobCopyButton({ label, text }: { label: string; text: string }) {
+export function CopyButton({ label, text }: { label: string; text: string }) {
   const { state, copy } = useClipboard()
   return (
     <Button size="sm" variant="ghost" onClick={() => void copy(text)}>

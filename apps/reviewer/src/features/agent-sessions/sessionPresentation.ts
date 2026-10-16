@@ -8,6 +8,7 @@ export const agentNames: Record<AgentSession['kind'], string> = {
   linus: 'Linus',
   grouping: 'Diff organization',
   jobs: 'Steve Jobs',
+  panel: 'Review panel',
 }
 export function modelName(model: OrganizationPreferences) {
   if (model.model === 'gpt-6.1-sol') return 'Sol 6.1'

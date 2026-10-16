@@ -1,58 +1,58 @@
-.bob-companion .linus-bubble {
+.finding-companion .linus-bubble {
   display: flex;
   flex-direction: column;
   width: 400px;
   max-height: calc(100dvh - 190px);
   overflow: hidden;
 }
-.bob-tour {
+.finding-tour {
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
-.bob-tour-content {
+.finding-tour-content {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   padding-right: 6px;
 }
-.bob-companion .linus-bubble > header,
-.bob-companion .linus-footer,
-.bob-tour .linus-turn-meta {
+.finding-companion .linus-bubble > header,
+.finding-companion .linus-footer,
+.finding-tour .linus-turn-meta {
   flex-shrink: 0;
 }
-.bob-severity {
+.finding-severity {
   display: inline-block;
   color: var(--primary);
   font-size: 11px;
   font-weight: 600;
   margin-bottom: 6px;
 }
-.bob-finding-title {
+.finding-title {
   font-size: 16px;
   font-weight: 600;
   line-height: 1.4;
   margin: 0 0 12px;
   overflow-wrap: anywhere;
 }
-.bob-prose {
+.finding-prose {
   font-size: 14px;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
-.bob-prose p + p {
+.finding-prose p + p {
   margin-top: 12px;
 }
-.bob-prose code,
-.bob-location code {
+.finding-prose code,
+.finding-location code {
   font-size: 0.9em;
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 8%, transparent);
   border-radius: 3px;
   padding: 1px 3px;
 }
-.bob-prose pre {
+.finding-prose pre {
   overflow-x: auto;
   padding: 10px;
   margin: 10px 0;
@@ -60,93 +60,93 @@
   border: 1px solid var(--border);
   border-radius: 6px;
 }
-.bob-prose pre code {
+.finding-prose pre code {
   background: none;
   padding: 0;
 }
-.bob-prose ul,
-.bob-prose ol,
-.bob-notes > ul {
+.finding-prose ul,
+.finding-prose ol,
+.finding-notes > ul {
   padding-left: 20px;
   margin: 10px 0;
   display: grid;
   gap: 10px;
   list-style-type: disc;
 }
-.bob-prose ol {
+.finding-prose ol {
   list-style-type: decimal;
 }
-.bob-prose a {
+.finding-prose a {
   color: var(--primary);
   text-decoration: underline;
 }
-.bob-location {
+.finding-location {
   font-size: 11px;
   line-height: 1.5;
   color: var(--muted-foreground);
   margin: 0 0 14px;
   overflow-wrap: anywhere;
 }
-.bob-suggestion {
+.finding-suggestion {
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid var(--border);
 }
-.bob-suggestion h3 {
+.finding-suggestion h3 {
   font-size: 12px;
   font-weight: 600;
   margin-bottom: 8px;
 }
-.bob-actions,
-.bob-comment {
+.finding-actions,
+.finding-comment {
   flex-shrink: 0;
   margin-top: 14px;
 }
-.bob-actions {
+.finding-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
-.bob-comment label {
+.finding-comment label {
   display: block;
   font-size: 11px;
   margin-bottom: 8px;
   overflow-wrap: anywhere;
 }
-.bob-comment textarea {
+.finding-comment textarea {
   width: 100%;
   margin-bottom: 10px;
 }
-.bob-saved {
+.finding-saved {
   flex-basis: 100%;
   color: var(--success);
   font-size: 11px;
 }
-.bob-notes {
+.finding-notes {
   font-size: 12px;
   line-height: 1.6;
   margin: 14px 0;
 }
-.bob-notes summary {
+.finding-notes summary {
   cursor: pointer;
   font-weight: 600;
 }
-.bob-notes .bob-prose {
+.finding-notes .finding-prose {
   font-size: 13px;
 }
-.bob-tour-controls {
+.finding-tour-controls {
   flex-shrink: 0;
   justify-content: flex-end;
   padding-top: 12px;
   margin-top: 14px;
   border-top: 1px solid var(--border);
 }
-.bob-submit {
+.finding-submit {
   flex-shrink: 0;
   margin-top: 14px;
 }
-.bob-continue {
+.finding-continue {
   flex-shrink: 0;
   margin-top: 10px;
 }
@@ -154,7 +154,7 @@
   padding-right: 428px;
 }
 @media (max-width: 760px) {
-  .bob-companion .linus-bubble {
+  .finding-companion .linus-bubble {
     max-height: 290px;
   }
   .review-focusing-line .review-body {

@@ -1,38 +1,46 @@
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { Button } from '~/components/ui/button'
-import { bobCommentId, bobDraftComment, type BobFinding } from '../../../shared/domain/bob'
-import type { DraftComment, PullRequest, ReviewDraft } from '../../../shared/domain/types'
+import type { DraftComment, ReviewDraft } from '../../shared/domain/types'
 
-interface BobCommentProps {
-  pull: PullRequest
-  finding: BobFinding
+interface FindingCommentProps {
+  /** The stable id the finding's draft comment is saved under. */
+  commentId: string
+  /** Names where the comment lands, such as `src/a.ts:12 (RIGHT)`. */
+  location: string
+  /** What the editor starts with when there is no saved comment yet. */
+  initialBody: string
+  toComment: (body: string) => DraftComment
   comments: DraftComment[]
   disabled: boolean
   onSave: (comment: DraftComment) => void
   onDelete: (id: string) => void
   actions?: ReactNode
 }
-export function BobComment({
-  pull,
-  finding,
+
+/** Turns a reviewer's finding into an editable comment in the user's review draft. */
+export function FindingComment({
+  commentId,
+  initialBody,
   comments,
   onSave,
   onDelete,
   disabled,
   actions,
-}: BobCommentProps) {
-  const saved = comments.find((comment) => comment.id === bobCommentId(pull, finding))
+  location,
+  toComment,
+}: FindingCommentProps) {
+  const saved = comments.find((comment) => comment.id === commentId)
   const [editing, setEditing] = useState(false)
   const [body, setBody] = useState('')
   function edit() {
-    setBody(saved?.body ?? `${finding.title}\n\n${finding.body}\n\n${finding.suggestion}`)
+    setBody(saved?.body ?? initialBody)
     setEditing(true)
   }
   if (!editing)
     return (
-      <div className="bob-actions">
+      <div className="finding-actions">
         {saved && (
-          <p className="bob-saved" role="status">
+          <p className="finding-saved" role="status">
             Comment saved in your review draft
           </p>
         )}
@@ -55,13 +63,13 @@ export function BobComment({
       </div>
     )
   return (
-    <BobCommentForm
-      finding={finding}
+    <FindingCommentForm
+      location={location}
       body={body}
       setBody={setBody}
       disabled={disabled}
       onSubmit={() => {
-        onSave(bobDraftComment(pull, finding, body))
+        onSave(toComment(body))
         setEditing(false)
       }}
       onCancel={() => {
@@ -71,34 +79,33 @@ export function BobComment({
   )
 }
 
-function BobCommentForm({
-  finding,
+function FindingCommentForm({
+  location,
   body,
   setBody,
   disabled,
   onSubmit,
   onCancel,
 }: {
-  finding: BobFinding
+  location: string
   body: string
   setBody: (body: string) => void
   disabled: boolean
   onSubmit: () => void
   onCancel: () => void
 }) {
+  const id = useId()
   return (
     <form
-      className="bob-comment"
+      className="finding-comment"
       onSubmit={(event) => {
         event.preventDefault()
         onSubmit()
       }}
     >
-      <label htmlFor="bob-comment-body">
-        Review comment · {finding.path}:{finding.line} ({finding.side})
-      </label>
+      <label htmlFor={id}>Review comment · {location}</label>
       <textarea
-        id="bob-comment-body"
+        id={id}
         rows={5}
         maxLength={10000}
         value={body}
@@ -119,9 +126,14 @@ function BobCommentForm({
   )
 }
 
-export function saveBobComment(draft: ReviewDraft, comment: DraftComment): ReviewDraft {
+/** Save a comment into the draft, replacing an earlier one with the same id. */
+export function saveDraftComment(draft: ReviewDraft, comment: DraftComment): ReviewDraft {
   return {
     ...draft,
     comments: [...draft.comments.filter((item) => item.id !== comment.id), comment],
   }
+}
+
+export function removeDraftComment(draft: ReviewDraft, id: string): ReviewDraft {
+  return { ...draft, comments: draft.comments.filter((comment) => comment.id !== id) }
 }

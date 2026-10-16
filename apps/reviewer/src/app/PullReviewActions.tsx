@@ -2,6 +2,8 @@ import { StartReviewButton, type ReviewCompanion } from '../components/StartRevi
 import { LinusRecommendationBadge } from '../features/linus/LinusRecommendationBadge'
 import { BobReviewBadge } from '../features/bob/BobReviewBadge'
 import type { BobReviewSummary } from '../../shared/domain/bob'
+import type { PanelReviewSummary } from '../../shared/domain/panel'
+import { PanelBadge } from '../features/panel/PanelBadge'
 import type { LinusRecommendation } from '../../shared/domain/linus'
 import type { InboxPull } from '../../shared/domain/types'
 
@@ -11,10 +13,12 @@ export interface PullReviewActionsProps {
   onReplay: (recommendation: LinusRecommendation) => void
   bobReview?: BobReviewSummary
   onBobReplay: (review: BobReviewSummary) => void
+  /** The latest panel result; the PR page shows it with the panel picker instead. */
+  panelReview?: PanelReviewSummary
+  onPanelReplay?: (review: PanelReviewSummary) => void
   onStartReview?: (companion: ReviewCompanion) => void
   reviewStarting?: boolean
   reviewStartDisabled?: boolean
-  startCompanion?: ReviewCompanion
 }
 
 export function PullReviewActions({
@@ -23,18 +27,27 @@ export function PullReviewActions({
   onReplay,
   bobReview,
   onBobReplay,
+  panelReview,
+  onPanelReplay,
   onStartReview,
   reviewStarting,
   reviewStartDisabled,
-  startCompanion,
 }: PullReviewActionsProps) {
   return (
     <>
+      {panelReview && onPanelReplay && (
+        <PanelBadge
+          review={panelReview}
+          headSha={pull.headSha}
+          onOpen={() => {
+            onPanelReplay(panelReview)
+          }}
+        />
+      )}
       {bobReview && (
         <BobReviewBadge
           review={bobReview}
           headSha={pull.headSha}
-          showLabel={startCompanion === 'bob'}
           onOpen={() => {
             onBobReplay(bobReview)
           }}
@@ -49,12 +62,11 @@ export function PullReviewActions({
           }}
         />
       )}
-      {onStartReview && !(startCompanion === 'bob' && bobReview) && (
+      {onStartReview && (
         <StartReviewButton
           number={pull.number}
           busy={reviewStarting}
           disabled={reviewStartDisabled}
-          companion={startCompanion}
           onStart={onStartReview}
         />
       )}

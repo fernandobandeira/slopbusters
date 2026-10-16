@@ -10,6 +10,12 @@ import { latestJobsAdvice, type JobsSession } from '../../../shared/domain/jobs'
 import type { LinusSession } from '../../../shared/domain/linus'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import type { ReviewSession } from '../../../shared/domain/reviewSession'
+import {
+  reviewerTeammate,
+  type PanelReviewer,
+  type PanelSession,
+} from '../../../shared/domain/panel'
+import { panelReviewerMarkdown } from '../../../shared/domain/panelMarkdown'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
 
 /** Where each persona keeps the sessions a chat can continue. */
@@ -18,6 +24,7 @@ export interface ReviewSessions {
   bob: { get(id: string): BobSession }
   jobs: { get(id: string): JobsSession }
   gandalf: { get(id: string): GandalfSession }
+  panel: { get(id: string): PanelSession }
 }
 
 export type Checkout = Pick<PreparedPullRequest, 'branch' | 'worktreePath' | 'onPullRequestHead'>
@@ -59,6 +66,8 @@ export function chatSeed(sessions: ReviewSessions, request: ContinueChatRequest)
       return jobsSeed(sessions.jobs.get(request.sessionId))
     case 'gandalf':
       return gandalfSeed(sessions.gandalf.get(request.sessionId), request.url)
+    case 'panel':
+      return panelSeed(sessions.panel.get(request.sessionId), request.url, request.reviewer)
   }
 }
 
@@ -144,6 +153,38 @@ function gandalfSeed(session: GandalfSession, url: string): ChatSeed {
         HANDOVER,
       ),
   }
+}
+
+/** One reviewer from a panel, picking up from its own review and what the judge made of it. */
+function panelSeed(session: PanelSession, url: string, reviewerId: string): ChatSeed {
+  const reviewer = session.reviewers.find((member) => member.id === reviewerId)
+  if (!reviewer) throw new UserError('That reviewer was not on this panel.')
+  const result = session.results.find((item) => item.pull.url === url)
+  const pending = session.pending?.pull.url === url ? session.pending : undefined
+  const pull = result?.pull ?? pending?.pull
+  const own = (result ?? pending)?.reviews.find((review) => review.reviewer === reviewer.id)?.advice
+  if (!pull || (!own && !result))
+    throw new UserError(`${reviewer.name} has not finished reviewing this PR yet.`)
+  return {
+    kind: 'pull',
+    title: `${reviewer.name} · #${String(pull.number)} ${pull.title}`,
+    pull,
+    message: (provider, checkout) =>
+      paragraphs(
+        `${panelInvocation(reviewer, provider)} Review ${subject(pull)}`,
+        `${checkoutLine(pull, checkout)} Review its changes with \`git diff origin/${pull.baseBranch}...HEAD\`.`,
+        `You reviewed this PR in Slopbusters as one reviewer on a panel, at head ${pull.headSha.slice(0, 7)}; if the head has moved since, say what changed before relying on it. ${result ? "A judge then checked every reviewer's findings against the code." : 'The judge has not weighed in yet.'} This is your review and what became of it:`,
+        clip(panelReviewerMarkdown(reviewer, own, result?.advice), MAX_CHAT_REVIEW_CHARACTERS),
+        HANDOVER,
+      ),
+  }
+}
+
+/** A teammate is invoked by its installed skill's name; built-in reviewers by the plugin's. */
+function panelInvocation(reviewer: PanelReviewer, provider: Provider): string {
+  const prefix = provider === Provider.claude ? '/' : '$'
+  if (reviewerTeammate(reviewer.id)) return `${prefix}${reviewer.skill ?? reviewer.id}`
+  return `${prefix}slopbusters:${reviewer.id}`
 }
 
 /** A PR's reconciled review, or for a partial session the advice of the reviewer that finished. */

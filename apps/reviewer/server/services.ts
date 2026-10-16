@@ -43,6 +43,12 @@ import type { StructuredTurns } from './adapters/t3Engine/engineTurns'
 import type { ChatHosts } from './adapters/t3Engine/chatHosts'
 import { continueInT3Code } from './features/chat/personaChats'
 import type { ContinueChatRequest } from '../shared/domain/chat'
+import { defaultSkillRoots, InstalledSkills, type SkillRoots } from './adapters/installedSkills'
+import { TeammateStore } from './adapters/teammateStore'
+import { Teammates } from './features/teammates/teammates'
+import { PanelMembers } from './features/panel/panelMembers'
+import { PanelJobs } from './features/panel/panelJobs'
+import { loadBuiltInSkill } from './features/panel/builtInSkills'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   dataDirectory: string
@@ -51,6 +57,9 @@ export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   bobSkillDirectory?: string
   linusSkillDirectory?: string
   jobsSkillDirectory?: string
+  rulesSkillDirectory?: string
+  /** Where Claude Code and Codex keep the user's own skills; replaced in tests. */
+  skillRoots?: SkillRoots
   port?: number
   allowedOrigins?: string[]
   sourceRemoteUrl?: (owner: string, repo: string) => string
@@ -156,6 +165,24 @@ export function createServices(options: ReviewerServerOptions) {
       }),
   })
   const organizationJobs = new OrganizationJobs(store, turns, agentSessions)
+  const teammates = new Teammates(
+    new TeammateStore(options.dataDirectory),
+    new InstalledSkills(options.skillRoots ?? defaultSkillRoots()),
+  )
+  const panelMembers = new PanelMembers({
+    teammates,
+    builtIn: (reviewer) => loadBuiltInSkill(reviewer, options),
+  })
+  const panelJobs = new PanelJobs({
+    store: store.panel,
+    turns,
+    sessions: agentSessions,
+    members: panelMembers,
+    model: () => chatModel(),
+    loadPull: pulls.fetchPull,
+    openRepository,
+    context: tickets.contextForPull,
+  })
   const chatModel = () => {
     const model = store.getPreferences().organization
     if (!model) throw new UserError('Choose your primary model in Settings first.')
@@ -180,13 +207,29 @@ export function createServices(options: ReviewerServerOptions) {
     linearAuth,
     tickets,
     jobs,
+    teammates,
+    panelJobs,
     chats: {
-      continueInT3Code: (request: ContinueChatRequest) =>
-        continueInT3Code(chatHosts, {
-          sessions: { linus: linusJobs, bob: bobJobs, jobs, gandalf: gandalfJobs },
-          model: chatModel(),
+      continueInT3Code: async (request: ContinueChatRequest) => {
+        const model = chatModel()
+        if (request.persona === 'panel') {
+          const reviewer = panelJobs
+            .get(request.sessionId)
+            .reviewers.find((member) => member.id === request.reviewer)
+          if (reviewer) await panelMembers.requireChat(reviewer, model.provider)
+        }
+        return continueInT3Code(chatHosts, {
+          sessions: {
+            linus: linusJobs,
+            bob: bobJobs,
+            jobs,
+            gandalf: gandalfJobs,
+            panel: panelJobs,
+          },
+          model,
           request,
-        }),
+        })
+      },
     },
     navigateSource: (pull: PullRequest, request: Parameters<typeof navigator>[1]) =>
       navigator(pull, request),
@@ -211,7 +254,13 @@ export function createServices(options: ReviewerServerOptions) {
     async close() {
       await organizationJobs.close()
       linearAuth.close()
-      await Promise.all([linusJobs.close(), bobJobs.close(), gandalfJobs.close(), jobs.close()])
+      await Promise.all([
+        linusJobs.close(),
+        bobJobs.close(),
+        gandalfJobs.close(),
+        jobs.close(),
+        panelJobs.close(),
+      ])
       await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])
       navigator.close()
       await workspaces.close()

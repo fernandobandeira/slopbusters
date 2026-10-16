@@ -6,7 +6,7 @@ import { BobCompanion } from '../src/features/bob/BobCompanion'
 import { useBobSession } from '../src/features/bob/useBobSession'
 import { BobTour } from '../src/features/bob/BobTour'
 import { BobReviewBadge } from '../src/features/bob/BobReviewBadge'
-import { BobText } from '../src/features/bob/BobText'
+import { FindingText } from '../src/components/FindingText'
 import type { BobResult } from '../shared/domain/bob'
 import { Provider, type ReviewDraft } from '../shared/domain/types'
 import { fixtureBobAdvice, required } from './fixtures/bob'
@@ -112,7 +112,7 @@ describe('Uncle Bob tour navigation and readability', () => {
   })
   it('renders code identifiers, paragraphs and suggestions as readable Markdown without HTML', () => {
     const view = render(
-      createElement(BobText, {
+      createElement(FindingText, {
         children:
           'Reuse `createProvisionedAccount()`.\n\n- Arrange the account\n- Assert the balance\n\n```ts\nawait provision(account)\n```\n<script>alert(1)</script>',
       }),

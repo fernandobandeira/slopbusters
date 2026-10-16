@@ -3,43 +3,20 @@ import { ChevronDown, LoaderCircle } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import './startReview.css'
 
-export type ReviewCompanion = 'bob' | 'linus'
+export type ReviewCompanion = 'panel' | 'linus'
 
+/** Start a review from a PR row: the code review panel, or Linus on the PR's packaging. */
 export function StartReviewButton({
   number,
   busy = false,
   disabled = false,
-  companion,
   onStart,
 }: {
   number: number
   busy?: boolean
   disabled?: boolean
-  companion?: ReviewCompanion
   onStart: (companion: ReviewCompanion) => void
 }) {
-  if (companion) {
-    const name = companion === 'bob' ? 'Uncle Bob' : 'Linus'
-    return (
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={busy || disabled}
-        aria-label={`Ask ${name} to review PR #${number}`}
-        onClick={() => {
-          onStart(companion)
-        }}
-      >
-        <img
-          className="review-companion-icon"
-          src={companion === 'bob' ? '/unclebob/neutral.png' : '/linus/neutral.png'}
-          alt=""
-        />
-        {busy ? <LoaderCircle size={13} className="animate-spin" /> : null}
-        {busy ? `Asking ${name}…` : `Ask ${name}`}
-      </Button>
-    )
-  }
   return (
     <Menu.Root>
       <Menu.Trigger
@@ -61,11 +38,11 @@ export function StartReviewButton({
           <Menu.Popup className="review-menu" aria-label={`Review PR #${number}`}>
             <Menu.Item
               onClick={() => {
-                onStart('bob')
+                onStart('panel')
               }}
             >
-              <strong>Uncle Bob</strong>
-              <span>Code quality and readability</span>
+              <strong>Review panel</strong>
+              <span>Uncle Bob, Rules and your teammates, with a judge</span>
             </Menu.Item>
             <Menu.Item
               onClick={() => {

@@ -95,3 +95,13 @@ export const MAX_GANDALF_PROMPT_BYTES = 4 * 1024 * 1024
 export const MAX_AGENT_EVENT_CHARS = 128 * 1024
 export const MAX_AGENT_EVENT_PAGE = 200
 export const MAX_AGENT_SESSIONS = 100
+
+/** The largest `SKILL.md` a teammate may have; bigger skills belong in its `references/`. */
+export const MAX_SKILL_FILE_BYTES = 256 * 1024
+/** Avatars arrive re-encoded by the browser as square PNGs; these bound what the server keeps. */
+export const MAX_AVATAR_BYTES = 512 * 1024
+export const MAX_AVATAR_DIMENSION = 1024
+export const MAX_PANEL_REVIEWERS = 8
+/** How many panel reviewers run at the same time on one PR. */
+export const PANEL_REVIEWER_CONCURRENCY = 3
+export const MAX_SAVED_PANEL_REVIEWS = 500

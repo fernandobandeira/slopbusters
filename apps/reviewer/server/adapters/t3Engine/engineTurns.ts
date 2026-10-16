@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Stream from 'effect/Stream'
@@ -50,11 +50,23 @@ export interface StructuredTurnRequest<T> {
    * is never modified. Omitted: an empty scratch directory.
    */
   readonly directory?: string
+  /**
+   * Folders copied into the working directory beside it, at paths relative to its root, such as
+   * the skill folder a reviewer reads its references from. Copies, like the directory's, are
+   * scrubbed of agent configuration and deleted with the run.
+   */
+  readonly include?: readonly IncludedFolder[]
   readonly observer?: ProviderObserver
   /** The whole run, including a corrective turn; defaults to `PROVIDER_TIMEOUT_MS`. */
   readonly timeoutMs?: number
   /** Names the thread in the engine's sidebar, e.g. `Linus review`. */
   readonly purpose?: string
+}
+
+export interface IncludedFolder {
+  readonly directory: string
+  /** Where the copy goes, relative to the working directory, such as `.slopbusters/skill`. */
+  readonly as: string
 }
 
 /** One read-only agent turn whose reply is a JSON object validated against a schema. */
@@ -99,7 +111,7 @@ export class EngineTurns implements StructuredTurns {
       title: 'Instructions',
     })
     const deadline = Date.now() + (request.timeoutMs ?? PROVIDER_TIMEOUT_MS)
-    const workspace = await this.workspace(request.directory, request.signal)
+    const workspace = await this.workspace(request.directory, request.signal, request.include)
     try {
       const thread = await this.createThread(workspace.projectId, request)
       try {
@@ -223,7 +235,11 @@ export class EngineTurns implements StructuredTurns {
    * A per-run project in a throwaway directory: a scrubbed copy of `directory`, or an empty one.
    * The project and the directory are deleted when the run ends.
    */
-  private async workspace(directory: string | undefined, signal: AbortSignal): Promise<Workspace> {
+  private async workspace(
+    directory: string | undefined,
+    signal: AbortSignal,
+    include: readonly IncludedFolder[] = [],
+  ): Promise<Workspace> {
     const root = await mkdtemp(join(tmpdir(), 'slopbusters-turn-'))
     const removeRoot = () => rm(root, { recursive: true, force: true })
     let projectId: string
@@ -234,6 +250,7 @@ export class EngineTurns implements StructuredTurns {
         await copyForInspection(directory, workspaceRoot, signal)
         files = await listInspectionFiles(workspaceRoot)
       }
+      for (const folder of include) await copyIncluded(folder, workspaceRoot, signal)
       projectId = await this.createProject(workspaceRoot, basename(workspaceRoot))
     } catch (error) {
       await removeRoot()
@@ -340,6 +357,15 @@ function whenAborted(signal: AbortSignal): Effect.Effect<'cancelled'> {
       signal.removeEventListener('abort', abort)
     })
   })
+}
+
+/** Copy an included folder to its place inside the working directory, never outside it. */
+async function copyIncluded(folder: IncludedFolder, workspaceRoot: string, signal: AbortSignal) {
+  const destination = resolve(workspaceRoot, folder.as)
+  if (!destination.startsWith(`${resolve(workspaceRoot)}${sep}`))
+    throw new Error(`An included folder must stay inside the working directory: ${folder.as}`)
+  await mkdir(dirname(destination), { recursive: true })
+  await copyForInspection(folder.directory, destination, signal)
 }
 
 function commandBase(threadId: string) {

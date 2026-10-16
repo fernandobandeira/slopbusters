@@ -1,31 +1,37 @@
 import { useRef, useState } from 'react'
 import * as routes from '../../shared/api'
-import {
-  blocksNewReview,
-  reviewedPullsLabel,
-  type ReviewSession,
-} from '../../shared/domain/reviewSession'
+import { blocksNewReview, reviewedPullsLabel } from '../../shared/domain/reviewSession'
 import type { ReviewCompanion } from '../components/StartReviewButton'
 import { call, message } from '../lib/api'
 import { useApiQuery } from '../lib/useApiQuery'
+import { savedPanelSelection } from '../features/panel/panelSelection'
 
-type LaunchedSession = Pick<ReviewSession<unknown>, 'id' | 'urls' | 'status' | 'results'>
+interface LaunchedSession {
+  id: string
+  urls: string[]
+  status: 'running' | 'partial' | 'complete' | 'failed' | 'cancelled'
+  results: unknown[]
+}
 
-const companionNames: Record<ReviewCompanion, string> = { bob: 'Uncle Bob', linus: 'Linus' }
+const reviewNames: Record<ReviewCompanion, string> = {
+  panel: 'The panel’s review',
+  linus: 'Linus’s review',
+}
 
 /**
  * Starts persona reviews and keeps the review that blocks a new one reachable: a running or
  * partial Linus review reopens after a reload, and a refused start opens the review in the way.
+ * A panel review opens on its PR page; it runs the reviewers the user last picked there.
  */
 export function useReviewLaunch({
   repository,
   restore,
-  onBobOpen,
+  onPanelOpen,
   onError,
 }: {
   repository: string
   restore: boolean
-  onBobOpen: (url: string, sessionId: string) => void
+  onPanelOpen: (url: string, sessionId: string) => void
   onError: (error: string) => void
 }) {
   const pending = useRef(false)
@@ -54,7 +60,7 @@ export function useReviewLaunch({
   }
   function open(companion: ReviewCompanion, id: string, url: string) {
     if (companion === 'linus') setLaunched({ repository, id })
-    else onBobOpen(url, id)
+    else onPanelOpen(url, id)
   }
   return {
     start,
@@ -89,8 +95,10 @@ function startSession(
   repository: string,
   url: string,
 ): Promise<LaunchedSession> {
-  const input = { body: { repository, urls: [url] } }
-  return companion === 'bob' ? call(routes.startBob, input) : call(routes.startLinus, input)
+  const body = { repository, urls: [url] }
+  return companion === 'panel'
+    ? call(routes.startPanel, { body: { ...body, reviewers: savedPanelSelection() } })
+    : call(routes.startLinus, { body })
 }
 
 async function blockingSession(
@@ -100,8 +108,8 @@ async function blockingSession(
   const input = { query: { repository } }
   try {
     const { session } =
-      companion === 'bob'
-        ? await call(routes.latestBob, input)
+      companion === 'panel'
+        ? await call(routes.latestPanel, input)
         : await call(routes.latestLinus, input)
     return session && blocksNewReview(session) ? session : undefined
   } catch {
@@ -111,12 +119,11 @@ async function blockingSession(
 }
 
 function blockedMessage(companion: ReviewCompanion, session: LaunchedSession) {
-  const name = companionNames[companion]
   const what = session.status === 'partial' ? 'is waiting on you' : 'is still running'
-  return `${name}’s review of ${reviewedPullsLabel(session.urls)} ${what}, so it is open now. Finish or cancel it before starting another.`
+  return `${reviewNames[companion]} of ${reviewedPullsLabel(session.urls)} ${what}, so it is open now. Finish or cancel it before starting another.`
 }
 
-/** The PR a Bob companion should open on: the one under review, or the first. */
+/** The PR a panel companion should open on: the one under review, or the first. */
 function reviewedUrl(session: LaunchedSession) {
   return session.urls[session.results.length] ?? session.urls[0] ?? ''
 }

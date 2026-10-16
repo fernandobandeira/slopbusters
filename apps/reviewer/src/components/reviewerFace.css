@@ -1,0 +1,16 @@
+.reviewer-face {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--primary) 10%, var(--popover));
+  border: 1px solid var(--border);
+}
+.reviewer-face-initials {
+  color: var(--primary);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  user-select: none;
+}

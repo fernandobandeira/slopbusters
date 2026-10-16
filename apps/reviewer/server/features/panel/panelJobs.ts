@@ -1,0 +1,343 @@
+import { randomUUID } from 'node:crypto'
+import type { ProviderObserver } from '../../../shared/domain/agentSession'
+import type {
+  PanelPending,
+  PanelReview,
+  PanelReviewer,
+  PanelSession,
+  ReviewerId,
+} from '../../../shared/domain/panel'
+import type { OrganizationPreferences } from '../../../shared/domain/preferences'
+import { blocksNewReview, reviewedPullsLabel } from '../../../shared/domain/reviewSession'
+import type { PullRequest } from '../../../shared/domain/types'
+import type { PanelSessionStore } from '../../adapters/panelSessionStore'
+import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
+import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
+import { publicError, UserError } from '../../errors'
+import { PANEL_REVIEWER_CONCURRENCY } from '../../limits'
+import { pullFingerprint } from '../../reviewSnapshot'
+import type { AgentSessions } from '../agent-sessions/agentSessions'
+import type { PanelMembers } from './panelMembers'
+import { judgePanel, reviewAsPanelist } from './panelReview'
+
+interface Options {
+  store: PanelSessionStore
+  turns: StructuredTurns
+  members: PanelMembers
+  model: () => OrganizationPreferences
+  loadPull: (url: string) => Promise<PullRequest>
+  sessions?: AgentSessions
+  openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
+  /** Evidence about what the PR is meant to do, such as its linked ticket. */
+  context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
+}
+
+/** How a run treats a PR that already has reviews waiting: start over, rerun failures, or judge. */
+type RunMode = 'fresh' | 'retry' | 'judge'
+
+/**
+ * A panel review: every chosen reviewer reviews each PR on the primary model, a few at a time,
+ * then a judge verifies their findings against the code and merges them into one result.
+ */
+export class PanelJobs {
+  private running = new Map<string, { controller: AbortController; done: Promise<void> }>()
+  constructor(private readonly options: Options) {}
+
+  async start(repository: string, urls: string[], ids: ReviewerId[]): Promise<PanelSession> {
+    const model = this.options.model()
+    const previous = this.latest(repository)
+    if (previous && blocksNewReview(previous)) {
+      if (sameRequest(previous, urls, ids)) return previous
+      throw new UserError(
+        `Finish or cancel the current panel review of ${reviewedPullsLabel(previous.urls)} before starting another.`,
+        409,
+      )
+    }
+    const session: PanelSession = {
+      id: randomUUID(),
+      repository,
+      urls,
+      model,
+      reviewers: await this.options.members.describe(ids, model.provider),
+      status: 'running',
+      progress: 'Loading PR snapshots…',
+      results: [],
+      createdAt: new Date().toISOString(),
+    }
+    this.options.sessions?.start(session.id, 'panel', session)
+    this.save(session)
+    this.launch(session, 'fresh')
+    return session
+  }
+  get(id: string): PanelSession {
+    const session = this.options.store.get(id)
+    if (!session) throw new UserError('This panel review is no longer available.', 404)
+    return this.recover(session)
+  }
+  latest(repository: string, url?: string): PanelSession | undefined {
+    const session = this.options.store.latest(repository, url)
+    return session && this.recover(session)
+  }
+  /** Judge with the reviews that finished, leaving the failed reviewers out. */
+  continue(id: string): PanelSession {
+    const session = this.get(id)
+    if (session.status !== 'partial' || !session.pending?.reviews.some((review) => review.advice))
+      throw new UserError('There is no partial panel review to continue.')
+    return this.relaunch(session, 'judge', 'Judging the reviews that finished…')
+  }
+  /** Rerun only the reviewers that failed, or the whole PR when nothing is waiting. */
+  retry(id: string): PanelSession {
+    const session = this.get(id)
+    if (session.status === 'running' || this.running.has(id))
+      throw new UserError('Wait for the current panel review to stop before retrying.')
+    return this.relaunch(session, 'retry', 'Retrying the reviewers that did not finish…')
+  }
+  cancel(id: string): PanelSession {
+    this.running.get(id)?.controller.abort()
+    const session = this.get(id)
+    if (session.status === 'running' || session.status === 'partial') {
+      session.status = 'cancelled'
+      session.progress = 'Panel review cancelled. Judged PRs are saved.'
+      session.pending = undefined
+      this.save(session)
+    }
+    return session
+  }
+  async close(): Promise<void> {
+    const jobs = [...this.running.entries()]
+    for (const [id] of jobs) this.cancel(id)
+    await Promise.allSettled(jobs.map(([, job]) => job.done))
+  }
+
+  private relaunch(session: PanelSession, mode: RunMode, progress: string): PanelSession {
+    session.status = 'running'
+    session.error = undefined
+    session.progress = progress
+    this.save(session)
+    this.launch(session, mode)
+    return session
+  }
+  private recover(session: PanelSession): PanelSession {
+    if (session.status === 'running' && !this.running.has(session.id)) {
+      session.status = 'cancelled'
+      session.progress = 'Panel review interrupted when the app stopped. Judged PRs are saved.'
+      this.save(session)
+    }
+    return session
+  }
+  private launch(session: PanelSession, mode: RunMode): void {
+    const controller = new AbortController()
+    const job = { controller, done: Promise.resolve() }
+    this.running.set(session.id, job)
+    job.done = this.run(session, controller.signal, mode)
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return
+        this.options.sessions?.diagnostic(session.id, session.progress, cause)
+        session.status = 'failed'
+        session.error = publicError(cause, 'The panel could not review these PRs.')
+        session.progress = 'Panel review stopped. Judged PRs are saved.'
+        this.save(session)
+      })
+      .finally(() => {
+        if (this.running.get(session.id) === job) this.running.delete(session.id)
+      })
+  }
+  private async run(session: PanelSession, signal: AbortSignal, mode: RunMode): Promise<void> {
+    for (let index = session.results.length; index < session.urls.length; index++) {
+      signal.throwIfAborted()
+      const usePending = mode !== 'fresh' && session.pending
+      if (!(await this.reviewPull(session, signal, usePending ? mode : 'fresh', index))) return
+      mode = 'fresh'
+    }
+    session.status = 'complete'
+    this.progress(
+      session,
+      `The panel reviewed ${String(session.results.length)} PR${session.results.length === 1 ? '' : 's'}.`,
+    )
+  }
+  /** Review one PR and judge it; false when it stops to wait for the user. */
+  private async reviewPull(
+    session: PanelSession,
+    signal: AbortSignal,
+    mode: RunMode,
+    index: number,
+  ): Promise<boolean> {
+    let repository: ReviewCheckout | undefined
+    try {
+      const pending =
+        mode === 'fresh' ? await this.prepare(session, signal, index) : session.pending
+      if (!pending) throw new Error('Missing pending panel review.')
+      const source = await this.openSource(pending.pull, signal)
+      repository = source.repository
+      if (mode !== 'judge') await this.review(session, pending, { signal, repository })
+      if (!this.canJudge(session, pending, mode)) return false
+      this.progress(
+        session,
+        `The judge is weighing the reviews of PR #${String(pending.pull.number)}…`,
+      )
+      const execute = (observer?: ProviderObserver) =>
+        judgePanel({
+          turns: this.options.turns,
+          model: session.model,
+          signal,
+          repository,
+          observer,
+          pending,
+          reviewers: session.reviewers.filter((reviewer) =>
+            pending.reviews.some((review) => review.reviewer === reviewer.id && review.advice),
+          ),
+        })
+      const advice = await this.track(session, { label: 'Judge', url: pending.pull.url }, execute)
+      signal.throwIfAborted()
+      if (source.limitation) advice.limitations.unshift(source.limitation)
+      session.results.push({ ...pending, advice, reviews: pending.reviews })
+      session.pending = undefined
+      this.save(session)
+      return true
+    } finally {
+      repository?.release()
+    }
+  }
+  private async prepare(session: PanelSession, signal: AbortSignal, index: number) {
+    this.progress(session, `Loading PR ${String(index + 1)} of ${String(session.urls.length)}…`)
+    const url = session.urls[index]
+    if (!url) throw new Error('Missing PR URL.')
+    const pull = await this.options.loadPull(url)
+    signal.throwIfAborted()
+    const context = await this.options.context?.(pull, signal)
+    signal.throwIfAborted()
+    const pending: PanelPending = {
+      pull,
+      fingerprint: pullFingerprint(pull),
+      ...(context ? { context } : {}),
+      reviews: [],
+    }
+    session.pending = pending
+    return pending
+  }
+  /** The saved checkout of the PR head; without one, reviewers read the snapshot only. */
+  private async openSource(
+    pull: PullRequest,
+    signal: AbortSignal,
+  ): Promise<{ repository?: ReviewCheckout; limitation?: string }> {
+    if (!this.options.openRepository) return {}
+    try {
+      return { repository: await this.options.openRepository(pull, signal) }
+    } catch (error) {
+      signal.throwIfAborted()
+      return {
+        limitation: `Local repository inspection was unavailable: ${publicError(error, 'Source could not be prepared.')} The panel used the supplied PR snapshot.`,
+      }
+    }
+  }
+  /** Run every reviewer that has no review yet, a few at a time, saving each as it lands. */
+  private async review(
+    session: PanelSession,
+    pending: PanelPending,
+    run: { signal: AbortSignal; repository?: ReviewCheckout },
+  ) {
+    pending.reviews = pending.reviews.filter((review) => review.advice)
+    const waiting = session.reviewers.filter(
+      (reviewer) => !pending.reviews.some((review) => review.reviewer === reviewer.id),
+    )
+    this.reportReviewers(session, pending)
+    await eachLimited(waiting, PANEL_REVIEWER_CONCURRENCY, async (reviewer) => {
+      const review = await this.reviewOne(session, pending, reviewer, run)
+      run.signal.throwIfAborted()
+      pending.reviews.push(review)
+      this.reportReviewers(session, pending)
+    })
+  }
+  private async reviewOne(
+    session: PanelSession,
+    pending: PanelPending,
+    reviewer: PanelReviewer,
+    { signal, repository }: { signal: AbortSignal; repository?: ReviewCheckout },
+  ): Promise<PanelReview> {
+    try {
+      const member = await this.options.members.load(reviewer, session.model.provider)
+      const execute = (observer?: ProviderObserver) =>
+        reviewAsPanelist({
+          turns: this.options.turns,
+          model: session.model,
+          signal,
+          repository,
+          observer,
+          member,
+          pull: pending.pull,
+          context: pending.context,
+        })
+      const label = `${reviewer.name} review`
+      const advice = await this.track(session, { label, url: pending.pull.url }, execute)
+      return { reviewer: reviewer.id, advice }
+    } catch (error) {
+      signal.throwIfAborted()
+      return { reviewer: reviewer.id, error: publicError(error, `${reviewer.name} failed.`) }
+    }
+  }
+  private canJudge(session: PanelSession, pending: PanelPending, mode: RunMode): boolean {
+    const failed = pending.reviews.filter((review) => !review.advice)
+    if (!pending.reviews.some((review) => review.advice))
+      throw new UserError(
+        failed
+          .map((review) => `${nameOf(session, review)}: ${review.error ?? 'No review.'}`)
+          .join('\n'),
+      )
+    if (!failed.length || mode === 'judge') return true
+    session.status = 'partial'
+    session.error = failed
+      .map((review) => `${nameOf(session, review)}: ${review.error ?? ''}`)
+      .join('\n')
+    this.progress(
+      session,
+      `${failed.map((review) => nameOf(session, review)).join(', ')} could not finish. Retry them, or let the judge use the reviews that did.`,
+    )
+    return false
+  }
+  private reportReviewers(session: PanelSession, pending: PanelPending) {
+    const done = pending.reviews.length
+    this.progress(
+      session,
+      `${String(done)} of ${String(session.reviewers.length)} reviewers finished PR #${String(pending.pull.number)}…`,
+    )
+  }
+  private track<T>(
+    session: PanelSession,
+    pass: { label: string; url: string },
+    execute: (observer?: ProviderObserver) => Promise<T>,
+  ): Promise<T> {
+    return this.options.sessions
+      ? this.options.sessions.run(session.id, { model: session.model, ...pass }, execute)
+      : execute()
+  }
+  private save(session: PanelSession) {
+    this.options.store.save(session)
+    this.options.sessions?.sync('panel', session)
+  }
+  private progress(session: PanelSession, progress: string): void {
+    session.progress = progress
+    this.save(session)
+  }
+}
+
+function sameRequest(session: PanelSession, urls: string[], ids: ReviewerId[]) {
+  return (
+    JSON.stringify(session.urls) === JSON.stringify(urls) &&
+    JSON.stringify(session.reviewers.map((reviewer) => reviewer.id)) === JSON.stringify(ids)
+  )
+}
+
+function nameOf(session: PanelSession, review: PanelReview) {
+  return (
+    session.reviewers.find((reviewer) => reviewer.id === review.reviewer)?.name ?? review.reviewer
+  )
+}
+
+/** Run `work` over every item with at most `limit` running at once; the first failure rejects. */
+async function eachLimited<T>(items: T[], limit: number, work: (item: T) => Promise<void>) {
+  const queue = [...items]
+  const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
+    for (let item = queue.shift(); item !== undefined; item = queue.shift()) await work(item)
+  })
+  await Promise.all(workers)
+}

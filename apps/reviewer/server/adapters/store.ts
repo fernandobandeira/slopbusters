@@ -23,6 +23,7 @@ import type { BobSession } from '../../shared/domain/bob'
 import { readSavedBobReviews } from './savedBobReviews'
 import { migrateTicketStore, TicketStore } from './ticketStore'
 import { EngineCredentialStore } from './t3Engine/engineCredentials'
+import { migratePanelSessions, PanelSessionStore } from './panelSessionStore'
 import type { LinusRecommendation, LinusSession } from '../../shared/domain/linus'
 
 export class ReviewNotFoundError extends UserError {
@@ -41,6 +42,7 @@ export class ReviewerStore {
   private readonly database: DatabaseSync
   readonly tickets: TicketStore
   readonly engine: EngineCredentialStore
+  readonly panel: PanelSessionStore
   constructor({ dataDirectory }: { dataDirectory: string }) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 })
     const filename = join(dataDirectory, 'reviewer.sqlite')
@@ -50,7 +52,7 @@ export class ReviewerStore {
       'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;',
     )
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
-    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6, 7].includes(version)) {
+    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6, 7, 8].includes(version)) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
     }
@@ -88,8 +90,10 @@ export class ReviewerStore {
       ); PRAGMA user_version = 5; COMMIT;`)
     if (version < 6) migrateReviewProgress(this.database)
     if (version < 7) migrateTicketStore(this.database)
+    if (version < 8) migratePanelSessions(this.database)
     this.tickets = new TicketStore(this.database)
     this.engine = new EngineCredentialStore(this.database)
+    this.panel = new PanelSessionStore(this.database)
   }
   savePull(pull: PullRequest): void {
     this.database

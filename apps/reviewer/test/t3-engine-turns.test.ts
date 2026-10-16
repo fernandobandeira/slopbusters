@@ -440,3 +440,22 @@ it('ignores replayed events the snapshot already holds', async () => {
 
   await expect(fake.turns.run(request())).resolves.toEqual({ files: ['a'] })
 })
+
+it('copies included folders, such as a skill, into the copy, scrubbed, and never outside it', async () => {
+  const skill = mkdtempSync(join(tmpdir(), 'turns-skill-'))
+  mkdirSync(join(skill, '.claude'))
+  writeFileSync(join(skill, 'patterns.md'), 'patterns\n')
+  const paths = ['README.md', 'skill/patterns.md', 'skill/.claude']
+  let copied: string[] = []
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'thread.turn.start') return
+    copied = paths.filter((path) => existsSync(join(fake.workspaceRoots()[0] ?? '', path)))
+    thread.reply(command, '{"files":[]}')
+  })
+  await fake.turns.run(request({ include: [{ directory: skill, as: 'skill' }] }))
+  const escape = fake.turns.run(request({ include: [{ directory: skill, as: '../escape' }] }))
+
+  await expect(escape).rejects.toThrow(/must stay inside the working directory/)
+  expect(copied).toEqual(['README.md', 'skill/patterns.md'])
+  rmSync(skill, { recursive: true, force: true })
+})

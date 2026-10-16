@@ -1,0 +1,148 @@
+.teammate-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+.teammate-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.teammate-row-text {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+.teammate-row-text strong {
+  font-size: 13px;
+}
+.teammate-row-actions {
+  display: flex;
+  gap: 6px;
+}
+.teammate-availability-both {
+  color: var(--success);
+}
+.teammate-availability-claude,
+.teammate-availability-codex {
+  color: var(--warning-foreground, var(--muted-foreground));
+}
+.teammate-availability-missing,
+.teammate-skill-problem {
+  color: var(--destructive-foreground);
+}
+.teammate-wizard {
+  width: min(640px, calc(100vw - 32px));
+  max-width: none;
+}
+.teammate-step {
+  display: grid;
+  gap: 12px;
+  font-size: 13px;
+}
+.teammate-skill-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.teammate-skill-groups {
+  display: grid;
+  gap: 14px;
+  max-height: min(48dvh, 420px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.teammate-skill-group {
+  display: grid;
+  gap: 6px;
+}
+.teammate-skill-group h3 {
+  font-size: 12px;
+  font-weight: 600;
+}
+.teammate-skill-group > p {
+  font-size: 11px;
+}
+.teammate-skill {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.teammate-skill[aria-checked='true'] {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.teammate-skill:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.teammate-skill-description {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.teammate-details label {
+  display: grid;
+  gap: 4px;
+}
+.teammate-details label > span:first-child {
+  font-weight: 600;
+  font-size: 12px;
+}
+.teammate-faces {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.teammate-face {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+.teammate-face label {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 6px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 11px;
+}
+.teammate-face strong {
+  text-transform: capitalize;
+}
+.teammate-face-over label {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.teammate-face-borrowed .reviewer-face {
+  opacity: 0.45;
+}
+.teammate-face label:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .teammate-faces {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

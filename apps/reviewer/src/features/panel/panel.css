@@ -1,0 +1,140 @@
+.panel-picker-positioner {
+  z-index: 100;
+}
+.panel-picker {
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 20%);
+  outline: none;
+  font-size: 12px;
+}
+.panel-picker-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.panel-candidates {
+  display: grid;
+  gap: 4px;
+  max-height: min(50dvh, 360px);
+  overflow-y: auto;
+}
+.panel-candidate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.panel-candidate:hover:not(:disabled) {
+  background: var(--accent);
+}
+.panel-candidate[aria-checked='true'] {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+.panel-candidate:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.panel-candidate-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.panel-candidate-text .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-candidate-check {
+  display: inline-flex;
+  width: 16px;
+  color: var(--primary);
+}
+.panel-manage {
+  color: var(--primary);
+  font-size: 11px;
+}
+.panel-faces {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 12px;
+  font-size: 11px;
+}
+.panel-faces .reviewer-face + .reviewer-face {
+  margin-left: -8px;
+}
+.panel-faces-names {
+  margin-left: 6px;
+  color: var(--muted-foreground);
+}
+.panel-question {
+  margin-top: 14px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  font-size: 12px;
+}
+.panel-set-aside-path {
+  margin-left: 6px;
+  font-size: 11px;
+}
+.panel-set-aside-reason {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+.panel-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.panel-roster li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+}
+.panel-roster-done svg {
+  color: var(--success);
+}
+.panel-roster-failed svg {
+  color: var(--destructive-foreground);
+}
+.panel-continue ul {
+  list-style: none;
+  padding-left: 0;
+}
+.panel-continue li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-continue li > span {
+  flex: 1;
+}
+.panel-portrait {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.panel-portrait .reviewer-face {
+  border-width: 3px;
+  box-shadow: 0 4px 12px #0003;
+}

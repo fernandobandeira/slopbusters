@@ -7,7 +7,7 @@ import { BobTour, type BobDraftContext } from './BobTour'
 import { useBobTour } from './useBobTour'
 import { useBobSession } from './useBobSession'
 import '../../linus.css'
-import './bob.css'
+import '../../findingTour.css'
 
 export function BobCompanion(
   context: BobDraftContext & {
@@ -55,7 +55,7 @@ export function BobCompanion(
   }
   return (
     <aside
-      className="linus-companion bob-companion linus-open"
+      className="linus-companion finding-companion linus-open"
       aria-label="Uncle Bob code review companion"
     >
       <BobPanel
@@ -107,7 +107,7 @@ function BobPanel({
         </p>
       )}
       {result && session && (
-        <div className="linus-actions bob-continue">
+        <div className="linus-actions finding-continue">
           <ContinueInT3CodeButton request={{ persona: 'unclebob', sessionId: session.id }} />
         </div>
       )}

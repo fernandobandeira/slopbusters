@@ -1,0 +1,39 @@
+import { Router } from 'express'
+import * as routes from '../../shared/api/panel'
+import { parsePullUrl } from '../../shared/domain/pullUrl'
+import { UserError } from '../errors'
+import type { Services } from '../services'
+import { handle } from './contractRouter'
+
+export function panelRouter({ panelJobs, store }: Services) {
+  const router = Router()
+  handle(router, routes.savedPanelReviews, ({ query }) => ({
+    reviews: store.panel.reviews(query.repository),
+  }))
+  handle(router, routes.latestPanel, ({ query }) => ({
+    session: panelJobs.latest(query.repository, query.url) ?? null,
+  }))
+  handle(router, routes.startPanel, async ({ body }, _request, response) => {
+    for (const url of body.urls) {
+      const pull = parsePullUrl(url)
+      if (`${pull.owner}/${pull.repo}` !== body.repository)
+        throw new UserError('Select PRs from the current repository.')
+    }
+    if (new Set(body.urls).size !== body.urls.length)
+      throw new UserError('Select each PR only once.')
+    const session = await panelJobs.start(body.repository, body.urls, body.reviewers)
+    response.status(202)
+    return session
+  })
+  handle(router, routes.getPanel, ({ params }) => panelJobs.get(params.id))
+  handle(router, routes.continuePanel, ({ params }, _request, response) => {
+    response.status(202)
+    return panelJobs.continue(params.id)
+  })
+  handle(router, routes.retryPanel, ({ params }, _request, response) => {
+    response.status(202)
+    return panelJobs.retry(params.id)
+  })
+  handle(router, routes.cancelPanel, ({ params }) => panelJobs.cancel(params.id))
+  return router
+}

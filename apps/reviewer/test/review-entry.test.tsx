@@ -8,6 +8,7 @@ import { Provider } from '../shared/domain/types'
 import type { BobReviewSummary } from '../shared/domain/bob'
 import { useApiQuery } from '../src/lib/useApiQuery'
 import { useBobSession } from '../src/features/bob/useBobSession'
+import { usePanelSession } from '../src/features/panel/usePanelSession'
 import { App } from '../src/app/App'
 import { call } from '../src/lib/api'
 import { useLinusSession } from '../src/features/linus/useLinusSession'
@@ -79,6 +80,7 @@ vi.mock('../src/features/linus/useLinusRecommendations', () => ({
 }))
 vi.mock('../src/features/linus/useLinusSession', () => ({ useLinusSession: vi.fn() }))
 vi.mock('../src/features/bob/useBobSession', () => ({ useBobSession: vi.fn() }))
+vi.mock('../src/features/panel/usePanelSession', () => ({ usePanelSession: vi.fn() }))
 vi.mock('../src/features/review/usePullReview', () => ({
   usePullReview: (route: { kind: string }) => ({ pull: route.kind === 'pull' ? pull : undefined }),
 }))
@@ -112,8 +114,9 @@ beforeEach(() => {
   }))
   vi.mocked(useBobSession).mockReturnValue(job)
   vi.mocked(useLinusSession).mockReturnValue(job)
+  vi.mocked(usePanelSession).mockReturnValue(job)
   vi.mocked(call).mockImplementation((route) => {
-    if (route === routes.startBob || route === routes.startLinus)
+    if (route === routes.startPanel || route === routes.startLinus)
       return Promise.resolve({ id: 'new-review' })
     return Promise.resolve({ results: [] })
   })
@@ -126,7 +129,7 @@ afterEach(() => {
 function openPage(path = `/repos/${repository}/pulls?inbox=mine`) {
   return render(createElement(MemoryRouter, { initialEntries: [path] }, createElement(App)))
 }
-async function choose(companion: 'Uncle Bob' | 'Linus') {
+async function choose(companion: 'Review panel' | 'Linus') {
   fireEvent.click(screen.getByRole('button', { name: `Start review of PR #${pull.number}` }))
   fireEvent.click(await screen.findByRole('menuitem', { name: new RegExp(companion) }))
 }
@@ -139,30 +142,47 @@ describe('Review entry points', () => {
     expect(Boolean(screen.queryByRole('button', { name: /Start review/ }))).toBe(filter === 'mine')
   })
 
-  it.each(['Uncle Bob', 'Linus'] as const)(
-    'starts %s on the selected PR from My PRs',
-    async (companion) => {
-      openPage()
-      await choose(companion)
-      await waitFor(() => {
-        expect(call).toHaveBeenCalledWith(
-          companion === 'Uncle Bob' ? routes.startBob : routes.startLinus,
-          { body: { repository, urls: [pull.url] } },
-        )
-      })
-      expect(
-        await screen.findByRole('complementary', { name: new RegExp(`${companion}.*companion`) }),
-      ).toBeTruthy()
-      if (companion === 'Linus')
-        expect(useLinusSession).toHaveBeenCalledWith(repository, 'new-review')
-      fireEvent.click(screen.getByRole('button', { name: `Close ${companion}` }))
-      await waitFor(() => {
-        expect(
-          screen.queryByRole('complementary', { name: new RegExp(`${companion}.*companion`) }),
-        ).toBeNull()
-      })
+  it.each([
+    {
+      companion: 'Review panel',
+      route: routes.startPanel,
+      body: { repository, urls: [pull.url], reviewers: ['unclebob', 'rules'] },
+      aside: 'Review panel companion',
+      close: 'Close the review panel',
     },
-  )
+    {
+      companion: 'Linus',
+      route: routes.startLinus,
+      body: { repository, urls: [pull.url] },
+      aside: 'Linus PR companion',
+      close: 'Close Linus',
+    },
+  ] as const)('starts the $companion on the selected PR from My PRs', async (entry) => {
+    openPage()
+    await choose(entry.companion)
+    await waitFor(() => {
+      expect(call).toHaveBeenCalledWith(entry.route, { body: entry.body })
+    })
+    expect(await screen.findByRole('complementary', { name: entry.aside })).toBeTruthy()
+    if (entry.companion === 'Linus')
+      expect(useLinusSession).toHaveBeenCalledWith(repository, 'new-review')
+    else expect(usePanelSession).toHaveBeenCalledWith('new-review')
+    fireEvent.click(screen.getByRole('button', { name: entry.close }))
+    await waitFor(() => {
+      expect(screen.queryByRole('complementary', { name: entry.aside })).toBeNull()
+    })
+  })
+
+  it('starts the panel with the reviewers last picked in the PR header', async () => {
+    localStorage.setItem('slopbusters:panel-reviewers', JSON.stringify(['teammate:avery']))
+    openPage()
+    await choose('Review panel')
+    await waitFor(() => {
+      expect(call).toHaveBeenCalledWith(routes.startPanel, {
+        body: { repository, urls: [pull.url], reviewers: ['teammate:avery'] },
+      })
+    })
+  })
 
   it('reopens Uncle Bob from a saved badge after closing the panel', async () => {
     openPage()
@@ -180,12 +200,12 @@ describe('Review entry points', () => {
   it('reports a failed start without opening a companion and allows retry', async () => {
     vi.mocked(call).mockRejectedValueOnce(new Error('Choose a primary model first.'))
     openPage()
-    await choose('Uncle Bob')
+    await choose('Review panel')
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByText('Choose a primary model first.')).toBeTruthy()
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
-    await choose('Uncle Bob')
-    expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
+    await choose('Review panel')
+    expect(await screen.findByRole('button', { name: 'Close the review panel' })).toBeTruthy()
   })
 })
 
@@ -262,73 +282,34 @@ describe('repository startup selection', () => {
   })
 })
 
-describe('Uncle Bob action in the diff view', () => {
-  it('starts Uncle Bob directly on the single PR in the diff', async () => {
+describe('Review actions in the diff view', () => {
+  it('offers the review panel instead of a solo Uncle Bob review', () => {
     savedReviews = []
     openPage(`/repos/${repository}/pulls/${pull.number}?inbox=mine&group=permissions&diff=split`)
+
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
-    fireEvent.click(
-      screen.getByRole('button', { name: `Ask Uncle Bob to review PR #${pull.number}` }),
-    )
-    expect(screen.queryByRole('menu')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Ask Uncle Bob to review/ })).toBeNull()
     expect(
-      await screen.findByRole('complementary', { name: 'Uncle Bob code review companion' }),
+      screen.getByRole('button', { name: `Ask the review panel about PR #${pull.number}` }),
     ).toBeTruthy()
-    expect(call).toHaveBeenCalledWith(routes.startBob, {
-      body: { repository, urls: [pull.url] },
-    })
-    expect(call).not.toHaveBeenCalledWith(routes.startLinus, expect.anything())
+    expect(call).not.toHaveBeenCalled()
   })
 
   it.each([
     { findingCount: 1, headSha: pull.headSha },
     { findingCount: 0, headSha: pull.headSha },
     { findingCount: 3, headSha: 'previous-head' },
-  ])('reopens the saved review instead of starting another (%j)', async (review) => {
+  ])('still reopens a saved Uncle Bob review (%j)', async (review) => {
     savedReviews = [{ ...bobReview, ...review }]
     openPage(`/repos/${repository}/pulls/${pull.number}`)
     const button = screen.getByRole('button', { name: /Open saved Uncle Bob review/ })
-    expect(button.textContent).toBe(`Ask Uncle Bob${review.findingCount}`)
+    expect(button.textContent).toBe(String(review.findingCount))
     expect(button.querySelector('img')?.getAttribute('src')).toBe('/unclebob/neutral.png')
-    expect(screen.queryByRole('button', { name: /Ask Uncle Bob to review/ })).toBeNull()
 
     fireEvent.click(button)
 
     expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
     expect(useBobSession).toHaveBeenLastCalledWith(repository, pull.url, bobReview.sessionId)
     expect(call).not.toHaveBeenCalledWith(routes.startBob, expect.anything())
-  })
-
-  it('waits for saved reviews before allowing a new review', () => {
-    savedReviews = []
-    savedReviewsLoading = true
-    openPage(`/repos/${repository}/pulls/${pull.number}`)
-    const button = screen.getByRole<HTMLButtonElement>('button', {
-      name: /Ask Uncle Bob to review/,
-    })
-
-    expect(button.disabled).toBe(true)
-    expect(call).not.toHaveBeenCalledWith(routes.startBob, expect.anything())
-  })
-
-  it('keeps the face visible and prevents another request while a new review is starting', async () => {
-    savedReviews = []
-    let finish!: (value: { id: string }) => void
-    vi.mocked(call).mockReturnValueOnce(
-      new Promise((resolve) => {
-        finish = resolve
-      }),
-    )
-    openPage(`/repos/${repository}/pulls/${pull.number}`)
-    const button = screen.getByRole<HTMLButtonElement>('button', {
-      name: /Ask Uncle Bob to review/,
-    })
-    fireEvent.click(button)
-
-    expect(button.disabled).toBe(true)
-    expect(button.textContent).toBe('Asking Uncle Bob…')
-    expect(button.querySelector('img')?.getAttribute('src')).toBe('/unclebob/neutral.png')
-    finish({ id: 'new-review' })
-    expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
   })
 })

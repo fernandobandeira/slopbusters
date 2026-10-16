@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { DiffSide, LineKind, type DraftComment, type PullRequest } from './types'
+import { DiffSide, type DraftComment, type PullRequest } from './types'
+import { findingCommentId, findingDraftComment, pointsAtChange, snapshotMatches } from './findings'
 import type { ReviewResult, ReviewSession, PendingReview } from './reviewSession'
 
 export const bobAdviceSchema = z
@@ -88,15 +89,7 @@ export function validateBobAdvice(pull: PullRequest, input: unknown): BobAdvice 
   for (const finding of advice.findings) {
     if (ids.has(finding.id)) throw new Error('Each Bob finding must have a unique ID.')
     ids.add(finding.id)
-    const hunk = pull.files
-      .find((file) => file.path === finding.path)
-      ?.hunks.find((hunk) => hunk.id === finding.hunkId)
-    const line = hunk?.lines.find((line) =>
-      finding.side === DiffSide.left
-        ? line.oldLine === finding.line
-        : line.newLine === finding.line,
-    )
-    if (!line || line.kind === LineKind.context)
+    if (!pointsAtChange(pull, finding))
       throw new Error('A Bob finding must reference a changed line in this PR snapshot.')
   }
   if (advice.verdict === 'clean' && advice.findings.length)
@@ -109,51 +102,14 @@ export function validateBobAdvice(pull: PullRequest, input: unknown): BobAdvice 
 }
 
 export function bobCommentId(pull: PullRequest, finding: BobFinding): string {
-  const source = JSON.stringify([
-    pull.url,
-    pull.headSha,
-    pull.baseSha,
-    finding.id,
-    finding.path,
-    finding.hunkId,
-    finding.line,
-    finding.side,
-  ])
-  // FNV-1a keeps the stable annotation ID below the draft contract's 100-character limit.
-  let hash = 14695981039346656037n
-  for (const byte of new TextEncoder().encode(source))
-    hash = BigInt.asUintN(64, (hash ^ BigInt(byte)) * 1099511628211n)
-  return `bob:${hash.toString(16)}`
+  return findingCommentId('bob', pull, finding)
 }
 export function bobDraftComment(
   pull: PullRequest,
   finding: BobFinding,
   body: string,
 ): DraftComment {
-  const hunk = pull.files
-    .find((file) => file.path === finding.path)
-    ?.hunks.find((hunk) => hunk.id === finding.hunkId)
-  const line = hunk?.lines.find((line) =>
-    finding.side === DiffSide.left ? line.oldLine === finding.line : line.newLine === finding.line,
-  )
-  if (!line) throw new Error('This finding no longer belongs to the review snapshot.')
-  return {
-    id: bobCommentId(pull, finding),
-    body: body.trim(),
-    path: finding.path,
-    line: finding.line,
-    side: finding.side,
-    headSha: pull.headSha,
-    code: line.text.slice(0, 20000),
-  }
+  return findingDraftComment(bobCommentId(pull, finding), pull, finding, body)
 }
 
-export function bobSnapshotMatches(current: PullRequest, saved: PullRequest): boolean {
-  return (
-    current.url === saved.url &&
-    current.headSha === saved.headSha &&
-    current.baseSha === saved.baseSha &&
-    current.title === saved.title &&
-    current.description === saved.description
-  )
-}
+export const bobSnapshotMatches = snapshotMatches

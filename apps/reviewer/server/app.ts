@@ -14,6 +14,8 @@ import { listen } from './http/listen'
 import { ticketsRouter } from './http/ticketsRouter'
 import { jobsRouter } from './http/jobsRouter'
 import { chatRouter } from './http/chatRouter'
+import { teammatesRouter } from './http/teammatesRouter'
+import { panelRouter } from './http/panelRouter'
 
 export type { ReviewerServerOptions } from './services'
 
@@ -37,6 +39,8 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
     ticketsRouter(services),
     jobsRouter(services),
     chatRouter(services),
+    teammatesRouter(services),
+    panelRouter(services),
     sourceRouter(services),
     settingsRouter(services),
   )

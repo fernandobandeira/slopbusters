@@ -1,3 +1,5 @@
+import type { PanelSession } from '../shared/domain/panel'
+import { fixtureJudgeAdvice, fixturePanelAdvice } from './fixtures/panel'
 import { describe, expect, it, vi } from 'vitest'
 import type { ChatHosts } from '../server/adapters/t3Engine/chatHosts'
 import type { EngineThreadOperations } from '../server/adapters/t3Engine/engineThreads'
@@ -24,6 +26,7 @@ function sessionsWith(saved: {
   bob?: BobSession
   jobs?: JobsSession
   gandalf?: GandalfSession
+  panel?: PanelSession
 }): ReviewSessions {
   const find = <T extends { id: string }>(session: T | undefined) => ({
     get: vi.fn((id: string) => {
@@ -36,6 +39,7 @@ function sessionsWith(saved: {
     bob: find(saved.bob),
     jobs: find(saved.jobs),
     gandalf: find(saved.gandalf),
+    panel: find(saved.panel),
   }
 }
 
@@ -337,5 +341,79 @@ describe('continuing a Jobs review in T3 Code', () => {
         { persona: 'jobs', sessionId: 'jobs-1' },
       ),
     ).rejects.toThrow('Choose the repository this issue belongs to first.')
+  })
+})
+
+describe('continuing one reviewer from a review panel', () => {
+  const reviewers = [
+    { id: 'unclebob' as const, name: 'Uncle Bob', maxFindings: 10 },
+    { id: 'teammate:avery' as const, name: 'Avery', skill: 'AveryReview', maxFindings: 16 },
+  ]
+  function panelSession(overrides: Partial<PanelSession> = {}): PanelSession {
+    return {
+      id: 'panel-1',
+      repository: 'review-room/example',
+      urls: [pull.url],
+      model: claude,
+      reviewers,
+      status: 'complete',
+      progress: '',
+      createdAt: '2026-10-16T00:00:00Z',
+      results: [
+        {
+          pull,
+          fingerprint: 'f',
+          advice: fixtureJudgeAdvice(['teammate:avery']),
+          reviews: [
+            { reviewer: 'unclebob', advice: fixturePanelAdvice([]) },
+            { reviewer: 'teammate:avery', advice: fixturePanelAdvice() },
+          ],
+        },
+      ],
+      ...overrides,
+    }
+  }
+
+  it('invokes a teammate by its installed skill and hands it what the judge kept', async () => {
+    const { firstMessage, startThread } = await continueWith(
+      { panel: panelSession() },
+      { persona: 'panel', sessionId: 'panel-1', url: pull.url, reviewer: 'teammate:avery' },
+    )
+
+    const message = firstMessage()
+    expect(message.startsWith('/AveryReview Review PR #128')).toBe(true)
+    expect(message).toContain('A judge then checked every reviewer')
+    expect(message).toContain('### Findings the judge kept')
+    expect(startThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Avery · #128 Require editor permissions for project updates',
+      }),
+    )
+  })
+
+  it('invokes a built-in reviewer through the plugin, the way Codex expects', async () => {
+    const { firstMessage } = await continueWith(
+      { panel: panelSession() },
+      { persona: 'panel', sessionId: 'panel-1', url: pull.url, reviewer: 'unclebob' },
+      codex,
+    )
+
+    expect(firstMessage().startsWith('$slopbusters:unclebob Review PR #128')).toBe(true)
+    expect(firstMessage()).toContain('The judge kept none of your findings.')
+  })
+
+  it('refuses a reviewer that has not finished this PR', async () => {
+    const running = panelSession({
+      status: 'running',
+      results: [],
+      pending: { pull, fingerprint: 'f', reviews: [{ reviewer: 'unclebob', error: 'Timed out.' }] },
+    })
+
+    await expect(
+      continueWith(
+        { panel: running },
+        { persona: 'panel', sessionId: 'panel-1', url: pull.url, reviewer: 'unclebob' },
+      ),
+    ).rejects.toThrow('Uncle Bob has not finished reviewing this PR yet.')
   })
 })
