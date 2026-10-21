@@ -19,6 +19,7 @@ export interface WizardDraft {
   skill?: string
   name: string
   title: string
+  login: string
   maxFindings: number
   faces: Partial<Record<Mood, FaceChange>>
 }
@@ -28,6 +29,7 @@ function initialDraft(teammate?: Teammate): WizardDraft {
     skill: teammate?.skill,
     name: teammate?.name ?? '',
     title: teammate?.title ?? '',
+    login: teammate?.login ?? '',
     maxFindings: teammate?.maxFindings ?? DEFAULT_TEAMMATE_FINDINGS,
     faces: {},
   }
@@ -74,11 +76,13 @@ export function useTeammateWizard(
 
 function teammateInput(draft: WizardDraft, skill: string): TeammateInput {
   const title = draft.title.trim()
+  const login = draft.login.trim().replace(/^@/, '')
   return {
     name: draft.name.trim(),
     skill,
     maxFindings: draft.maxFindings,
     ...(title ? { title } : {}),
+    ...(login ? { login } : {}),
   }
 }
 

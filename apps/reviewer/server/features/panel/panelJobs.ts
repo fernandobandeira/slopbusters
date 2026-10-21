@@ -4,6 +4,7 @@ import type { LayerSnapshot } from '../../../shared/domain/anchors'
 import type {
   PanelPending,
   PanelPreparation,
+  ReviewHistory,
   PanelReview,
   PanelReviewer,
   PanelSession,
@@ -32,6 +33,8 @@ interface Options {
   /** The primary model judges; each seat reviews on the model for its provider. */
   models: () => { primary: OrganizationPreferences; companion?: OrganizationPreferences }
   loadPull: (url: string) => Promise<PullRequest>
+  /** What reviewers already said on a PR, for teammates whose GitHub login is known. */
+  history?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewHistory>
   /** The PR's stack, so seats see its other open layers. */
   stack?: (url: string) => Promise<PullStackResult>
   sessions?: AgentSessions
@@ -225,6 +228,7 @@ export class PanelJobs {
   private async prepareRound(session: PanelSession, signal: AbortSignal) {
     const preparation = await preparePanelRound(session.urls, {
       ...this.options,
+      withHistory: session.reviewers.some((reviewer) => reviewer.login),
       signal,
       progress: (progress) => {
         this.progress(session, progress)
@@ -303,6 +307,7 @@ export class PanelJobs {
         member,
         pull: pending.pull,
         layers,
+        history: pending.history,
         context: pending.context,
       })
     const label = `${reviewer.name} review`

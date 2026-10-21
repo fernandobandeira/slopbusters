@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchDiscussions, replyToThread } from '../server/features/pulls/discussions'
+import type { GitHub } from '../server/adapters/github'
+import {
+  fetchDiscussions,
+  fetchReviewBodies,
+  replyToThread,
+} from '../server/features/pulls/discussions'
 import { runCommand } from '../server/adapters/process'
 import { fixturePull } from './fixtures/pull'
 
@@ -182,5 +187,38 @@ describe('GitHub discussion replies', () => {
       replyToThread({ pr: fixturePull(), threadId: 'thread', body: ' \n ' }),
     ).rejects.toThrow('cannot be empty')
     expect(command).not.toHaveBeenCalled()
+  })
+})
+
+describe('review bodies', () => {
+  it('keeps submitted reviews with a body, with their author, state and commit', async () => {
+    const review = (id: number, body: string | null, login: string | null = 'avery') => ({
+      id,
+      user: login ? { login } : null,
+      state: 'CHANGES_REQUESTED',
+      body,
+      html_url: `https://github.com/example/project/pull/1#pullrequestreview-${String(id)}`,
+      submitted_at: '2026-10-02T09:00:00Z',
+      commit_id: 'abc123',
+    })
+    const paginate = vi.fn(() =>
+      Promise.resolve([review(1, 'Please split this.'), review(2, ''), review(3, 'Done.', null)]),
+    )
+    const github = { paginate } as unknown as GitHub
+
+    const bodies = await fetchReviewBodies(fixturePull(), github)
+
+    expect(paginate).toHaveBeenCalledWith(
+      'repos/review-room/example/pulls/128/reviews?per_page=100',
+    )
+    expect(bodies).toEqual([
+      expect.objectContaining({
+        id: '1',
+        author: 'avery',
+        body: 'Please split this.',
+        commitId: 'abc123',
+      }),
+      expect.objectContaining({ id: '3', author: 'deleted user' }),
+    ])
   })
 })

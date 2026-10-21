@@ -1,5 +1,5 @@
 import type { LayerSnapshot } from '../../../shared/domain/anchors'
-import type { PanelPreparation, PanelSnapshot } from '../../../shared/domain/panel'
+import type { PanelPreparation, PanelSnapshot, ReviewHistory } from '../../../shared/domain/panel'
 import type { PullStackResult } from '../../../shared/domain/stacks'
 import type { PullRequest } from '../../../shared/domain/types'
 import { UserError } from '../../errors'
@@ -9,6 +9,8 @@ import { settleEach } from '../flows/panel'
 
 interface Sources {
   loadPull: (url: string) => Promise<PullRequest>
+  /** What reviewers already said on a PR, for teammates whose GitHub login is known. */
+  history?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewHistory>
   stack?: (url: string) => Promise<PullStackResult>
   context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
   signal: AbortSignal
@@ -22,7 +24,7 @@ interface Sources {
  */
 export async function preparePanelRound(
   urls: readonly string[],
-  sources: Sources,
+  sources: Sources & { withHistory: boolean },
 ): Promise<PanelPreparation> {
   sources.progress(`Loading ${pullCount(urls.length)}…`)
   const snapshots = (await loadSnapshots(urls, sources, true)).map((outcome) => {
@@ -30,6 +32,7 @@ export async function preparePanelRound(
     return outcome.advice
   })
   const stacks = await stackLayers(urls, sources)
+  if (sources.withHistory) await addHistory(snapshots, stacks.missing, sources)
   const wanted = [...new Set(Object.values(stacks.layers).flat())].filter(
     (url) => !urls.includes(url),
   )
@@ -75,6 +78,29 @@ function loadSnapshots(urls: readonly string[], sources: Sources, withContext: b
       return { pull, fingerprint: pullFingerprint(pull), ...(context ? { context } : {}) }
     },
     failure: () => 'The PR could not be loaded.',
+  })
+}
+
+/** Each chosen PR's existing review comments; one that cannot be loaded is disclosed. */
+async function addHistory(
+  snapshots: PanelSnapshot[],
+  missing: Record<string, string[]>,
+  { history, signal }: Sources,
+) {
+  if (!history) return
+  const loaded = await settleEach(snapshots, {
+    signal,
+    concurrency: PANEL_PREPARE_CONCURRENCY,
+    run: (snapshot) => history(snapshot.pull, signal),
+    failure: () => 'GitHub did not return them.',
+  })
+  snapshots.forEach((snapshot, index) => {
+    const outcome = loaded[index]
+    if (outcome?.advice) snapshot.history = outcome.advice
+    else
+      (missing[snapshot.pull.url] ??= []).push(
+        `The PR's existing review comments could not be loaded (${outcome?.error ?? 'unknown error'}), so teammates did not see what they already said.`,
+      )
   })
 }
 

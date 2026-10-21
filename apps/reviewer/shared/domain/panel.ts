@@ -10,7 +10,13 @@ import {
 import { findingCommentId, findingDraftComment, stableId } from './findings'
 import { organizationSchema, type OrganizationPreferences } from './preferences'
 import { teammateIdSchema } from './teammates'
-import { Provider, type DraftComment, type PullRequest } from './types'
+import {
+  Provider,
+  type DraftComment,
+  type PullRequest,
+  type PullReviewBody,
+  type ReviewThread,
+} from './types'
 
 /** The reviewers Slopbusters ships; teammates join them as `teammate:<id>`. */
 export const builtInReviewers = {
@@ -90,6 +96,8 @@ export const panelReviewerSchema = z.object({
   description: z.string().optional(),
   /** The installed skill a teammate runs, by folder name. */
   skill: z.string().optional(),
+  /** The teammate's GitHub login, whose earlier comments on the PR the seat reads. */
+  login: z.string().optional(),
   maxFindings: z.number().int().positive(),
   /** The model this seat reviews on; sessions saved before seats used the session's model. */
   model: organizationSchema.optional(),
@@ -330,10 +338,7 @@ export interface PanelReview {
   capped?: boolean
   error?: string
 }
-export interface PanelPending {
-  pull: PullRequest
-  fingerprint: string
-  context?: string
+export interface PanelPending extends PanelSnapshot {
   reviews: PanelReview[]
 }
 export interface PanelResult {
@@ -343,11 +348,17 @@ export interface PanelResult {
   /** What each reviewer said before the judge, for a chat that continues one of them. */
   reviews: PanelReview[]
 }
-/** A PR snapshot a round loaded, and what the PR is meant to do. */
+/** What reviewers already said on a PR: its inline threads and its reviews' bodies. */
+export interface ReviewHistory {
+  threads: ReviewThread[]
+  reviews: PullReviewBody[]
+}
+/** A PR snapshot a round loaded, what the PR is meant to do, and what reviewers said on it. */
 export interface PanelSnapshot {
   pull: PullRequest
   fingerprint: string
   context?: string
+  history?: ReviewHistory
 }
 /**
  * What a round loads before any seat starts: every chosen PR and the other open layers of their

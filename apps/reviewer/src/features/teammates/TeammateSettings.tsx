@@ -78,30 +78,8 @@ function TeammateRow({
   onChanged: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
-  const [error, setError] = useState('')
+  const { error, remove, adoptDefaultCap } = useRowChanges(teammate, onChanged)
   const availability = skillAvailability(teammate.locations)
-  async function remove() {
-    setError('')
-    try {
-      await call(routes.removeTeammate, { params: { id: teammate.id } })
-      onChanged()
-    } catch (cause) {
-      setError(message(cause))
-    }
-  }
-  async function adoptDefaultCap() {
-    setError('')
-    try {
-      const { name, title, skill } = teammate
-      await call(routes.updateTeammate, {
-        params: { id: teammate.id },
-        body: { name, skill, maxFindings: DEFAULT_TEAMMATE_FINDINGS, ...(title ? { title } : {}) },
-      })
-      onChanged()
-    } catch (cause) {
-      setError(message(cause))
-    }
-  }
   return (
     <li className="teammate-row">
       <ReviewerFace
@@ -112,24 +90,14 @@ function TeammateRow({
       <div className="teammate-row-text">
         <strong>{teammate.name}</strong>
         {teammate.title && <span className="muted">{teammate.title}</span>}
+        {teammate.login && <span className="muted">@{teammate.login} on GitHub</span>}
         <span className="muted">
           <code>{teammate.skill}</code> ·{' '}
           <span className={`teammate-availability teammate-availability-${availability}`}>
             {availabilityLabels[availability]}
           </span>
         </span>
-        <span className="muted">
-          Up to {teammate.maxFindings} findings per PR
-          {teammate.maxFindings < DEFAULT_TEAMMATE_FINDINGS && (
-            <>
-              {' '}
-              ·{' '}
-              <Button size="xs" variant="link" onClick={() => void adoptDefaultCap()}>
-                Use new default ({DEFAULT_TEAMMATE_FINDINGS})
-              </Button>
-            </>
-          )}
-        </span>
+        <FindingCap teammate={teammate} onAdoptDefault={() => void adoptDefaultCap()} />
         {availability === 'missing' && (
           <span role="status" className="teammate-skill-problem">
             The {teammate.skill} skill is no longer installed. Install it again, or edit this
@@ -146,6 +114,62 @@ function TeammateRow({
         onRemove={() => void remove()}
       />
     </li>
+  )
+}
+
+/** Remove a teammate, or move a cap saved before the new default up to it. */
+function useRowChanges(teammate: Teammate, onChanged: () => void) {
+  const [error, setError] = useState('')
+  async function change(request: () => Promise<unknown>) {
+    setError('')
+    try {
+      await request()
+      onChanged()
+    } catch (cause) {
+      setError(message(cause))
+    }
+  }
+  const { name, title, skill, login } = teammate
+  return {
+    error,
+    remove: () => change(() => call(routes.removeTeammate, { params: { id: teammate.id } })),
+    adoptDefaultCap: () =>
+      change(() =>
+        call(routes.updateTeammate, {
+          params: { id: teammate.id },
+          body: {
+            name,
+            skill,
+            maxFindings: DEFAULT_TEAMMATE_FINDINGS,
+            ...(title ? { title } : {}),
+            ...(login ? { login } : {}),
+          },
+        }),
+      ),
+  }
+}
+
+/** The teammate's cap, and a way to the new default when the saved one is lower. */
+function FindingCap({
+  teammate,
+  onAdoptDefault,
+}: {
+  teammate: Teammate
+  onAdoptDefault: () => void
+}) {
+  return (
+    <span className="muted">
+      Up to {teammate.maxFindings} findings per PR
+      {teammate.maxFindings < DEFAULT_TEAMMATE_FINDINGS && (
+        <>
+          {' '}
+          ·{' '}
+          <Button size="xs" variant="link" onClick={onAdoptDefault}>
+            Use new default ({DEFAULT_TEAMMATE_FINDINGS})
+          </Button>
+        </>
+      )}
+    </span>
   )
 }
 

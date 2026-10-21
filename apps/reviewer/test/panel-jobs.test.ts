@@ -1,77 +1,27 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { InstalledSkills } from '../server/adapters/installedSkills'
-import { ReviewerStore } from '../server/adapters/store'
-import { TeammateStore } from '../server/adapters/teammateStore'
+import { describe, expect, it, vi } from 'vitest'
 import type {
   StructuredTurnRequest,
   StructuredTurns,
 } from '../server/adapters/t3Engine/engineTurns'
-import { PanelJobs } from '../server/features/panel/panelJobs'
-import { PanelMembers } from '../server/features/panel/panelMembers'
-import { Teammates } from '../server/features/teammates/teammates'
-import type { ReviewerId } from '../shared/domain/panel'
 import { Provider } from '../shared/domain/types'
-import { UserError } from '../server/errors'
 import { fixtureJudgeAdvice, fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
-import { fixturePull } from './fixtures/pull'
-import { installSkill, temporarySkillRoots } from './fixtures/skills'
+import {
+  companion,
+  everyone,
+  isJudge,
+  panelHarness,
+  primary,
+  reply,
+  repository,
+  url,
+} from './fixtures/panelJobs'
+import { installSkill } from './fixtures/skills'
 import { recordingTurns } from './fixtures/turns'
 
-const primary = { provider: Provider.claude, model: 'claude-opus-5-5' }
-const companion = { provider: Provider.codex, model: 'gpt-6.1-sol' }
-const repository = 'review-room/example'
-const url = fixturePull().url
-let data: string
-let roots: ReturnType<typeof temporarySkillRoots>
-let store: ReviewerStore
-let teammates: Teammates
-let jobs: PanelJobs | undefined
-
-beforeEach(async () => {
-  data = mkdtempSync(join(tmpdir(), 'panel-jobs-'))
-  roots = temporarySkillRoots()
-  store = new ReviewerStore({ dataDirectory: data })
-  teammates = new Teammates(new TeammateStore(data), new InstalledSkills(roots))
-  installSkill(roots.claude, 'AveryReview', { description: 'Review the way Avery does.' })
-  await teammates.create({ name: 'Avery', skill: 'AveryReview', maxFindings: 5 })
-})
-afterEach(async () => {
-  await jobs?.close()
-  jobs = undefined
-  store.close()
-  rmSync(data, { recursive: true, force: true })
-  rmSync(roots.home, { recursive: true, force: true })
-})
-
-function panel(
-  turns: StructuredTurns,
-  sources: Pick<ConstructorParameters<typeof PanelJobs>[0], 'loadPull' | 'stack'> = {
-    loadPull: () => Promise.resolve(fixturePull()),
-  },
-) {
-  jobs = new PanelJobs({
-    store: store.panel,
-    turns,
-    members: new PanelMembers({ teammates, builtIn: (id) => Promise.resolve(`The ${id} skill.`) }),
-    models: () => ({ primary, companion }),
-    ...sources,
-  })
-  return jobs
-}
-
-const isJudge = (request: StructuredTurnRequest<unknown>) =>
-  Boolean(request.purpose?.startsWith('Panel judge'))
-
-function reply(request: StructuredTurnRequest<unknown>) {
-  return isJudge(request)
-    ? fixtureJudgeAdvice(['unclebob', 'teammate:avery'])
-    : fixturePanelAdvice()
-}
-
-const everyone: ReviewerId[] = ['unclebob', 'terminator', 'teammate:avery']
+const harness = panelHarness()
+const panel = harness.panel
 
 describe('a panel review', () => {
   it('runs each reviewer once on the primary model with its own skill, then the judge', async () => {
@@ -103,9 +53,9 @@ describe('a panel review', () => {
 
   it('runs at most three reviewers at a time', async () => {
     for (const name of ['Riley', 'Morgan'])
-      await teammates.create({
+      await harness.teammates.create({
         name,
-        skill: installSkill(roots.claude, `${name}Review`).split('/').pop() ?? '',
+        skill: installSkill(harness.roots.claude, `${name}Review`).split('/').pop() ?? '',
         maxFindings: 5,
       })
     let running = 0
@@ -131,82 +81,6 @@ describe('a panel review', () => {
     })
 
     expect(most).toBe(3)
-  })
-})
-
-describe('a PR in a stack', () => {
-  const layerUrl = (number: number) => url.replace(/\d+$/, String(number))
-  const layer = (number: number) => ({
-    ...fixturePull(),
-    number,
-    url: layerUrl(number),
-    title: `Layer ${String(number)}`,
-  })
-  const item = (number: number, state: 'open' | 'merged' = 'open') => ({
-    number,
-    url: number === 128 ? url : layerUrl(number),
-    title: `Layer ${String(number)}`,
-    repository,
-    headBranch: `layer-${String(number)}`,
-    baseBranch: 'main',
-    state,
-    isDraft: false,
-  })
-  const stack = () =>
-    Promise.resolve({
-      stack: {
-        id: 's',
-        source: 'github' as const,
-        baseBranch: 'main',
-        position: 2,
-        size: 4,
-        items: [item(127, 'merged'), item(128), item(131), item(140)],
-        warnings: [],
-      },
-      warnings: [],
-    })
-
-  it('loads the other open layers before any seat starts and lets seats anchor on them', async () => {
-    const loads: string[] = []
-    const { turns, requests } = recordingTurns((request) => {
-      if (isJudge(request)) return fixtureJudgeAdvice(['unclebob'])
-      expect(loads).toEqual([url, layerUrl(131), layerUrl(140)])
-      return fixturePanelAdvice([
-        fixturePanelFinding({
-          id: 'rename-above',
-          anchor: { kind: 'stack', pull: 131, location: { kind: 'description', field: 'title' } },
-        }),
-      ])
-    })
-    const jobs = panel(turns, {
-      loadPull: (loaded) => {
-        loads.push(loaded)
-        if (loaded === layerUrl(140)) return Promise.reject(new UserError('Not found.'))
-        return Promise.resolve(
-          loaded === url ? fixturePull() : layer(Number(loaded.split('/').pop())),
-        )
-      },
-      stack,
-    })
-
-    const session = await jobs.start(repository, [url], ['unclebob'])
-    await vi.waitFor(() => {
-      expect(jobs.get(session.id).status).toBe('complete')
-    })
-
-    const seat = requests.find((request) => !isJudge(request))
-    expect(seat?.prompt).toContain("Other open layers of this PR's stack")
-    expect(seat?.prompt).toContain('PR #131:')
-    expect(seat?.prompt).toContain("by that layer's PR number (#131)")
-    const [result] = jobs.get(session.id).results
-    expect(result?.reviews[0]?.advice?.findings[0]?.anchor).toMatchObject({
-      kind: 'stack',
-      pull: 131,
-      fingerprint: expect.any(String) as string,
-    })
-    expect(result?.advice.limitations.join(' ')).toMatch(
-      /Other stack layers could not be loaded.*PR #140 \(Not found\.\)/,
-    )
   })
 })
 
@@ -261,8 +135,8 @@ describe('the panel judge', () => {
   })
 
   it('copies a skill folder once when both providers’ seats share it', async () => {
-    mkdirSync(roots.codex, { recursive: true })
-    symlinkSync(join(roots.claude, 'AveryReview'), join(roots.codex, 'AveryReview'))
+    mkdirSync(harness.roots.codex, { recursive: true })
+    symlinkSync(join(harness.roots.claude, 'AveryReview'), join(harness.roots.codex, 'AveryReview'))
     const { turns, requests } = recordingTurns(reply)
     const jobs = panel(turns)
     const both = [Provider.claude, Provider.codex]
@@ -383,9 +257,9 @@ describe('a reviewer on both providers', () => {
 
 describe('starting a panel', () => {
   it('seats a teammate on every provider its skill is installed for unless asked otherwise', async () => {
-    installSkill(roots.codex, 'AveryReview')
-    installSkill(roots.codex, 'RileyReview')
-    await teammates.create({ name: 'Riley', skill: 'RileyReview', maxFindings: 5 })
+    installSkill(harness.roots.codex, 'AveryReview')
+    installSkill(harness.roots.codex, 'RileyReview')
+    await harness.teammates.create({ name: 'Riley', skill: 'RileyReview', maxFindings: 5 })
     const jobs = panel(recordingTurns(reply).turns)
 
     const session = await jobs.start(
@@ -433,10 +307,15 @@ describe('starting a panel', () => {
     await vi.waitFor(() => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
-    store.panel.save({ ...jobs.get(session.id), id: 'interrupted', status: 'running', results: [] })
+    harness.store.panel.save({
+      ...jobs.get(session.id),
+      id: 'interrupted',
+      status: 'running',
+      results: [],
+    })
 
     expect(jobs.get('interrupted').status).toBe('cancelled')
-    expect(store.panel.reviews(repository)).toEqual([
+    expect(harness.store.panel.reviews(repository)).toEqual([
       expect.objectContaining({ url, findingCount: 1, reviewers: ['unclebob'] }),
     ])
   })

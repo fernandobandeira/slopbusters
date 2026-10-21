@@ -115,13 +115,14 @@ export class Teammates {
   }
 
   private async touch(teammate: Teammate) {
-    const { name, title, skill, maxFindings, id } = teammate
+    const { name, title, skill, maxFindings, login, id } = teammate
     await this.store.save({
       id,
       name,
       skill,
       maxFindings,
       ...(title ? { title } : {}),
+      ...(login ? { login } : {}),
       updatedAt: new Date().toISOString(),
     })
   }

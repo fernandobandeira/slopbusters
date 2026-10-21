@@ -3,6 +3,7 @@ import {
   DiffSide,
   type PullRequest,
   type PullDiscussions,
+  type PullReviewBody,
   type ReviewThread,
 } from '../../../shared/domain/types'
 import { createGitHub, type GitHub } from '../../adapters/github'
@@ -124,6 +125,45 @@ export async function fetchDiscussions(
   } while (cursor)
   if (!revision) throw new UserError('GitHub did not return this PR.')
   return { ...revision, threads }
+}
+
+const reviewSchema = z.object({
+  id: z.number().int().positive(),
+  user: z.object({ login: z.string() }).nullable(),
+  state: z.string(),
+  body: z.string().nullable(),
+  html_url: z.string(),
+  submitted_at: z.string().nullable().optional(),
+  commit_id: z.string().nullable(),
+})
+
+/** The PR's submitted reviews that have a body, oldest first; inline threads come from `fetchDiscussions`. */
+export async function fetchReviewBodies(
+  pr: PullRequest,
+  github: GitHub = createGitHub(),
+): Promise<PullReviewBody[]> {
+  const reviews = z
+    .array(reviewSchema)
+    .parse(
+      await github.paginate(
+        `repos/${pr.owner}/${pr.repo}/pulls/${String(pr.number)}/reviews?per_page=100`,
+      ),
+    )
+  return reviews.flatMap((review) =>
+    review.body?.trim()
+      ? [
+          {
+            id: String(review.id),
+            author: review.user?.login ?? 'deleted user',
+            state: review.state,
+            body: review.body,
+            url: review.html_url,
+            submittedAt: review.submitted_at ?? null,
+            commitId: review.commit_id,
+          },
+        ]
+      : [],
+  )
 }
 
 export async function replyToThread(

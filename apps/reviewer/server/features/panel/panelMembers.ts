@@ -149,6 +149,7 @@ export class PanelMembers {
       name: teammate.name,
       skill: teammate.skill,
       maxFindings: teammate.maxFindings,
+      ...(teammate.login ? { login: teammate.login } : {}),
       ...(description ? { description: description.slice(0, MAX_DESCRIPTION_CHARACTERS) } : {}),
     }
   }

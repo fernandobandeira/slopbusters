@@ -132,6 +132,17 @@ export interface ReviewThread {
   canReply: boolean
   comments: ReviewThreadComment[]
 }
+/** A submitted review's top-level body; GitHub keeps it apart from the inline threads. */
+export interface PullReviewBody {
+  id: string
+  author: string
+  state: string
+  body: string
+  url: string
+  submittedAt: string | null
+  /** The head commit the review was submitted against. */
+  commitId: string | null
+}
 export interface PullDiscussions {
   headSha: string
   baseSha: string

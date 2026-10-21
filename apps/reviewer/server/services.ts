@@ -29,6 +29,7 @@ import { openConflictWorkspace } from './adapters/conflictWorkspace'
 import { loadCiFailures } from './adapters/ciFailures'
 import { createGitIdentity } from './adapters/gitIdentity'
 import { logError, UserError } from './errors'
+import { fetchDiscussions, fetchReviewBodies } from './features/pulls/discussions'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
 import type { PullRequest } from '../shared/domain/types'
 import { LinearAuth } from './adapters/linearAuth'
@@ -181,6 +182,13 @@ export function createServices(options: ReviewerServerOptions) {
     models: () => ({ primary: chatModel(), companion: store.getPreferences().companion }),
     loadPull: pulls.fetchPull,
     stack: (url) => stacks.getStackMetadata(url),
+    history: async (pull) => {
+      const [discussions, reviews] = await Promise.all([
+        fetchDiscussions(pull, github),
+        fetchReviewBodies(pull, github),
+      ])
+      return { threads: discussions.threads, reviews }
+    },
     openRepository,
     context: tickets.contextForPull,
   })

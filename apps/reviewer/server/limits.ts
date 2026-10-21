@@ -111,3 +111,5 @@ export const PANEL_PREPARE_CONCURRENCY = 3
 export const MAX_PANEL_STACK_LAYERS = 12
 /** How much of the other layers' diffs a seat's prompt carries; past it, only their file lists. */
 export const MAX_PANEL_LAYER_EVIDENCE_CHARS = 300_000
+/** How much of a teammate's earlier comments on the PR its seat's prompt carries. */
+export const MAX_PANEL_HISTORY_CHARS = 60_000
