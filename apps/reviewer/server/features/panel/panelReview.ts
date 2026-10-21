@@ -30,6 +30,8 @@ export interface PanelMember extends PanelReviewer {
   instructions: string
   /** A teammate's installed skill folder; built-in reviewers carry their references inline. */
   directory?: string
+  /** Which version of its instructions the seat reviews with. */
+  digest?: string
 }
 
 interface Turn {
@@ -159,6 +161,7 @@ export interface SeatReview {
   advice: PanelAdvice
   capped: boolean
   unplaced: UnplacedFinding[]
+  skillDigest?: string
 }
 
 /** The reviewed PR, its loaded stack layers and its checkout's files, to place anchors in. */
@@ -201,6 +204,7 @@ export async function reviewAsPanelist(
   return {
     ...normalizePanelAdvice(evidence, returned, member.maxFindings),
     capped: reachedCap(returned, member.maxFindings),
+    ...(member.digest ? { skillDigest: member.digest } : {}),
   }
 }
 

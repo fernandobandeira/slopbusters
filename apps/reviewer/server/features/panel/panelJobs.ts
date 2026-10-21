@@ -277,6 +277,7 @@ export class PanelJobs {
                 advice: seat.advice,
                 ...(seat.capped ? { capped: true } : {}),
                 ...(seat.unplaced.length ? { unplaced: seat.unplaced } : {}),
+                ...(seat.skillDigest ? { skillDigest: seat.skillDigest } : {}),
               }
             : {}),
           ...(error === undefined ? {} : { error }),

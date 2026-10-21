@@ -1,10 +1,11 @@
+import { createHash } from 'node:crypto'
 import { readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { skillNameSchema, type InstalledSkill } from '../../shared/domain/teammates'
 import { Provider } from '../../shared/domain/types'
 import { logError, UserError } from '../errors'
-import { MAX_SKILL_FILE_BYTES } from '../limits'
+import { MAX_SKILL_DIGEST_BYTES, MAX_SKILL_DIGEST_FILES, MAX_SKILL_FILE_BYTES } from '../limits'
 
 /** Where each agent looks for the user's own skills. */
 export interface SkillRoots {
@@ -62,9 +63,42 @@ export class InstalledSkills {
     return readSkillFile(await this.directory(name, provider))
   }
 
+  /**
+   * A digest of everything in the skill's folder, so a saved review records which version of the
+   * skill wrote it. Past the size bounds, files count by path and size only.
+   */
+  async digest(name: string, provider: Provider): Promise<string> {
+    const directory = await this.directory(name, provider)
+    const hash = createHash('sha256')
+    let budget = MAX_SKILL_DIGEST_BYTES
+    for (const path of await skillFiles(directory)) {
+      const { size } = await stat(path)
+      hash.update(`${relative(directory, path)}\0${String(size)}\0`)
+      if (size <= budget) hash.update(await readFile(path))
+      budget = Math.max(0, budget - size)
+    }
+    return `sha256:${hash.digest('hex')}`
+  }
+
   private root(provider: Provider) {
     return provider === Provider.claude ? this.roots.claude : this.roots.codex
   }
+}
+
+/** The skill folder's files in a stable order, leaving out hidden entries and symlinks. */
+async function skillFiles(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { recursive: true, withFileTypes: true })
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+    .filter(
+      (path) =>
+        !relative(directory, path)
+          .split('/')
+          .some((part) => part.startsWith('.')),
+    )
+    .sort()
+    .slice(0, MAX_SKILL_DIGEST_FILES)
 }
 
 async function scanRoot(root: string): Promise<Map<string, ScannedSkill>> {

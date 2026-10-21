@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -88,6 +88,22 @@ describe('creating teammates from installed skills', () => {
 
     expect(await teammates.list()).toEqual([])
     expect(existsSync(join(folder, 'SKILL.md'))).toBe(true)
+  })
+})
+
+describe('a teammate skill’s version', () => {
+  it('changes when any file in the skill folder changes, and only then', async () => {
+    const folder = installSkill(roots.claude, 'AveryReview', { references: { 'facts.md': 'One.' } })
+    await teammates.create(avery)
+    const first = (await teammates.skill('avery-quinn-lee', Provider.claude)).digest
+
+    const again = (await teammates.skill('avery-quinn-lee', Provider.claude)).digest
+    writeFileSync(join(folder, 'references', 'facts.md'), 'Two.')
+    const changed = (await teammates.skill('avery-quinn-lee', Provider.claude)).digest
+
+    expect(first).toMatch(/^sha256:[0-9a-f]{64}$/)
+    expect(again).toBe(first)
+    expect(changed).not.toBe(first)
   })
 })
 

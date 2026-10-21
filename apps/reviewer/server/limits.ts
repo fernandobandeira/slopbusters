@@ -98,6 +98,9 @@ export const MAX_AGENT_SESSIONS = 100
 
 /** The largest `SKILL.md` a teammate may have; bigger skills belong in its `references/`. */
 export const MAX_SKILL_FILE_BYTES = 256 * 1024
+/** How much of a skill folder its version digest reads, and how many of its files it counts. */
+export const MAX_SKILL_DIGEST_BYTES = 32 * 1024 * 1024
+export const MAX_SKILL_DIGEST_FILES = 2000
 /** Avatars arrive re-encoded by the browser as square PNGs; these bound what the server keeps. */
 export const MAX_AVATAR_BYTES = 512 * 1024
 export const MAX_AVATAR_DIMENSION = 1024

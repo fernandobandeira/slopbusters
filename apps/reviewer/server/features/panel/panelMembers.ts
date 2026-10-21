@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   builtInReviewers,
   reviewerTeammate,
@@ -88,13 +89,17 @@ export class PanelMembers {
   /** A reviewer's instructions as of now; a teammate whose skill was uninstalled fails here. */
   async load(reviewer: PanelReviewer, provider: Provider): Promise<PanelMember> {
     const teammate = reviewerTeammate(reviewer.id)
-    if (!teammate)
-      return {
-        ...reviewer,
-        instructions: await this.options.builtIn(seatReviewer(reviewer.id) as BuiltInReviewer),
-      }
+    if (!teammate) {
+      const instructions = await this.options.builtIn(seatReviewer(reviewer.id) as BuiltInReviewer)
+      return { ...reviewer, instructions, digest: textDigest(instructions) }
+    }
     const skill = await this.options.teammates.skill(teammate, provider)
-    return { ...reviewer, instructions: skill.text, directory: skill.directory }
+    return {
+      ...reviewer,
+      instructions: skill.text,
+      directory: skill.directory,
+      digest: skill.digest,
+    }
   }
 
   /**
@@ -153,6 +158,10 @@ export class PanelMembers {
       ...(description ? { description: description.slice(0, MAX_DESCRIPTION_CHARACTERS) } : {}),
     }
   }
+}
+
+function textDigest(text: string) {
+  return `sha256:${createHash('sha256').update(text).digest('hex')}`
 }
 
 function otherProvider(provider: Provider) {

@@ -16,6 +16,8 @@ import { UserError } from '../../errors'
 export interface TeammateSkill {
   text: string
   directory: string
+  /** Which version of the skill folder this is. */
+  digest: string
 }
 
 /**
@@ -102,8 +104,12 @@ export class Teammates {
       throw new UserError(
         `${teammate.name} uses the ${teammate.skill} skill, which is not installed for ${provider === Provider.claude ? 'Claude' : 'Codex'}. Install it there or switch your primary model in Settings.`,
       )
-    const directory = await this.skills.directory(teammate.skill, provider)
-    return { text: await this.skills.text(teammate.skill, provider), directory }
+    const [directory, text, digest] = await Promise.all([
+      this.skills.directory(teammate.skill, provider),
+      this.skills.text(teammate.skill, provider),
+      this.skills.digest(teammate.skill, provider),
+    ])
+    return { text, directory, digest }
   }
 
   private async requireUsableSkill(name: string, id: string) {

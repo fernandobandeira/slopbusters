@@ -336,6 +336,8 @@ export interface PanelReview {
   unplaced?: UnplacedFinding[]
   /** The seat returned its full cap, so it may have had more findings than it reported. */
   capped?: boolean
+  /** Which version of its skill or instructions the seat reviewed with; its model is the seat's. */
+  skillDigest?: string
   error?: string
 }
 export interface PanelPending extends PanelSnapshot {

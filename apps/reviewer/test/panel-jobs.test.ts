@@ -49,6 +49,11 @@ describe('a panel review', () => {
     const [result] = jobs.get(session.id).results
     expect(result?.advice.findings[0]?.raisedBy).toEqual(['unclebob', 'teammate:avery'])
     expect(result?.reviews.map((review) => review.reviewer)).toHaveLength(3)
+    expect(result?.reviews.map((review) => review.skillDigest)).toEqual([
+      expect.stringMatching(/^sha256:/),
+      expect.stringMatching(/^sha256:/),
+      expect.stringMatching(/^sha256:/),
+    ])
   })
 
   it('runs at most three reviewers at a time', async () => {

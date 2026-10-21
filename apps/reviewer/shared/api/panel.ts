@@ -18,6 +18,7 @@ const review = z.object({
   advice: panelAdviceSchema.optional(),
   unplaced: z.array(z.object({ finding: panelFindingSchema, problem: z.string() })).optional(),
   capped: z.boolean().optional(),
+  skillDigest: z.string().optional(),
   error: z.string().optional(),
 })
 
