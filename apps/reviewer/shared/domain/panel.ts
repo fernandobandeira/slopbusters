@@ -238,13 +238,18 @@ export function normalizeJudgeAdvice(
       ...item,
       raisedBy: item.raisedBy.filter((id) => known.has(id)),
     })),
-    ...unplaced.map(({ finding, problem }) => ({
-      title: finding.title,
-      body: finding.body,
-      ...codeLocation(finding.anchor),
-      raisedBy: finding.raisedBy,
-      reason: `Its location could not be checked: ${problem}`,
-    })),
+    ...unplaced.map(({ finding, problem }) =>
+      setAsideSchema.parse({
+        title: finding.title,
+        body: clip(finding.body, setAsideSchema.shape.body.maxLength),
+        ...codeLocation(finding.anchor),
+        raisedBy: finding.raisedBy,
+        reason: clip(
+          `Its location could not be checked: ${problem}`,
+          setAsideSchema.shape.reason.maxLength,
+        ),
+      }),
+    ),
   ]
   advice.verdict = agreeingVerdict(advice.verdict, advice.findings.length)
   return advice
@@ -281,6 +286,10 @@ function placeFindings<F extends PanelFinding>(
       `${String(unplaced.length)} findings point at a location the supplied evidence does not contain; they are listed apart and were not moved.`,
     )
   return { placed, unplaced }
+}
+
+function clip(text: string, length: number | null) {
+  return length !== null && text.length > length ? `${text.slice(0, length - 1)}…` : text
 }
 
 function codeLocation(anchor: Anchor): { path?: string; line?: number } {
