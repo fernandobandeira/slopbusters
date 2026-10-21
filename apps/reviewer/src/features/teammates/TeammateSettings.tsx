@@ -3,6 +3,7 @@ import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
 import {
   availabilityLabels,
+  DEFAULT_TEAMMATE_FINDINGS,
   skillAvailability,
   type Teammate,
 } from '../../../shared/domain/teammates'
@@ -38,7 +39,7 @@ export function TeammateSettings() {
             onEdit={() => {
               setWizard({ editing: teammate })
             }}
-            onRemoved={query.reload}
+            onChanged={query.reload}
           />
         ))}
       </ul>
@@ -70,11 +71,11 @@ export function TeammateSettings() {
 function TeammateRow({
   teammate,
   onEdit,
-  onRemoved,
+  onChanged,
 }: {
   teammate: Teammate
   onEdit: () => void
-  onRemoved: () => void
+  onChanged: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
@@ -83,7 +84,20 @@ function TeammateRow({
     setError('')
     try {
       await call(routes.removeTeammate, { params: { id: teammate.id } })
-      onRemoved()
+      onChanged()
+    } catch (cause) {
+      setError(message(cause))
+    }
+  }
+  async function adoptDefaultCap() {
+    setError('')
+    try {
+      const { name, title, skill } = teammate
+      await call(routes.updateTeammate, {
+        params: { id: teammate.id },
+        body: { name, skill, maxFindings: DEFAULT_TEAMMATE_FINDINGS, ...(title ? { title } : {}) },
+      })
+      onChanged()
     } catch (cause) {
       setError(message(cause))
     }
@@ -103,6 +117,18 @@ function TeammateRow({
           <span className={`teammate-availability teammate-availability-${availability}`}>
             {availabilityLabels[availability]}
           </span>
+        </span>
+        <span className="muted">
+          Up to {teammate.maxFindings} findings per PR
+          {teammate.maxFindings < DEFAULT_TEAMMATE_FINDINGS && (
+            <>
+              {' '}
+              ·{' '}
+              <Button size="xs" variant="link" onClick={() => void adoptDefaultCap()}>
+                Use new default ({DEFAULT_TEAMMATE_FINDINGS})
+              </Button>
+            </>
+          )}
         </span>
         {availability === 'missing' && (
           <span role="status" className="teammate-skill-problem">

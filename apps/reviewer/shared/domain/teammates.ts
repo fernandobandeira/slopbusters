@@ -19,8 +19,12 @@ export const teammateIdSchema = z
   .max(40)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
 
-export const DEFAULT_TEAMMATE_FINDINGS = 10
-export const MAX_TEAMMATE_FINDINGS = 30
+/**
+ * A teammate returns its most likely findings in rank order up to this many; the grounding stage
+ * checks them, so recall comes first. Teammates saved with a smaller cap keep it until changed.
+ */
+export const DEFAULT_TEAMMATE_FINDINGS = 40
+export const MAX_TEAMMATE_FINDINGS = 40
 
 /** What the wizard asks for; the id is derived from the name when the teammate is created. */
 export const teammateInputSchema = z

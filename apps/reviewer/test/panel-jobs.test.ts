@@ -14,7 +14,7 @@ import { PanelMembers } from '../server/features/panel/panelMembers'
 import { Teammates } from '../server/features/teammates/teammates'
 import type { ReviewerId } from '../shared/domain/panel'
 import { Provider } from '../shared/domain/types'
-import { fixtureJudgeAdvice, fixturePanelAdvice } from './fixtures/panel'
+import { fixtureJudgeAdvice, fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
 import { fixturePull } from './fixtures/pull'
 import { installSkill, temporarySkillRoots } from './fixtures/skills'
 import { recordingTurns } from './fixtures/turns'
@@ -81,7 +81,10 @@ describe('a panel review', () => {
     expect(reviews.map((request) => request.model)).toEqual([primary, primary, primary])
     const avery = reviews.find((request) => request.purpose?.startsWith('Avery'))
     expect(avery?.prompt).toContain('Review carefully.')
-    expect(avery?.prompt).toContain('Report at most 5 findings')
+    expect(avery?.prompt).toContain('most likely first')
+    expect(avery?.prompt).toContain('Return at most 5.')
+    const bob = reviews.find((request) => request.purpose?.startsWith('Uncle Bob'))
+    expect(bob?.prompt).toContain('Report at most 10 findings')
     expect(avery?.include).toEqual([
       { directory: expect.stringMatching(/AveryReview$/) as string, as: '.slopbusters/skill' },
     ])
@@ -122,6 +125,35 @@ describe('a panel review', () => {
     })
 
     expect(most).toBe(3)
+  })
+})
+
+describe('a seat that returns its full cap', () => {
+  it('is marked as possibly having more, and the judge’s result says so', async () => {
+    const five = Array.from({ length: 5 }, (_, index) =>
+      fixturePanelFinding({ id: `finding-${String(index)}` }),
+    )
+    const { turns } = recordingTurns((request) =>
+      request.purpose?.startsWith('Avery') ? fixturePanelAdvice(five) : reply(request),
+    )
+    const jobs = panel(turns)
+
+    const session = await jobs.start(repository, [url], everyone)
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
+
+    const [result] = jobs.get(session.id).results
+    const capped = result?.reviews.filter((review) => review.capped)
+    expect(capped?.map((review) => review.reviewer)).toEqual(['teammate:avery'])
+    expect(
+      result?.reviews
+        .find((review) => review.reviewer === 'teammate:avery')
+        ?.advice?.findings.map((finding) => finding.id),
+    ).toEqual(five.map((finding) => finding.id))
+    expect(result?.advice.limitations).toContain(
+      'Avery returned as many findings as allowed and may have had more.',
+    )
   })
 })
 

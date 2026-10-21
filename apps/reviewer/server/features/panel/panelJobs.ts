@@ -253,8 +253,12 @@ export class PanelJobs {
       concurrency: PANEL_REVIEWER_CONCURRENCY,
       review: (reviewer) => this.reviewOne(session, pending, reviewer, run),
       failure: (reviewer) => `${reviewer.name} failed.`,
-      landed: (reviewer, outcome) => {
-        pending.reviews.push({ reviewer: reviewer.id, ...outcome })
+      landed: (reviewer, { advice: seat, error }) => {
+        pending.reviews.push({
+          reviewer: reviewer.id,
+          ...(seat ? { advice: seat.advice, ...(seat.capped ? { capped: true } : {}) } : {}),
+          ...(error === undefined ? {} : { error }),
+        })
         this.reportReviewers(session, pending)
       },
     })

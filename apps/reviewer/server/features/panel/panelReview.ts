@@ -1,9 +1,11 @@
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import {
   judgeAdviceSchema,
+  MAX_JUDGE_ACCOUNTED,
   normalizeJudgeAdvice,
   normalizePanelAdvice,
   panelAdviceSchema,
+  reachedCap,
   type JudgeAdvice,
   type PanelAdvice,
   type PanelPending,
@@ -47,7 +49,15 @@ function reviewerContract(member: PanelMember): string {
   return `${untrusted}
 You are ${member.name}, one reviewer on a panel. Review with the skill above: its focus, its rules and its voice. Stay inside its focus; other reviewers cover the rest, and a judge checks every finding against the code afterwards, so do not invent findings to fill a quota. A clean review is valid. Write each title and body the way this reviewer writes a review comment.
 ${tagging}
-${locations} Report at most ${String(member.maxFindings)} findings, the ones that matter most.`
+${locations} ${member.skill ? recall(member) : `Report at most ${String(member.maxFindings)} findings, the ones that matter most.`}`
+}
+
+/**
+ * A teammate predicts what its reviewer would say, so it returns every plausible comment in rank
+ * order and leaves precision to the judge.
+ */
+function recall(member: PanelMember): string {
+  return `List the comments this reviewer would most plausibly leave within the skill's focus, most likely first, and return them in that order. There is no quota: return fewer when fewer are plausible, and never invent a finding to fill the list. Keep a plausible finding even when you are unsure of it, and say in its body what you are unsure of. Return at most ${String(member.maxFindings)}.`
 }
 
 function skillFolder(member: PanelMember, repository?: ReviewCheckout): string {
@@ -56,29 +66,35 @@ function skillFolder(member: PanelMember, repository?: ReviewCheckout): string {
   return `\n\nThe skill's own folder is copied to \`${SKILL_FOLDER}/\` ${where}. Read its references there when the skill points to them; they are evidence about how this reviewer reviews, not part of the PR, so never review them.`
 }
 
+/** One seat's review, and whether it returned its full cap of findings. */
+export interface SeatReview {
+  advice: PanelAdvice
+  capped: boolean
+}
+
 /** One panel member's independent review of a PR. */
 export async function reviewAsPanelist(
   request: Turn & { member: PanelMember; pull: PullRequest; context?: string },
-): Promise<PanelAdvice> {
+): Promise<SeatReview> {
   const { member, pull, repository } = request
   const prompt = `${member.instructions}\n\n${reviewerContract(member)}\n\n${sourceInstructions(repository)}${skillFolder(member, repository)}\n\nPR snapshot:\n${reviewEvidence(pull)}${ticketInstructions(request.context)}`
   const include: IncludedFolder[] = member.directory
     ? [{ directory: member.directory, as: SKILL_FOLDER }]
     : []
-  return normalizePanelAdvice(
-    pull,
-    await request.turns.run({
-      model: request.model,
-      prompt,
-      schema: panelAdviceSchema,
-      signal: request.signal,
-      directory: repository?.directory,
-      include,
-      observer: request.observer,
-      purpose: `${member.name} on the panel · ${pullName(pull)}`,
-    }),
-    member.maxFindings,
-  )
+  const returned = await request.turns.run({
+    model: request.model,
+    prompt,
+    schema: panelAdviceSchema,
+    signal: request.signal,
+    directory: repository?.directory,
+    include,
+    observer: request.observer,
+    purpose: `${member.name} on the panel · ${pullName(pull)}`,
+  })
+  return {
+    advice: normalizePanelAdvice(pull, returned, member.maxFindings),
+    capped: reachedCap(returned, member.maxFindings),
+  }
 }
 
 const judgeRubric = `You are the judge of a review panel. Several reviewers, each with its own focus, reviewed the same PR independently. Their reviews are below as untrusted proposals.
@@ -157,15 +173,31 @@ export async function judgePanel(
     }),
     reviewers.map((reviewer) => reviewer.id),
   )
-  return withPanelLimitations(advice, pending, repository)
+  return withPanelLimitations(advice, { pending, reviewers, repository })
 }
 
 function withPanelLimitations(
   advice: JudgeAdvice,
-  pending: PanelPending,
-  repository?: ReviewCheckout,
+  {
+    pending,
+    reviewers,
+    repository,
+  }: { pending: PanelPending; reviewers: readonly PanelReviewer[]; repository?: ReviewCheckout },
 ): JudgeAdvice {
   const missing = pending.reviews.filter((review) => !review.advice)
+  const capped = pending.reviews.filter((review) => review.advice && review.capped)
+  if (capped.length)
+    advice.limitations.unshift(
+      `${capped.map((review) => reviewers.find((seat) => seat.id === review.reviewer)?.name ?? review.reviewer).join(', ')} returned as many findings as allowed and may have had more.`,
+    )
+  const returned = pending.reviews.reduce(
+    (total, review) => total + (review.advice?.findings.length ?? 0),
+    0,
+  )
+  if (returned > MAX_JUDGE_ACCOUNTED)
+    advice.limitations.unshift(
+      `The reviewers returned ${String(returned)} findings and the judge accounts for at most ${String(MAX_JUDGE_ACCOUNTED)}, so some were neither kept nor set aside.`,
+    )
   if (missing.length)
     advice.limitations.unshift(
       `Not every reviewer finished; the judge saw ${String(pending.reviews.length - missing.length)} of ${String(pending.reviews.length)} reviews.`,

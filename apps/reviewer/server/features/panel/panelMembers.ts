@@ -8,7 +8,7 @@ import {
   type ReviewerId,
 } from '../../../shared/domain/panel'
 import { modelForProvider, type OrganizationPreferences } from '../../../shared/domain/preferences'
-import { DEFAULT_TEAMMATE_FINDINGS, installedFor } from '../../../shared/domain/teammates'
+import { installedFor } from '../../../shared/domain/teammates'
 import { Provider } from '../../../shared/domain/types'
 import { UserError } from '../../errors'
 import { MAX_PANEL_REVIEWERS } from '../../limits'
@@ -16,6 +16,8 @@ import type { Teammates } from '../teammates/teammates'
 import type { PanelMember } from './panelReview'
 
 const MAX_DESCRIPTION_CHARACTERS = 240
+/** Uncle Bob and the Terminator report what matters most; only teammates aim for recall. */
+const BUILT_IN_FINDINGS = 10
 
 /** Who can sit on a panel: the built-in reviewers and every teammate installed for the model. */
 export class PanelMembers {
@@ -114,7 +116,7 @@ export class PanelMembers {
         id,
         name: builtIn.name,
         description: builtIn.description,
-        maxFindings: DEFAULT_TEAMMATE_FINDINGS,
+        maxFindings: BUILT_IN_FINDINGS,
       }
     }
     const teammate = await this.options.teammates.get(teammateId)

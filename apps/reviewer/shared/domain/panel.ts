@@ -152,13 +152,18 @@ export const setAsideSchema = z
   .strict()
 export type SetAside = z.infer<typeof setAsideSchema>
 
+const MAX_JUDGED_FINDINGS = 60
+const MAX_SET_ASIDE = 60
+/** The most findings the judge can keep or set aside in one reply; the rest go unaccounted. */
+export const MAX_JUDGE_ACCOUNTED = MAX_JUDGED_FINDINGS + MAX_SET_ASIDE
+
 /** The judge's verdict over every review: verified findings with who raised them. */
 export const judgeAdviceSchema = z
   .object({
     verdict: z.enum(verdicts),
     summary: z.string().min(1).max(2000),
-    findings: z.array(judgedFindingSchema).max(60),
-    setAside: z.array(setAsideSchema).max(60),
+    findings: z.array(judgedFindingSchema).max(MAX_JUDGED_FINDINGS),
+    setAside: z.array(setAsideSchema).max(MAX_SET_ASIDE),
     good: z.array(z.string().min(1).max(1000)).max(8),
     limitations: z.array(z.string().min(1).max(1500)).max(16),
     disagreements: z.array(z.string().min(1).max(1500)).max(8),
@@ -167,8 +172,8 @@ export const judgeAdviceSchema = z
 export type JudgeAdvice = z.infer<typeof judgeAdviceSchema>
 
 /**
- * Keep a reviewer's findings that point at changed lines, at most `maxFindings` of them in
- * reading order, and a verdict that agrees with what is left.
+ * Keep a reviewer's findings that point at changed lines, the first `maxFindings` of them in the
+ * order the reviewer ranked them, and a verdict that agrees with what is left.
  */
 export function normalizePanelAdvice(
   pull: PullRequest,
@@ -176,14 +181,22 @@ export function normalizePanelAdvice(
   maxFindings: number,
 ): PanelAdvice {
   const advice = panelAdviceSchema.parse(input)
-  const kept = rankFindings(usableFindings(pull, advice.findings, advice.limitations))
+  const kept = usableFindings(pull, advice.findings, advice.limitations)
   if (kept.length > maxFindings)
     advice.limitations.push(
-      `Kept the ${String(maxFindings)} highest-ranked of ${String(kept.length)} findings.`,
+      `Kept the first ${String(maxFindings)} of ${String(kept.length)} ranked findings.`,
     )
   advice.findings = kept.slice(0, maxFindings)
   advice.verdict = agreeingVerdict(advice.verdict, advice.findings.length)
   return advice
+}
+
+/**
+ * Whether a seat returned as many findings as it was allowed, so it may have had more. The app
+ * cannot count findings a model never returned.
+ */
+export function reachedCap(advice: Pick<PanelAdvice, 'findings'>, maxFindings: number): boolean {
+  return advice.findings.length >= maxFindings
 }
 
 /** The judge's advice, keeping only findings that point at changes and that a reviewer raised. */
@@ -263,6 +276,8 @@ export interface PanelReview {
   /** The seat that wrote it. */
   reviewer: string
   advice?: PanelAdvice
+  /** The seat returned its full cap, so it may have had more findings than it reported. */
+  capped?: boolean
   error?: string
 }
 export interface PanelPending {

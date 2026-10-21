@@ -15,6 +15,7 @@ import { pullSchema } from './reviewSchemas'
 const review = z.object({
   reviewer: seatIdSchema,
   advice: panelAdviceSchema.optional(),
+  capped: z.boolean().optional(),
   error: z.string().optional(),
 })
 

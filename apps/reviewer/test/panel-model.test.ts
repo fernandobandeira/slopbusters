@@ -26,7 +26,7 @@ describe('a panel reviewer’s advice', () => {
     expect(advice.limitations.join(' ')).toMatch(/Dropped 1 findings/)
   })
 
-  it('keeps the highest-ranked findings up to the reviewer’s cap', () => {
+  it('keeps the reviewer’s own ranking up to its cap', () => {
     const findings = [
       fixturePanelFinding({ id: 'question', tag: 'decision', severity: 'must-fix' }),
       fixturePanelFinding({ id: 'rule', tag: 'convention', severity: 'consider' }),
@@ -35,8 +35,8 @@ describe('a panel reviewer’s advice', () => {
 
     const advice = normalizePanelAdvice(pull, fixturePanelAdvice(findings), 2)
 
-    expect(advice.findings.map((finding) => finding.id)).toEqual(['rule', 'code'])
-    expect(advice.limitations).toContain('Kept the 2 highest-ranked of 3 findings.')
+    expect(advice.findings.map((finding) => finding.id)).toEqual(['question', 'rule'])
+    expect(advice.limitations).toContain('Kept the first 2 of 3 ranked findings.')
   })
 
   it('makes the verdict agree with the findings that are left', () => {

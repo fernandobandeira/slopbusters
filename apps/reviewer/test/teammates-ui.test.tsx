@@ -99,7 +99,32 @@ describe('the teammate wizard', () => {
       })
     })
     expect(call).toHaveBeenCalledWith(routes.createTeammate, {
-      body: { name: 'Avery', skill: 'AveryReview', maxFindings: 10 },
+      body: { name: 'Avery', skill: 'AveryReview', maxFindings: 40 },
+    })
+  })
+
+  it('keeps a saved cap and offers the new default without changing it silently', async () => {
+    teammates = [teammate({ title: 'Backend lead' })]
+    vi.mocked(call).mockImplementation((route: ApiContract) => {
+      if (route === routes.listTeammates) return Promise.resolve({ teammates })
+      if (route === routes.updateTeammate) return Promise.resolve(teammate({ maxFindings: 40 }))
+      return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
+    })
+    render(
+      <MemoryRouter>
+        <TeammateSettings />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText(/Up to 10 findings per PR/)).toBeTruthy()
+    expect(call).not.toHaveBeenCalledWith(routes.updateTeammate, expect.anything())
+    fireEvent.click(screen.getByRole('button', { name: 'Use new default (40)' }))
+
+    await waitFor(() => {
+      expect(call).toHaveBeenCalledWith(routes.updateTeammate, {
+        params: { id: 'avery' },
+        body: { name: 'Avery', skill: 'AveryReview', maxFindings: 40, title: 'Backend lead' },
+      })
     })
   })
 
