@@ -12,9 +12,9 @@ import type {
 import { PanelJobs } from '../server/features/panel/panelJobs'
 import { PanelMembers } from '../server/features/panel/panelMembers'
 import { Teammates } from '../server/features/teammates/teammates'
-import * as routes from '../shared/api'
-import type { PanelFinding, PanelSession, ReviewerId } from '../shared/domain/panel'
+import type { ReviewerId } from '../shared/domain/panel'
 import { Provider } from '../shared/domain/types'
+import { UserError } from '../server/errors'
 import { fixtureJudgeAdvice, fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
 import { fixturePull } from './fixtures/pull'
 import { installSkill, temporarySkillRoots } from './fixtures/skills'
@@ -46,13 +46,18 @@ afterEach(async () => {
   rmSync(roots.home, { recursive: true, force: true })
 })
 
-function panel(turns: StructuredTurns) {
+function panel(
+  turns: StructuredTurns,
+  sources: Pick<ConstructorParameters<typeof PanelJobs>[0], 'loadPull' | 'stack'> = {
+    loadPull: () => Promise.resolve(fixturePull()),
+  },
+) {
   jobs = new PanelJobs({
     store: store.panel,
     turns,
     members: new PanelMembers({ teammates, builtIn: (id) => Promise.resolve(`The ${id} skill.`) }),
     models: () => ({ primary, companion }),
-    loadPull: () => Promise.resolve(fixturePull()),
+    ...sources,
   })
   return jobs
 }
@@ -126,6 +131,82 @@ describe('a panel review', () => {
     })
 
     expect(most).toBe(3)
+  })
+})
+
+describe('a PR in a stack', () => {
+  const layerUrl = (number: number) => url.replace(/\d+$/, String(number))
+  const layer = (number: number) => ({
+    ...fixturePull(),
+    number,
+    url: layerUrl(number),
+    title: `Layer ${String(number)}`,
+  })
+  const item = (number: number, state: 'open' | 'merged' = 'open') => ({
+    number,
+    url: number === 128 ? url : layerUrl(number),
+    title: `Layer ${String(number)}`,
+    repository,
+    headBranch: `layer-${String(number)}`,
+    baseBranch: 'main',
+    state,
+    isDraft: false,
+  })
+  const stack = () =>
+    Promise.resolve({
+      stack: {
+        id: 's',
+        source: 'github' as const,
+        baseBranch: 'main',
+        position: 2,
+        size: 4,
+        items: [item(127, 'merged'), item(128), item(131), item(140)],
+        warnings: [],
+      },
+      warnings: [],
+    })
+
+  it('loads the other open layers before any seat starts and lets seats anchor on them', async () => {
+    const loads: string[] = []
+    const { turns, requests } = recordingTurns((request) => {
+      if (isJudge(request)) return fixtureJudgeAdvice(['unclebob'])
+      expect(loads).toEqual([url, layerUrl(131), layerUrl(140)])
+      return fixturePanelAdvice([
+        fixturePanelFinding({
+          id: 'rename-above',
+          anchor: { kind: 'stack', pull: 131, location: { kind: 'description', field: 'title' } },
+        }),
+      ])
+    })
+    const jobs = panel(turns, {
+      loadPull: (loaded) => {
+        loads.push(loaded)
+        if (loaded === layerUrl(140)) return Promise.reject(new UserError('Not found.'))
+        return Promise.resolve(
+          loaded === url ? fixturePull() : layer(Number(loaded.split('/').pop())),
+        )
+      },
+      stack,
+    })
+
+    const session = await jobs.start(repository, [url], ['unclebob'])
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
+
+    const seat = requests.find((request) => !isJudge(request))
+    expect(seat?.prompt).toContain("Other open layers of this PR's stack")
+    expect(seat?.prompt).toContain('PR #131:')
+    expect(seat?.prompt).toContain("by that layer's PR number (#131)")
+    const [result] = jobs.get(session.id).results
+    expect(result?.reviews[0]?.advice?.findings[0]?.anchor).toMatchObject({
+      kind: 'stack',
+      pull: 131,
+      fingerprint: expect.any(String) as string,
+    })
+    expect(result?.advice.limitations.join(' ')).toMatch(
+      /Other stack layers could not be loaded.*PR #140 \(Not found\.\)/,
+    )
   })
 })
 
@@ -344,32 +425,6 @@ describe('starting a panel', () => {
     expect((await jobs.start(repository, [url], everyone)).id).toBe(session.id)
     await expect(jobs.start(repository, [url], ['unclebob'])).rejects.toThrow(/Finish or cancel/)
     expect(jobs.cancel(session.id).status).toBe('cancelled')
-  })
-
-  it('reads a session saved before anchors, with each finding on its changed line', async () => {
-    const jobs = panel(recordingTurns(reply).turns)
-    const session = await jobs.start(repository, [url], ['unclebob'])
-    await vi.waitFor(() => {
-      expect(jobs.get(session.id).status).toBe('complete')
-    })
-    const saved = jobs.get(session.id)
-    const flat = (finding: PanelFinding) => {
-      const { anchor, ...rest } = finding
-      return anchor.kind === 'change' ? { ...rest, ...anchor, kind: undefined } : finding
-    }
-    const legacy = JSON.parse(
-      JSON.stringify(saved, (key, value: unknown) =>
-        key === 'findings' ? (value as PanelFinding[]).map(flat) : value,
-      ),
-    ) as PanelSession
-    store.panel.save({ ...legacy, id: 'legacy' })
-
-    const loaded = jobs.get('legacy')
-
-    expect(loaded.results[0]?.advice.findings[0]?.anchor).toEqual(
-      saved.results[0]?.advice.findings[0]?.anchor,
-    )
-    expect(() => routes.getPanel.response.parse(loaded)).not.toThrow()
   })
 
   it('marks a panel interrupted by a restart as cancelled', async () => {

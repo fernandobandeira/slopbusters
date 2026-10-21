@@ -105,3 +105,9 @@ export const MAX_PANEL_REVIEWERS = 8
 /** How many panel reviewers run at the same time on one PR. */
 export const PANEL_REVIEWER_CONCURRENCY = 3
 export const MAX_SAVED_PANEL_REVIEWS = 500
+/** How many PR snapshots a panel loads at the same time before its seats start. */
+export const PANEL_PREPARE_CONCURRENCY = 3
+/** The most other stack layers a panel loads as evidence; GitHub stacks rarely run longer. */
+export const MAX_PANEL_STACK_LAYERS = 12
+/** How much of the other layers' diffs a seat's prompt carries; past it, only their file lists. */
+export const MAX_PANEL_LAYER_EVIDENCE_CHARS = 300_000

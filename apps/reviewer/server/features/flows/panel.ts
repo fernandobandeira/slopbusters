@@ -12,7 +12,7 @@ export interface SeatOutcome<Advice> {
  * others; cancellation rejects as soon as a seat sees it. Outcomes come back in seat order, and `landed` hears each
  * one as it finishes so the caller can save progress.
  */
-export async function reviewSeats<Seat, Advice>(
+export function reviewSeats<Seat, Advice>(
   seats: readonly Seat[],
   options: {
     signal: AbortSignal
@@ -23,25 +23,41 @@ export async function reviewSeats<Seat, Advice>(
     landed?: (seat: Seat, outcome: SeatOutcome<Advice>) => void
   },
 ): Promise<SeatOutcome<Advice>[]> {
+  return settleEach(seats, { ...options, run: options.review })
+}
+
+/**
+ * Run `run` for every item, at most `concurrency` at a time, recording a failure beside the other
+ * results instead of stopping them. Cancellation rejects as soon as a run sees it.
+ */
+export async function settleEach<Item, Result>(
+  items: readonly Item[],
+  options: {
+    signal: AbortSignal
+    concurrency: number
+    run: (item: Item) => Promise<Result>
+    failure: (item: Item) => string
+    landed?: (item: Item, outcome: SeatOutcome<Result>) => void
+  },
+): Promise<SeatOutcome<Result>[]> {
   const { signal } = options
-  const outcomes: SeatOutcome<Advice>[] = []
-  const queue = seats.map((seat, index) => ({ seat, index }))
-  const reviewOne = async ({ seat, index }: { seat: Seat; index: number }) => {
-    let outcome: SeatOutcome<Advice>
+  const outcomes: SeatOutcome<Result>[] = []
+  const queue = items.map((item, index) => ({ item, index }))
+  const runOne = async ({ item, index }: { item: Item; index: number }) => {
+    let outcome: SeatOutcome<Result>
     try {
-      outcome = { advice: await options.review(seat) }
+      outcome = { advice: await options.run(item) }
     } catch (error) {
       signal.throwIfAborted()
-      outcome = { error: publicError(error, options.failure(seat)) }
+      outcome = { error: publicError(error, options.failure(item)) }
     }
     signal.throwIfAborted()
     outcomes[index] = outcome
-    options.landed?.(seat, outcome)
+    options.landed?.(item, outcome)
   }
   const workers = Array.from({ length: Math.min(options.concurrency, queue.length) }, async () => {
-    // A cancelled panel takes no more seats; the first seat to see the abort rejects the panel.
-    for (let next = queue.shift(); next && !signal.aborted; next = queue.shift())
-      await reviewOne(next)
+    // A cancelled run takes no more items; the first to see the abort rejects the whole run.
+    for (let next = queue.shift(); next && !signal.aborted; next = queue.shift()) await runOne(next)
   })
   await Promise.all(workers)
   signal.throwIfAborted()

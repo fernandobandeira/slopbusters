@@ -180,6 +180,7 @@ export function createServices(options: ReviewerServerOptions) {
     members: panelMembers,
     models: () => ({ primary: chatModel(), companion: store.getPreferences().companion }),
     loadPull: pulls.fetchPull,
+    stack: (url) => stacks.getStackMetadata(url),
     openRepository,
     context: tickets.contextForPull,
   })

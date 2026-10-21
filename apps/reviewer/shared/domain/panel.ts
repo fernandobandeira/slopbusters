@@ -343,6 +343,23 @@ export interface PanelResult {
   /** What each reviewer said before the judge, for a chat that continues one of them. */
   reviews: PanelReview[]
 }
+/** A PR snapshot a round loaded, and what the PR is meant to do. */
+export interface PanelSnapshot {
+  pull: PullRequest
+  fingerprint: string
+  context?: string
+}
+/**
+ * What a round loads before any seat starts: every chosen PR and the other open layers of their
+ * stacks, so the first layer's seats already see the layers above it.
+ */
+export interface PanelPreparation {
+  snapshots: PanelSnapshot[]
+  /** By chosen PR URL: the URLs of the other layers of its stack that loaded. */
+  layers: Record<string, string[]>
+  /** By chosen PR URL: what about its stack could not be loaded, in words. */
+  missing: Record<string, string[]>
+}
 export interface PanelSession {
   id: string
   repository: string
@@ -353,6 +370,8 @@ export interface PanelSession {
   progress: string
   results: PanelResult[]
   pending?: PanelPending
+  /** Kept on the server; the API leaves the loaded layers out. */
+  preparation?: PanelPreparation
   error?: string
   createdAt: string
 }

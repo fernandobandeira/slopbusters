@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
+import type { LayerSnapshot } from '../../../shared/domain/anchors'
 import type {
   PanelPending,
+  PanelPreparation,
   PanelReview,
   PanelReviewer,
   PanelSession,
@@ -9,17 +11,18 @@ import type {
 } from '../../../shared/domain/panel'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import { blocksNewReview, reviewedPullsLabel } from '../../../shared/domain/reviewSession'
+import type { PullStackResult } from '../../../shared/domain/stacks'
 import type { PullRequest } from '../../../shared/domain/types'
 import type { PanelSessionStore } from '../../adapters/panelSessionStore'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { publicError, UserError } from '../../errors'
 import { PANEL_REVIEWER_CONCURRENCY } from '../../limits'
-import { pullFingerprint } from '../../reviewSnapshot'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { FlowJobs } from '../flows/flowJobs'
 import { failedSeats, reviewSeats } from '../flows/panel'
 import type { PanelMembers } from './panelMembers'
+import { layersOf, preparePanelRound } from './panelPreparation'
 import { judgePanel, reviewAsPanelist } from './panelReview'
 
 interface Options {
@@ -29,6 +32,8 @@ interface Options {
   /** The primary model judges; each seat reviews on the model for its provider. */
   models: () => { primary: OrganizationPreferences; companion?: OrganizationPreferences }
   loadPull: (url: string) => Promise<PullRequest>
+  /** The PR's stack, so seats see its other open layers. */
+  stack?: (url: string) => Promise<PullStackResult>
   sessions?: AgentSessions
   openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
   /** Evidence about what the PR is meant to do, such as its linked ticket. */
@@ -79,7 +84,7 @@ export class PanelJobs {
       model: models.primary,
       reviewers,
       status: 'running',
-      progress: 'Loading PR snapshots…',
+      progress: 'Loading PR snapshots and their stacks…',
       results: [],
       createdAt: new Date().toISOString(),
     }
@@ -144,10 +149,12 @@ export class PanelJobs {
     this.jobs.launch(session, (signal) => this.run(session, signal, mode))
   }
   private async run(session: PanelSession, signal: AbortSignal, mode: RunMode): Promise<void> {
+    const preparation = session.preparation ?? (await this.prepareRound(session, signal))
     for (let index = session.results.length; index < session.urls.length; index++) {
       signal.throwIfAborted()
       const usePending = mode !== 'fresh' && session.pending
-      if (!(await this.reviewPull(session, signal, usePending ? mode : 'fresh', index))) return
+      const round = { preparation, index, mode: usePending ? mode : 'fresh' } as const
+      if (!(await this.reviewPull(session, signal, round))) return
       mode = 'fresh'
     }
     session.status = 'complete'
@@ -160,17 +167,17 @@ export class PanelJobs {
   private async reviewPull(
     session: PanelSession,
     signal: AbortSignal,
-    mode: RunMode,
-    index: number,
+    { preparation, index, mode }: { preparation: PanelPreparation; index: number; mode: RunMode },
   ): Promise<boolean> {
     let repository: ReviewCheckout | undefined
     try {
       const pending =
-        mode === 'fresh' ? await this.prepare(session, signal, index) : session.pending
+        mode === 'fresh' ? this.pendingFor(session, preparation, index) : session.pending
       if (!pending) throw new Error('Missing pending panel review.')
+      const layers = layersOf(preparation, pending.pull.url)
       const source = await this.openSource(pending.pull, signal)
       repository = source.repository
-      if (mode !== 'judge') await this.review(session, pending, { signal, repository })
+      if (mode !== 'judge') await this.review(session, pending, { signal, repository, layers })
       if (!this.canJudge(session, pending, mode)) return false
       this.progress(
         session,
@@ -193,9 +200,11 @@ export class PanelJobs {
           pending,
           reviewers,
           skillFolders,
+          layers,
         })
       const advice = await this.track(session, { label: 'Judge', url: pending.pull.url }, execute)
       signal.throwIfAborted()
+      advice.limitations.unshift(...(preparation.missing[pending.pull.url] ?? []))
       if (source.limitation) advice.limitations.unshift(source.limitation)
       session.results.push({ ...pending, advice, reviews: pending.reviews })
       session.pending = undefined
@@ -205,22 +214,25 @@ export class PanelJobs {
       repository?.release()
     }
   }
-  private async prepare(session: PanelSession, signal: AbortSignal, index: number) {
-    this.progress(session, `Loading PR ${String(index + 1)} of ${String(session.urls.length)}…`)
+  private pendingFor(session: PanelSession, preparation: PanelPreparation, index: number) {
     const url = session.urls[index]
-    if (!url) throw new Error('Missing PR URL.')
-    const pull = await this.options.loadPull(url)
-    signal.throwIfAborted()
-    const context = await this.options.context?.(pull, signal)
-    signal.throwIfAborted()
-    const pending: PanelPending = {
-      pull,
-      fingerprint: pullFingerprint(pull),
-      ...(context ? { context } : {}),
-      reviews: [],
-    }
+    const snapshot = preparation.snapshots.find((entry) => entry.pull.url === url)
+    if (!snapshot) throw new Error('Missing PR snapshot.')
+    const pending: PanelPending = { ...snapshot, reviews: [] }
     session.pending = pending
     return pending
+  }
+  private async prepareRound(session: PanelSession, signal: AbortSignal) {
+    const preparation = await preparePanelRound(session.urls, {
+      ...this.options,
+      signal,
+      progress: (progress) => {
+        this.progress(session, progress)
+      },
+    })
+    session.preparation = preparation
+    this.save(session)
+    return preparation
   }
   /** The saved checkout of the PR head; without one, reviewers read the snapshot only. */
   private async openSource(
@@ -241,7 +253,7 @@ export class PanelJobs {
   private async review(
     session: PanelSession,
     pending: PanelPending,
-    run: { signal: AbortSignal; repository?: ReviewCheckout },
+    run: { signal: AbortSignal; repository?: ReviewCheckout; layers: LayerSnapshot[] },
   ) {
     pending.reviews = pending.reviews.filter((review) => review.advice)
     const waiting = session.reviewers.filter(
@@ -273,7 +285,11 @@ export class PanelJobs {
     session: PanelSession,
     pending: PanelPending,
     reviewer: PanelReviewer,
-    { signal, repository }: { signal: AbortSignal; repository?: ReviewCheckout },
+    {
+      signal,
+      repository,
+      layers,
+    }: { signal: AbortSignal; repository?: ReviewCheckout; layers: LayerSnapshot[] },
   ) {
     const model = reviewer.model ?? session.model
     const member = await this.options.members.load(reviewer, model.provider)
@@ -286,6 +302,7 @@ export class PanelJobs {
         observer,
         member,
         pull: pending.pull,
+        layers,
         context: pending.context,
       })
     const label = `${reviewer.name} review`
