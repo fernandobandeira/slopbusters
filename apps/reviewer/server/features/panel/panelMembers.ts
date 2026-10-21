@@ -36,13 +36,15 @@ export class PanelMembers {
     requests: readonly PanelSeatRequest[],
     models: { primary: OrganizationPreferences; companion?: OrganizationPreferences },
   ): Promise<PanelReviewer[]> {
-    const asked = requests.map((request) =>
-      typeof request === 'string'
-        ? { id: request, providers: [models.primary.provider] }
-        : {
-            id: request.id,
-            providers: [...new Set(request.providers ?? [models.primary.provider])],
-          },
+    const asked = await Promise.all(
+      requests.map(async (request) => {
+        const id = typeof request === 'string' ? request : request.id
+        const picked = typeof request === 'string' ? undefined : request.providers
+        return {
+          id,
+          providers: [...new Set(picked ?? (await this.defaultProviders(id, models.primary)))],
+        }
+      }),
     )
     if (new Set(asked.map((entry) => entry.id)).size !== asked.length)
       throw new UserError('Pick each reviewer only once.')
@@ -64,6 +66,23 @@ export class PanelMembers {
       ),
     )
     return seats
+  }
+
+  /**
+   * Where a reviewer sits when the request names no provider: a teammate on every provider its
+   * skill is installed for, so both models predict its comments; anyone else on the primary's.
+   */
+  private async defaultProviders(
+    id: ReviewerId,
+    primary: OrganizationPreferences,
+  ): Promise<Provider[]> {
+    const teammateId = reviewerTeammate(id)
+    if (!teammateId) return [primary.provider]
+    const { locations } = await this.options.teammates.get(teammateId)
+    const installed = [primary.provider, otherProvider(primary.provider)].filter((provider) =>
+      installedFor(locations, provider),
+    )
+    return installed.length ? installed : [primary.provider]
   }
 
   /** A reviewer's instructions as of now; a teammate whose skill was uninstalled fails here. */
@@ -133,6 +152,10 @@ export class PanelMembers {
       ...(description ? { description: description.slice(0, MAX_DESCRIPTION_CHARACTERS) } : {}),
     }
   }
+}
+
+function otherProvider(provider: Provider) {
+  return provider === Provider.claude ? Provider.codex : Provider.claude
 }
 
 function providerName(provider: Provider) {

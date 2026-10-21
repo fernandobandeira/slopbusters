@@ -10,7 +10,7 @@ import {
 const SELECTION_KEY = 'slopbusters:panel-reviewers'
 const providers = [Provider.codex, Provider.claude] as const
 
-/** A reviewer the user picked, and the providers to run it on; none means the primary model's. */
+/** A reviewer the user picked, and the providers to run it on; none means its default ones. */
 export interface PanelChoice {
   id: ReviewerId
   providers?: Provider[]
@@ -78,7 +78,7 @@ export function panelCandidates(teammates: readonly Teammate[]): Candidate[] {
 
 /**
  * The picked reviewers that can run, each with the providers it will run on: the ones picked,
- * else the primary model's, else whichever has its skill.
+ * else its default providers.
  */
 export function resolveChoices(
   selection: readonly PanelChoice[],
@@ -88,18 +88,13 @@ export function resolveChoices(
   return selection.flatMap((choice) => {
     const candidate = candidates.find((entry) => entry.id === choice.id)
     if (!candidate || candidate.unavailable) return []
-    const asked = (choice.providers ?? [primary]).filter(
-      (provider) => candidate.installed[provider],
-    )
-    const fallback = candidate.installed[primary]
-      ? primary
-      : providers.find((p) => candidate.installed[p])
-    const chosen = asked.length ? asked : fallback ? [fallback] : []
+    const asked = (choice.providers ?? []).filter((provider) => candidate.installed[provider])
+    const chosen = asked.length ? asked : defaultProviders(candidate, primary)
     return chosen.length ? [{ id: choice.id, providers: chosen }] : []
   })
 }
 
-/** Turn a reviewer on with its default provider, or off. */
+/** Turn a reviewer on with its default providers, or off. */
 export function toggleReviewer(
   choices: Required<PanelChoice>[],
   candidate: Candidate,
@@ -107,10 +102,18 @@ export function toggleReviewer(
 ): Required<PanelChoice>[] {
   if (choices.some((choice) => choice.id === candidate.id))
     return choices.filter((choice) => choice.id !== candidate.id)
-  const provider = candidate.installed[primary]
-    ? primary
-    : providers.find((p) => candidate.installed[p])
-  return provider ? [...choices, { id: candidate.id, providers: [provider] }] : choices
+  const chosen = defaultProviders(candidate, primary)
+  return chosen.length ? [...choices, { id: candidate.id, providers: chosen }] : choices
+}
+
+/**
+ * A teammate sits once on every provider its skill is installed for, so both models predict its
+ * comments; a built-in reviewer runs on the primary model's provider, else wherever it can.
+ */
+function defaultProviders(candidate: Candidate, primary: Provider): Provider[] {
+  const installed = providers.filter((provider) => candidate.installed[provider])
+  if (candidate.id.startsWith('teammate:')) return installed
+  return installed.includes(primary) ? [primary] : installed.slice(0, 1)
 }
 
 /** Add or drop one provider for a reviewer; dropping the last one takes the reviewer off. */

@@ -157,7 +157,7 @@ describe('asking the panel', () => {
     return onOpen
   }
 
-  it('runs each reviewer on the primary model’s provider unless another is picked', async () => {
+  it('runs a teammate on every installed provider and anyone else on the primary’s', async () => {
     teammates = [
       teammate(),
       teammate({ id: 'riley', name: 'Riley', skill: 'RileyReview', locations: { claude: '/c' } }),
@@ -165,6 +165,7 @@ describe('asking the panel', () => {
     const onOpen = openPicker()
 
     fireEvent.click(await screen.findByRole('checkbox', { name: /Riley/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Avery/ }))
     expect(screen.getByRole('button', { name: 'Riley on Codex' }).hasAttribute('disabled')).toBe(
       true,
     )
@@ -172,7 +173,7 @@ describe('asking the panel', () => {
       screen.getByRole('button', { name: 'Riley on Claude' }).getAttribute('aria-pressed'),
     ).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: 'Uncle Bob on Claude' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Review with 3 reviewers, 4 runs' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review with 4 reviewers, 6 runs' }))
 
     await waitFor(() => {
       expect(onOpen).toHaveBeenCalledWith('panel-1')
@@ -185,6 +186,7 @@ describe('asking the panel', () => {
           { id: 'unclebob', providers: [Provider.codex, Provider.claude] },
           { id: 'terminator', providers: [Provider.codex] },
           { id: 'teammate:riley', providers: [Provider.claude] },
+          { id: 'teammate:avery', providers: [Provider.codex, Provider.claude] },
         ],
       },
     })

@@ -300,13 +300,31 @@ describe('a reviewer on both providers', () => {
 })
 
 describe('starting a panel', () => {
-  it('refuses a teammate whose skill is not installed for the primary model’s provider', async () => {
+  it('seats a teammate on every provider its skill is installed for unless asked otherwise', async () => {
+    installSkill(roots.codex, 'AveryReview')
     installSkill(roots.codex, 'RileyReview')
     await teammates.create({ name: 'Riley', skill: 'RileyReview', maxFindings: 5 })
+    const jobs = panel(recordingTurns(reply).turns)
 
-    await expect(
-      panel(recordingTurns(reply).turns).start(repository, [url], ['teammate:riley']),
-    ).rejects.toThrow(/RileyReview, is not installed/)
+    const session = await jobs.start(
+      repository,
+      [url],
+      [
+        'teammate:avery',
+        'teammate:riley',
+        'unclebob',
+        { id: 'terminator', providers: [Provider.codex] },
+      ],
+    )
+
+    expect(session.reviewers.map((seat) => [seat.id, seat.model?.provider])).toEqual([
+      ['teammate:avery@claude', Provider.claude],
+      ['teammate:avery@codex', Provider.codex],
+      ['teammate:riley', Provider.codex],
+      ['unclebob', Provider.claude],
+      ['terminator', Provider.codex],
+    ])
+    jobs.cancel(session.id)
   })
 
   it('reopens the running panel for the same request and refuses a different one', async () => {
