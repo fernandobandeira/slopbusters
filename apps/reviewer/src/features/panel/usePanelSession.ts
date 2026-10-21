@@ -1,6 +1,6 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import * as routes from '../../../shared/api'
-import type { PanelSession } from '../../../shared/domain/panel'
+import type { PanelSession } from '../../../shared/domain/panelSession'
 import { call, message } from '../../lib/api'
 
 /** A saved panel review, polled while it runs, with the actions that move it along. */

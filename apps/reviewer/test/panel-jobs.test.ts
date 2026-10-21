@@ -6,11 +6,11 @@ import type {
   StructuredTurns,
 } from '../server/adapters/t3Engine/engineTurns'
 import { Provider } from '../shared/domain/types'
-import { fixtureJudgeAdvice, fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
+import { fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
 import {
   companion,
   everyone,
-  isJudge,
+  isGrounding,
   panelHarness,
   primary,
   reply,
@@ -24,7 +24,7 @@ const harness = panelHarness()
 const panel = harness.panel
 
 describe('a panel review', () => {
-  it('runs each reviewer once on the primary model with its own skill, then the judge', async () => {
+  it('runs each reviewer once on the primary model with its own skill, then grounds their findings', async () => {
     const { turns, requests } = recordingTurns(reply)
     const jobs = panel(turns)
 
@@ -33,7 +33,7 @@ describe('a panel review', () => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
 
-    const reviews = requests.filter((request) => !isJudge(request))
+    const reviews = requests.filter((request) => !isGrounding(request))
     expect(reviews.map((request) => request.model)).toEqual([primary, primary, primary])
     const avery = reviews.find((request) => request.purpose?.startsWith('Avery'))
     expect(avery?.prompt).toContain('Review carefully.')
@@ -44,10 +44,14 @@ describe('a panel review', () => {
     expect(avery?.include).toEqual([
       { directory: expect.stringMatching(/AveryReview$/) as string, as: '.slopbusters/skill' },
     ])
-    const judge = requests.find(isJudge)
-    expect(judge?.prompt).toContain('- teammate:avery: Avery (Review the way Avery does.)')
+    const grounding = requests.find(isGrounding)
+    expect(grounding?.prompt).toContain('- teammate:avery: Avery (Review the way Avery does.)')
     const [result] = jobs.get(session.id).results
-    expect(result?.advice.findings[0]?.raisedBy).toEqual(['unclebob', 'teammate:avery'])
+    expect(result?.advice.findings[0]?.raisedBy).toEqual([
+      'unclebob',
+      'terminator',
+      'teammate:avery',
+    ])
     expect(result?.reviews.map((review) => review.reviewer)).toHaveLength(3)
     expect(result?.reviews.map((review) => review.skillDigest)).toEqual([
       expect.stringMatching(/^sha256:/),
@@ -90,7 +94,7 @@ describe('a panel review', () => {
 })
 
 describe('a seat that returns its full cap', () => {
-  it('is marked as possibly having more, and the judge’s result says so', async () => {
+  it('is marked as possibly having more, and the grounded result says so', async () => {
     const five = Array.from({ length: 5 }, (_, index) =>
       fixturePanelFinding({ id: `finding-${String(index)}` }),
     )
@@ -118,8 +122,8 @@ describe('a seat that returns its full cap', () => {
   })
 })
 
-describe('the panel judge', () => {
-  it('judges by its own rubric alone, with each teammate’s skill folder to check citations', async () => {
+describe('panel grounding', () => {
+  it('grounds by its own rubric alone, with each teammate’s skill folder to check citations', async () => {
     const { turns, requests } = recordingTurns(reply)
     const jobs = panel(turns)
 
@@ -128,10 +132,10 @@ describe('the panel judge', () => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
 
-    const judge = requests.find(isJudge)
-    expect(judge?.prompt).toContain('Do not load or follow other skills')
-    expect(judge?.prompt).toContain('- teammate:avery: `.slopbusters/skills/avery/`')
-    expect(judge?.include).toEqual([
+    const grounding = requests.find(isGrounding)
+    expect(grounding?.prompt).toContain('Do not load or follow other skills')
+    expect(grounding?.prompt).toContain('- teammate:avery: `.slopbusters/skills/avery/`')
+    expect(grounding?.include).toEqual([
       {
         directory: expect.stringMatching(/AveryReview$/) as string,
         as: '.slopbusters/skills/avery',
@@ -151,14 +155,18 @@ describe('the panel judge', () => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
 
-    const judge = requests.find(isJudge)
-    expect(judge?.include?.map((folder) => folder.as)).toEqual(['.slopbusters/skills/avery@claude'])
-    expect(judge?.prompt).toContain('- teammate:avery@codex: `.slopbusters/skills/avery@claude/`')
+    const grounding = requests.find(isGrounding)
+    expect(grounding?.include?.map((folder) => folder.as)).toEqual([
+      '.slopbusters/skills/avery@claude',
+    ])
+    expect(grounding?.prompt).toContain(
+      '- teammate:avery@codex: `.slopbusters/skills/avery@claude/`',
+    )
   })
 })
 
 describe('a panel reviewer that fails', () => {
-  it('waits on the user when a reviewer fails, then judges with the reviews that finished', async () => {
+  it('waits on the user when a reviewer fails, then grounds the reviews that finished', async () => {
     const { turns, requests } = recordingTurns((request) => {
       if (request.purpose?.startsWith('Terminator')) throw new Error('Terminator timed out')
       return reply(request)
@@ -170,17 +178,17 @@ describe('a panel reviewer that fails', () => {
       expect(jobs.get(session.id).status).toBe('partial')
     })
     expect(jobs.get(session.id).progress).toMatch(/^Terminator could not finish/)
-    expect(requests.some(isJudge)).toBe(false)
+    expect(requests.some(isGrounding)).toBe(false)
 
     jobs.continue(session.id)
     await vi.waitFor(() => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
 
-    const judge = requests.find(isJudge)
-    expect(judge?.prompt).not.toContain('- terminator:')
+    const grounding = requests.find(isGrounding)
+    expect(grounding?.prompt).not.toContain('- terminator:')
     expect(jobs.get(session.id).results[0]?.advice.limitations.join(' ')).toMatch(
-      /the judge saw 2 of 3 reviews/,
+      /grounding saw 2 of 3 reviews/,
     )
   })
 
@@ -207,15 +215,15 @@ describe('a panel reviewer that fails', () => {
     expect(requests.slice(before).map((request) => request.purpose?.split(' ')[0])).toEqual([
       'Terminator',
       'Panel',
+      'Panel',
+      'Panel',
     ])
   })
 })
 
 describe('a reviewer on both providers', () => {
-  it('runs once on each provider’s model and the judge weighs the runs as two reviewers', async () => {
-    const { turns, requests } = recordingTurns((request) =>
-      isJudge(request) ? fixtureJudgeAdvice(['unclebob@codex']) : fixturePanelAdvice(),
-    )
+  it('runs once on each provider’s model and grounding weighs the runs as two reviewers', async () => {
+    const { turns, requests } = recordingTurns(reply)
     const jobs = panel(turns)
 
     const session = await jobs.start(
@@ -228,7 +236,7 @@ describe('a reviewer on both providers', () => {
     })
 
     const runs = requests
-      .filter((request) => !isJudge(request))
+      .filter((request) => !isGrounding(request))
       .map((request) => [request.purpose?.split(' on the panel')[0], request.model.provider])
     expect(runs).toEqual(
       expect.arrayContaining([
@@ -237,15 +245,21 @@ describe('a reviewer on both providers', () => {
         ['Terminator', Provider.claude],
       ]),
     )
-    expect(requests.find(isJudge)?.model).toEqual(primary)
-    expect(requests.find(isJudge)?.prompt).toContain('- unclebob@codex: Uncle Bob (Codex)')
+    expect(requests.filter(isGrounding).map((request) => request.model)).toEqual([
+      primary,
+      companion,
+      primary,
+    ])
+    expect(requests.find(isGrounding)?.prompt).toContain('- unclebob@codex: Uncle Bob (Codex)')
     expect(jobs.get(session.id).reviewers.map((seat) => [seat.id, seat.model])).toEqual([
       ['unclebob@claude', primary],
       ['unclebob@codex', companion],
       ['terminator', primary],
     ])
     expect(jobs.get(session.id).results[0]?.advice.findings[0]?.raisedBy).toEqual([
+      'unclebob@claude',
       'unclebob@codex',
+      'terminator',
     ])
   })
 

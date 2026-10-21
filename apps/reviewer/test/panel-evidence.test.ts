@@ -1,8 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import { UserError } from '../server/errors'
 import { DiffSide } from '../shared/domain/types'
-import { fixtureJudgeAdvice, fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
-import { everyone, isJudge, panelHarness, reply, repository, url } from './fixtures/panelJobs'
+import { fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
+import {
+  everyone,
+  groundingReply,
+  isGrounding,
+  panelHarness,
+  reply,
+  repository,
+  url,
+} from './fixtures/panelJobs'
 import { fixturePull } from './fixtures/pull'
 import { recordingTurns } from './fixtures/turns'
 
@@ -44,7 +52,7 @@ describe('a PR in a stack', () => {
   it('loads the other open layers before any seat starts and lets seats anchor on them', async () => {
     const loads: string[] = []
     const { turns, requests } = recordingTurns((request) => {
-      if (isJudge(request)) return fixtureJudgeAdvice(['unclebob'])
+      if (isGrounding(request)) return groundingReply(request)
       expect(loads).toEqual([url, layerUrl(131), layerUrl(140)])
       return fixturePanelAdvice([
         fixturePanelFinding({
@@ -69,7 +77,7 @@ describe('a PR in a stack', () => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
 
-    const seat = requests.find((request) => !isJudge(request))
+    const seat = requests.find((request) => !isGrounding(request))
     expect(seat?.prompt).toContain("Other open layers of this PR's stack")
     expect(seat?.prompt).toContain('PR #131:')
     expect(seat?.prompt).toContain("by that layer's PR number (#131)")

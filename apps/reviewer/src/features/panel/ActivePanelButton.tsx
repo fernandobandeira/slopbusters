@@ -1,6 +1,6 @@
 import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
-import type { PanelSession } from '../../../shared/domain/panel'
+import type { PanelSession } from '../../../shared/domain/panelSession'
 import { useApiQuery } from '../../lib/useApiQuery'
 import { PanelStack } from './PanelStack'
 

@@ -1,4 +1,4 @@
-import type { PanelSession } from '../shared/domain/panel'
+import type { PanelSession } from '../shared/domain/panelSession'
 import { fixtureJudgeAdvice, fixturePanelAdvice } from './fixtures/panel'
 import { describe, expect, it, vi } from 'vitest'
 import type { ChatHosts } from '../server/adapters/t3Engine/chatHosts'

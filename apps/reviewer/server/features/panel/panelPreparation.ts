@@ -1,5 +1,9 @@
 import type { LayerSnapshot } from '../../../shared/domain/anchors'
-import type { PanelPreparation, PanelSnapshot, ReviewHistory } from '../../../shared/domain/panel'
+import type {
+  PanelPreparation,
+  PanelSnapshot,
+  ReviewHistory,
+} from '../../../shared/domain/panelSession'
 import type { PullStackResult } from '../../../shared/domain/stacks'
 import type { PullRequest } from '../../../shared/domain/types'
 import { UserError } from '../../errors'

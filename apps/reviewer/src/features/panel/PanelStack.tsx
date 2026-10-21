@@ -1,4 +1,5 @@
-import { seatReviewer, type PanelReviewer, type PanelSession } from '../../../shared/domain/panel'
+import { seatReviewer, type PanelReviewer } from '../../../shared/domain/panel'
+import type { PanelSession } from '../../../shared/domain/panelSession'
 import type { Mood, Teammate } from '../../../shared/domain/teammates'
 import { ReviewerFace } from '../../components/ReviewerFace'
 import { reviewerFaceSrc } from '../../lib/reviewerFaces'

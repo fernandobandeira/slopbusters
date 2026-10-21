@@ -126,6 +126,16 @@
   margin-left: 6px;
   font-size: 11px;
 }
+.panel-grounding {
+  margin-top: 14px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--border);
+  font-size: 12px;
+}
+.panel-grounding-counts {
+  margin-top: 8px;
+  font-size: 12px;
+}
 .panel-set-aside-reason {
   color: var(--muted-foreground);
   font-style: italic;

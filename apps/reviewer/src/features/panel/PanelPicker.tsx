@@ -120,7 +120,7 @@ function PickerBody({
     <>
       <Popover.Title className="panel-picker-title">Who should review PR #{number}?</Popover.Title>
       <Popover.Description className="muted">
-        Each reviewer runs on Codex, Claude, or both, then a judge on your primary model checks
+        Each reviewer runs on Codex, Claude, or both, then Claude and Codex take turns checking
         their findings against the code.
       </Popover.Description>
       <div role="group" aria-label="Reviewers" className="panel-candidates">

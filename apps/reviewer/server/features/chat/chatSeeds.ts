@@ -10,12 +10,8 @@ import { latestJobsAdvice, type JobsSession } from '../../../shared/domain/jobs'
 import type { LinusSession } from '../../../shared/domain/linus'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import type { ReviewSession } from '../../../shared/domain/reviewSession'
-import {
-  reviewerTeammate,
-  seatReviewer,
-  type PanelReviewer,
-  type PanelSession,
-} from '../../../shared/domain/panel'
+import { reviewerTeammate, seatReviewer, type PanelReviewer } from '../../../shared/domain/panel'
+import type { PanelSession } from '../../../shared/domain/panelSession'
 import { panelReviewerMarkdown } from '../../../shared/domain/panelMarkdown'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
 

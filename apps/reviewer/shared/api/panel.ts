@@ -7,8 +7,9 @@ import {
   panelReviewSummarySchema,
   panelSeatRequestSchema,
   seatIdSchema,
-  type PanelSession,
 } from '../domain/panel'
+import { groundingStateSchema } from '../domain/grounding'
+import type { PanelSession } from '../domain/panelSession'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, pullUrlSchema, repositoryQuery } from './contract'
 import { pullSchema } from './reviewSchemas'
@@ -27,6 +28,7 @@ const session = z.object({
   repository: z.string(),
   urls: z.array(z.string()),
   model: organizationSchema,
+  companion: organizationSchema.optional(),
   reviewers: z.array(panelReviewerSchema),
   status: z.enum(['running', 'partial', 'complete', 'failed', 'cancelled']),
   progress: z.string(),
@@ -38,6 +40,7 @@ const session = z.object({
       fingerprint: z.string(),
       advice: judgeAdviceSchema,
       reviews: z.array(review),
+      grounding: groundingStateSchema.optional(),
     }),
   ),
   pending: z
@@ -46,6 +49,7 @@ const session = z.object({
       fingerprint: z.string(),
       context: z.string().optional(),
       reviews: z.array(review),
+      grounding: groundingStateSchema.optional(),
     })
     .optional(),
 }) satisfies z.ZodType<PanelSession>

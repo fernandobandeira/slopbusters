@@ -25,7 +25,8 @@ export function unanimousApproval<Role>(roles: readonly Role[]): Consensus<Role>
 
 /**
  * A debate: participants take turns in order on shared state until `consensus` says they agree.
- * Each turn persists what it needs before it returns. Resolves with the number of turns taken,
+ * Each turn persists what it needs before it returns. Moves saved by an earlier, interrupted run
+ * are replayed first, so the debate resumes after them. Resolves with the number of turns taken,
  * and rejects with `stalled()` when `maxTurns` pass without agreement.
  */
 export async function debate<Role>(options: {
@@ -35,9 +36,14 @@ export async function debate<Role>(options: {
   consensus: Consensus<Role>
   turn: (role: Role, index: number) => Promise<DebateMove>
   stalled: () => Error
+  /** The moves already taken, in order. */
+  history?: readonly { role: Role; move: DebateMove }[]
 }): Promise<number> {
   const { roles, signal, consensus } = options
-  for (let index = 0; index < options.maxTurns; index++) {
+  const history = options.history ?? []
+  for (const [index, { role, move }] of history.entries())
+    if (consensus.record(role, move)) return index + 1
+  for (let index = history.length; index < options.maxTurns; index++) {
     signal.throwIfAborted()
     const role = roles[index % roles.length]
     if (role === undefined) break

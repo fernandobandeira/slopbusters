@@ -8,7 +8,7 @@ import { startReviewerServer } from '../server/app'
 import { fetchPull } from '../server/features/pulls/github'
 import * as routes from '../shared/api'
 import { Provider } from '../shared/domain/types'
-import { fixtureJudgeAdvice, fixturePanelAdvice } from './fixtures/panel'
+import { reply } from './fixtures/panelJobs'
 import { fixturePull } from './fixtures/pull'
 import { installSkill, pngHeader, temporarySkillRoots } from './fixtures/skills'
 import { recordingTurns } from './fixtures/turns'
@@ -32,11 +32,7 @@ vi.mock('../server/adapters/reviewWorkspaces', () => ({
 let data: string
 let roots: ReturnType<typeof temporarySkillRoots>
 let app: Awaited<ReturnType<typeof startReviewerServer>>
-const { turns, requests } = recordingTurns((request) =>
-  request.purpose?.startsWith('Panel judge')
-    ? fixtureJudgeAdvice(['teammate:avery'])
-    : fixturePanelAdvice(),
-)
+const { turns, requests } = recordingTurns(reply)
 
 beforeEach(async () => {
   data = mkdtempSync(join(tmpdir(), 'teammates-api-'))
@@ -108,7 +104,7 @@ describe('teammates over HTTP', () => {
 })
 
 describe('the review panel over HTTP', () => {
-  it('reviews a PR with a teammate and saves the judged result for the PR header', async () => {
+  it('reviews a PR with a teammate and saves the grounded result for the PR header', async () => {
     vi.mocked(fetchPull).mockResolvedValue(fixturePull())
     installSkill(roots.claude, 'AveryReview')
     await send('POST', '/teammates', { name: 'Avery', skill: 'AveryReview', maxFindings: 12 })

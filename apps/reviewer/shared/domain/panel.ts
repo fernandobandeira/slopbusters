@@ -4,19 +4,12 @@ import {
   anchorSchema,
   inlineLocation,
   placeAnchor,
-  type Anchor,
   type AnchorEvidence,
 } from './anchors'
 import { findingCommentId, findingDraftComment, stableId } from './findings'
-import { organizationSchema, type OrganizationPreferences } from './preferences'
+import { organizationSchema } from './preferences'
 import { teammateIdSchema } from './teammates'
-import {
-  Provider,
-  type DraftComment,
-  type PullRequest,
-  type PullReviewBody,
-  type ReviewThread,
-} from './types'
+import { Provider, type DraftComment, type PullRequest } from './types'
 
 /** The reviewers Slopbusters ships; teammates join them as `teammate:<id>`. */
 export const builtInReviewers = {
@@ -167,10 +160,11 @@ export type SetAside = z.infer<typeof setAsideSchema>
 
 const MAX_JUDGED_FINDINGS = 60
 const MAX_SET_ASIDE = 60
-/** The most findings the judge can keep or set aside in one reply; the rest go unaccounted. */
-export const MAX_JUDGE_ACCOUNTED = MAX_JUDGED_FINDINGS + MAX_SET_ASIDE
 
-/** The judge's verdict over every review: verified findings with who raised them. */
+/**
+ * A PR's grounded review: findings to act on or still open, with who raised them, and what was
+ * set aside. Sessions from before grounding saved a judge's reply in this shape.
+ */
 export const judgeAdviceSchema = z
   .object({
     verdict: z.enum(verdicts),
@@ -213,48 +207,6 @@ export function reachedCap(advice: Pick<PanelAdvice, 'findings'>, maxFindings: n
   return advice.findings.length >= maxFindings
 }
 
-/**
- * The judge's advice, keeping only findings a reviewer raised. A finding the evidence cannot
- * place is set aside with the reason, rather than moved to another line.
- */
-export function normalizeJudgeAdvice(
-  evidence: AnchorEvidence,
-  input: unknown,
-  reviewers: readonly string[],
-): JudgeAdvice {
-  const advice = judgeAdviceSchema.parse(input)
-  const known = new Set(reviewers)
-  const attributed = advice.findings
-    .map((finding) => ({ ...finding, raisedBy: finding.raisedBy.filter((id) => known.has(id)) }))
-    .filter((finding) => finding.raisedBy.length)
-  if (attributed.length < advice.findings.length)
-    advice.limitations.push(
-      `Dropped ${String(advice.findings.length - attributed.length)} findings no reviewer on the panel raised.`,
-    )
-  const { placed, unplaced } = placeFindings(evidence, attributed, advice.limitations)
-  advice.findings = rankFindings(placed)
-  advice.setAside = [
-    ...advice.setAside.map((item) => ({
-      ...item,
-      raisedBy: item.raisedBy.filter((id) => known.has(id)),
-    })),
-    ...unplaced.map(({ finding, problem }) =>
-      setAsideSchema.parse({
-        title: finding.title,
-        body: clip(finding.body, setAsideSchema.shape.body.maxLength),
-        ...codeLocation(finding.anchor),
-        raisedBy: finding.raisedBy,
-        reason: clip(
-          `Its location could not be checked: ${problem}`,
-          setAsideSchema.shape.reason.maxLength,
-        ),
-      }),
-    ),
-  ]
-  advice.verdict = agreeingVerdict(advice.verdict, advice.findings.length)
-  return advice
-}
-
 /** A finding whose anchor the evidence cannot place, and why. */
 export interface UnplacedFinding<F extends PanelFinding = PanelFinding> {
   finding: F
@@ -286,15 +238,6 @@ function placeFindings<F extends PanelFinding>(
       `${String(unplaced.length)} findings point at a location the supplied evidence does not contain; they are listed apart and were not moved.`,
     )
   return { placed, unplaced }
-}
-
-function clip(text: string, length: number | null) {
-  return length !== null && text.length > length ? `${text.slice(0, length - 1)}…` : text
-}
-
-function codeLocation(anchor: Anchor): { path?: string; line?: number } {
-  const location = anchor.kind === 'stack' ? anchor.location : anchor
-  return location.kind === 'description' ? {} : { path: location.path, line: location.line }
 }
 
 /** Repository rules first, then what the code settles, then questions; severity within each. */
@@ -335,67 +278,6 @@ export function panelCommentBody(finding: PanelFinding): string {
   return [finding.title, finding.body, finding.tag === 'decision' ? '' : finding.suggestion]
     .filter(Boolean)
     .join('\n\n')
-}
-
-export interface PanelReview {
-  /** The seat that wrote it. */
-  reviewer: string
-  advice?: PanelAdvice
-  /** Findings whose location the evidence could not place, kept as the seat wrote them. */
-  unplaced?: UnplacedFinding[]
-  /** The seat returned its full cap, so it may have had more findings than it reported. */
-  capped?: boolean
-  /** Which version of its skill or instructions the seat reviewed with; its model is the seat's. */
-  skillDigest?: string
-  error?: string
-}
-export interface PanelPending extends PanelSnapshot {
-  reviews: PanelReview[]
-}
-export interface PanelResult {
-  pull: PullRequest
-  fingerprint: string
-  advice: JudgeAdvice
-  /** What each reviewer said before the judge, for a chat that continues one of them. */
-  reviews: PanelReview[]
-}
-/** What reviewers already said on a PR: its inline threads and its reviews' bodies. */
-export interface ReviewHistory {
-  threads: ReviewThread[]
-  reviews: PullReviewBody[]
-}
-/** A PR snapshot a round loaded, what the PR is meant to do, and what reviewers said on it. */
-export interface PanelSnapshot {
-  pull: PullRequest
-  fingerprint: string
-  context?: string
-  history?: ReviewHistory
-}
-/**
- * What a round loads before any seat starts: every chosen PR and the other open layers of their
- * stacks, so the first layer's seats already see the layers above it.
- */
-export interface PanelPreparation {
-  snapshots: PanelSnapshot[]
-  /** By chosen PR URL: the URLs of the other layers of its stack that loaded. */
-  layers: Record<string, string[]>
-  /** By chosen PR URL: what about its stack could not be loaded, in words. */
-  missing: Record<string, string[]>
-}
-export interface PanelSession {
-  id: string
-  repository: string
-  urls: string[]
-  model: OrganizationPreferences
-  reviewers: PanelReviewer[]
-  status: 'running' | 'partial' | 'complete' | 'failed' | 'cancelled'
-  progress: string
-  results: PanelResult[]
-  pending?: PanelPending
-  /** Kept on the server; the API leaves the loaded layers out. */
-  preparation?: PanelPreparation
-  error?: string
-  createdAt: string
 }
 
 export const panelReviewSummarySchema = z.object({

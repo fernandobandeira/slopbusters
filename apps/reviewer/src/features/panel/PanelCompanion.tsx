@@ -4,7 +4,8 @@ import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
 import { anchorLine } from '../../../shared/domain/anchors'
 import { snapshotMatches } from '../../../shared/domain/findings'
-import { seatRequests, type PanelSession } from '../../../shared/domain/panel'
+import { seatRequests } from '../../../shared/domain/panel'
+import type { PanelSession } from '../../../shared/domain/panelSession'
 import type { Teammate } from '../../../shared/domain/teammates'
 import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { ReviewerFace } from '../../components/ReviewerFace'
@@ -23,7 +24,7 @@ import './panel.css'
 type Job = ReturnType<typeof usePanelSession>
 type Tour = ReturnType<typeof usePanelTour>
 
-/** The review panel's companion: reviewers at work, then the judged findings one by one. */
+/** The review panel's companion: reviewers at work, then the grounded findings one by one. */
 export function PanelCompanion(
   context: PanelDraftContext & {
     sessionId: string
@@ -174,7 +175,7 @@ function PanelProgress({
               disabled={busy}
               onClick={() => void act('continue')}
             >
-              Judge without them
+              Check without them
             </Button>
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act('cancel')}>
               Cancel

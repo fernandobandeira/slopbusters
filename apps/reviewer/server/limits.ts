@@ -116,3 +116,10 @@ export const MAX_PANEL_STACK_LAYERS = 12
 export const MAX_PANEL_LAYER_EVIDENCE_CHARS = 300_000
 /** How much of a teammate's earlier comments on the PR its seat's prompt carries. */
 export const MAX_PANEL_HISTORY_CHARS = 60_000
+/**
+ * How many seat findings one grounding round checks per PR, across every seat; the rest wait as
+ * deferred. A starting value: lower it if a maximum-sized grounding reply does not fit a provider.
+ */
+export const MAX_GROUNDING_SOURCES = 40
+/** Grounding turns before the debate stops and keeps what the two models did agree on. */
+export const MAX_GROUNDING_TURNS = 6

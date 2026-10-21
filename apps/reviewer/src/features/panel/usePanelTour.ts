@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import type { JudgedFinding, PanelResult, PanelSession } from '../../../shared/domain/panel'
+import type { JudgedFinding } from '../../../shared/domain/panel'
+import type { PanelResult, PanelSession } from '../../../shared/domain/panelSession'
 import type { Mood } from '../../../shared/domain/teammates'
 import type { PullRequest } from '../../../shared/domain/types'
 

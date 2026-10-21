@@ -1,15 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import type { LayerSnapshot } from '../../../shared/domain/anchors'
+import type { PanelReviewer, PanelSeatRequest } from '../../../shared/domain/panel'
 import type {
   PanelPending,
   PanelPreparation,
   ReviewHistory,
   PanelReview,
-  PanelReviewer,
   PanelSession,
-  PanelSeatRequest,
-} from '../../../shared/domain/panel'
+} from '../../../shared/domain/panelSession'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import { blocksNewReview, reviewedPullsLabel } from '../../../shared/domain/reviewSession'
 import type { PullStackResult } from '../../../shared/domain/stacks'
@@ -24,13 +23,14 @@ import { FlowJobs } from '../flows/flowJobs'
 import { failedSeats, reviewSeats } from '../flows/panel'
 import type { PanelMembers } from './panelMembers'
 import { layersOf, preparePanelRound } from './panelPreparation'
-import { judgePanel, reviewAsPanelist } from './panelReview'
+import { groundPanel } from './groundingDebate'
+import { reviewAsPanelist } from './panelReview'
 
 interface Options {
   store: PanelSessionStore
   turns: StructuredTurns
   members: PanelMembers
-  /** The primary model judges; each seat reviews on the model for its provider. */
+  /** The primary and companion models ground; each seat reviews on its provider's model. */
   models: () => { primary: OrganizationPreferences; companion?: OrganizationPreferences }
   loadPull: (url: string) => Promise<PullRequest>
   /** What reviewers already said on a PR, for teammates whose GitHub login is known. */
@@ -43,12 +43,12 @@ interface Options {
   context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
 }
 
-/** How a run treats a PR that already has reviews waiting: start over, rerun failures, or judge. */
-type RunMode = 'fresh' | 'retry' | 'judge'
+/** How a run treats a PR that already has reviews waiting: start over, rerun failures, or ground. */
+type RunMode = 'fresh' | 'retry' | 'ground'
 
 /**
  * A panel review: every chosen seat reviews each PR on its provider's model, a few at a time,
- * then a judge verifies their findings against the code and merges them into one result.
+ * then two models ground their findings against the code in a bounded debate.
  */
 export class PanelJobs {
   private readonly jobs: FlowJobs<PanelSession>
@@ -60,7 +60,7 @@ export class PanelJobs {
       sessions: options.sessions,
       failure: {
         fallback: 'The panel could not review these PRs.',
-        progress: 'Panel review stopped. Judged PRs are saved.',
+        progress: 'Panel review stopped. Reviewed PRs are saved.',
       },
     })
   }
@@ -85,6 +85,7 @@ export class PanelJobs {
       repository,
       urls,
       model: models.primary,
+      ...(models.companion ? { companion: models.companion } : {}),
       reviewers,
       status: 'running',
       progress: 'Loading PR snapshots and their stacks…',
@@ -105,12 +106,12 @@ export class PanelJobs {
     const session = this.options.store.latest(repository, url)
     return session && this.recover(session)
   }
-  /** Judge with the reviews that finished, leaving the failed reviewers out. */
+  /** Ground the reviews that finished, leaving the failed reviewers out. */
   continue(id: string): PanelSession {
     const session = this.get(id)
     if (session.status !== 'partial' || !session.pending?.reviews.some((review) => review.advice))
       throw new UserError('There is no partial panel review to continue.')
-    return this.relaunch(session, 'judge', 'Judging the reviews that finished…')
+    return this.relaunch(session, 'ground', 'Grounding the reviews that finished…')
   }
   /** Rerun only the reviewers that failed, or the whole PR when nothing is waiting. */
   retry(id: string): PanelSession {
@@ -124,8 +125,7 @@ export class PanelJobs {
     const session = this.get(id)
     if (session.status === 'running' || session.status === 'partial') {
       session.status = 'cancelled'
-      session.progress = 'Panel review cancelled. Judged PRs are saved.'
-      session.pending = undefined
+      session.progress = 'Panel review cancelled. Reviewed PRs are saved.'
       this.save(session)
     }
     return session
@@ -145,7 +145,7 @@ export class PanelJobs {
   private recover(session: PanelSession): PanelSession {
     return this.jobs.recover(
       session,
-      'Panel review interrupted when the app stopped. Judged PRs are saved.',
+      'Panel review interrupted when the app stopped. Reviewed PRs are saved.',
     )
   }
   private launch(session: PanelSession, mode: RunMode): void {
@@ -166,7 +166,7 @@ export class PanelJobs {
       `The panel reviewed ${String(session.results.length)} PR${session.results.length === 1 ? '' : 's'}.`,
     )
   }
-  /** Review one PR and judge it; false when it stops to wait for the user. */
+  /** Review one PR and ground its findings; false when it stops to wait for the user. */
   private async reviewPull(
     session: PanelSession,
     signal: AbortSignal,
@@ -180,42 +180,53 @@ export class PanelJobs {
       const layers = layersOf(preparation, pending.pull.url)
       const source = await this.openSource(pending.pull, signal)
       repository = source.repository
-      if (mode !== 'judge') await this.review(session, pending, { signal, repository, layers })
-      if (!this.canJudge(session, pending, mode)) return false
-      this.progress(
-        session,
-        `The judge is weighing the reviews of PR #${String(pending.pull.number)}…`,
-      )
-      const reviewers = session.reviewers.filter((reviewer) =>
-        pending.reviews.some((review) => review.reviewer === reviewer.id && review.advice),
-      )
-      const skillFolders = await this.options.members.skillFolders(
-        reviewers,
-        session.model.provider,
-      )
-      const execute = (observer?: ProviderObserver) =>
-        judgePanel({
-          turns: this.options.turns,
-          model: session.model,
-          signal,
-          repository,
-          observer,
-          pending,
-          reviewers,
-          skillFolders,
-          layers,
-        })
-      const advice = await this.track(session, { label: 'Judge', url: pending.pull.url }, execute)
+      if (mode !== 'ground') await this.review(session, pending, { signal, repository, layers })
+      if (!this.canGround(session, pending, mode)) return false
+      this.progress(session, `Grounding the findings on PR #${String(pending.pull.number)}…`)
+      const { advice, grounding } = await this.ground(session, pending, {
+        signal,
+        repository,
+        layers,
+      })
       signal.throwIfAborted()
       advice.limitations.unshift(...(preparation.missing[pending.pull.url] ?? []))
       if (source.limitation) advice.limitations.unshift(source.limitation)
-      session.results.push({ ...pending, advice, reviews: pending.reviews })
+      const { grounding: _saved, ...snapshot } = pending
+      session.results.push({ ...snapshot, advice, reviews: pending.reviews, grounding })
       session.pending = undefined
       this.save(session)
       return true
     } finally {
       repository?.release()
     }
+  }
+  /** Two models ground the seats' findings, saving the debate on the pending review as it goes. */
+  private async ground(
+    session: PanelSession,
+    pending: PanelPending,
+    run: { signal: AbortSignal; repository?: ReviewCheckout; layers: LayerSnapshot[] },
+  ) {
+    const reviewers = session.reviewers.filter((reviewer) =>
+      pending.reviews.some((review) => review.reviewer === reviewer.id && review.advice),
+    )
+    const companion = session.companion ?? this.options.models().companion
+    return groundPanel({
+      ...run,
+      turns: this.options.turns,
+      pending,
+      reviewers,
+      skillFolders: await this.options.members.skillFolders(reviewers, session.model.provider),
+      models: {
+        primary: session.model,
+        ...(companion && companion.provider !== session.model.provider
+          ? { secondary: companion }
+          : {}),
+      },
+      save: () => {
+        this.save(session)
+      },
+      track: (pass, execute) => this.track(session, { ...pass, url: pending.pull.url }, execute),
+    })
   }
   private pendingFor(session: PanelSession, preparation: PanelPreparation, index: number) {
     const url = session.urls[index]
@@ -263,6 +274,8 @@ export class PanelJobs {
     const waiting = session.reviewers.filter(
       (reviewer) => !pending.reviews.some((review) => review.reviewer === reviewer.id),
     )
+    // New reviews change what grounding would select, so a saved debate starts over.
+    if (waiting.length) pending.grounding = undefined
     this.reportReviewers(session, pending)
     await reviewSeats(waiting, {
       signal: run.signal,
@@ -314,19 +327,19 @@ export class PanelJobs {
     const label = `${reviewer.name} review`
     return this.track(session, { label, url: pending.pull.url, model }, execute)
   }
-  private canJudge(session: PanelSession, pending: PanelPending, mode: RunMode): boolean {
+  private canGround(session: PanelSession, pending: PanelPending, mode: RunMode): boolean {
     const failed = failedSeats(
       pending.reviews,
       (review) => `${nameOf(session, review)}: ${review.error ?? 'No review.'}`,
     )
-    if (!failed.length || mode === 'judge') return true
+    if (!failed.length || mode === 'ground') return true
     session.status = 'partial'
     session.error = failed
       .map((review) => `${nameOf(session, review)}: ${review.error ?? ''}`)
       .join('\n')
     this.progress(
       session,
-      `${failed.map((review) => nameOf(session, review)).join(', ')} could not finish. Retry them, or let the judge use the reviews that did.`,
+      `${failed.map((review) => nameOf(session, review)).join(', ')} could not finish. Retry them, or ground the reviews that did.`,
     )
     return false
   }

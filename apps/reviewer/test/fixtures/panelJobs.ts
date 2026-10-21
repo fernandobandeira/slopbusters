@@ -14,7 +14,7 @@ import { PanelMembers } from '../../server/features/panel/panelMembers'
 import { Teammates } from '../../server/features/teammates/teammates'
 import type { ReviewerId } from '../../shared/domain/panel'
 import { Provider } from '../../shared/domain/types'
-import { fixtureJudgeAdvice, fixturePanelAdvice } from './panel'
+import { fixturePanelAdvice } from './panel'
 import { fixturePull } from './pull'
 import { installSkill, temporarySkillRoots } from './skills'
 
@@ -24,7 +24,8 @@ export const repository = 'review-room/example'
 export const url = fixturePull().url
 export const everyone: ReviewerId[] = ['unclebob', 'terminator', 'teammate:avery']
 
-type Sources = Pick<ConstructorParameters<typeof PanelJobs>[0], 'loadPull' | 'stack' | 'history'>
+type Options = ConstructorParameters<typeof PanelJobs>[0]
+type Sources = Pick<Options, 'loadPull' | 'stack' | 'history'> & Partial<Pick<Options, 'models'>>
 
 /**
  * A data directory, skill roots and teammate Avery (Claude only, five findings) for each test,
@@ -73,11 +74,39 @@ export function panelHarness() {
   return harness
 }
 
-export const isJudge = (request: StructuredTurnRequest<unknown>) =>
-  Boolean(request.purpose?.startsWith('Panel judge'))
+export const isGrounding = (request: StructuredTurnRequest<unknown>) =>
+  Boolean(request.purpose?.startsWith('Panel grounding'))
+
+/** The source keys a grounding turn was asked to account for. */
+export function sourceKeys(request: StructuredTurnRequest<unknown>): string[] {
+  return [
+    ...new Set([...request.prompt.matchAll(/"key":"(f\d+)"/g)].map((match) => match[1] ?? '')),
+  ]
+}
+
+/**
+ * A grounding turn that merges every source into one legit entry, the same each time, and
+ * approves it once there is a list to approve: the debate agrees on the third turn.
+ */
+export function groundingReply(request: StructuredTurnRequest<unknown>) {
+  return {
+    entries: [
+      {
+        id: 'g1',
+        sources: sourceKeys(request),
+        verdict: 'legit',
+        reason: 'The audit helper already does this.',
+        evidence: ['src/audit.ts:4'],
+        plan: 'Reuse the audit helper.',
+        destination: { kind: 'code', pull: fixturePull().number },
+      },
+    ],
+    approved: request.prompt.includes('The current list:'),
+    summary: 'Reuse the audit helper.',
+    objections: [],
+  }
+}
 
 export function reply(request: StructuredTurnRequest<unknown>) {
-  return isJudge(request)
-    ? fixtureJudgeAdvice(['unclebob', 'teammate:avery'])
-    : fixturePanelAdvice()
+  return isGrounding(request) ? groundingReply(request) : fixturePanelAdvice()
 }

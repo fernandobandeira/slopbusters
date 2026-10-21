@@ -4,8 +4,8 @@ import {
   panelReviewSummarySchema,
   type PanelFinding,
   type PanelReviewSummary,
-  type PanelSession,
 } from '../../shared/domain/panel'
+import type { PanelSession } from '../../shared/domain/panelSession'
 import { MAX_SAVED_PANEL_REVIEWS } from '../limits'
 
 export function migratePanelSessions(database: DatabaseSync): void {

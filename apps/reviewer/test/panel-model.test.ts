@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   seatReviewer,
-  judgeAdviceSchema,
-  normalizeJudgeAdvice,
   normalizePanelAdvice,
   panelCommentBody,
   panelCommentsInline,
@@ -165,46 +163,6 @@ describe('where a finding goes in the review draft', () => {
     expect(panelCommentsInline(pull, offHunk)).toBe(false)
     expect(panelCommentsInline(pull, description)).toBe(false)
     expect(() => panelDraftComment(pull, description, 'Say why.')).toThrow(/review summary/)
-  })
-})
-
-describe('the judge’s advice', () => {
-  it('keeps only reviewers on the panel in raisedBy and drops findings nobody on it raised', () => {
-    const advice = fixtureJudgeAdvice(['unclebob', 'teammate:ghost'])
-    advice.findings.push({ ...fixturePanelFinding({ id: 'invented' }), raisedBy: ['judge'] })
-
-    const judged = normalizeJudgeAdvice({ pull }, advice, ['unclebob', 'terminator'])
-
-    expect(judged.findings.map((finding) => [finding.id, finding.raisedBy])).toEqual([
-      ['reuse-audit-helper', ['unclebob']],
-    ])
-    expect(judged.limitations.join(' ')).toMatch(/no reviewer on the panel raised/)
-  })
-})
-
-describe('a judged finding the evidence cannot place', () => {
-  it('is set aside with the reason, within the set-aside limits', () => {
-    const advice = fixtureJudgeAdvice(['unclebob'])
-    advice.findings.push({
-      ...fixturePanelFinding({
-        id: 'far',
-        body: 'x'.repeat(3000),
-        anchor: {
-          kind: 'context',
-          path: `src/${'deep/'.repeat(150)}gone.ts`,
-          line: 3,
-          side: DiffSide.right,
-        },
-      }),
-      raisedBy: ['unclebob'],
-    })
-
-    const judged = normalizeJudgeAdvice({ pull }, advice, ['unclebob'])
-
-    expect(judged.findings.map((finding) => finding.id)).toEqual(['reuse-audit-helper'])
-    expect(judged.setAside[0]).toMatchObject({ line: 3, raisedBy: ['unclebob'] })
-    expect(judged.setAside[0]?.reason).toMatch(/^Its location could not be checked: src\/deep/)
-    expect(() => judgeAdviceSchema.parse(judged)).not.toThrow()
   })
 })
 

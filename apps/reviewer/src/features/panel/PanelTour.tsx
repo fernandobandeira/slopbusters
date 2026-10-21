@@ -11,9 +11,9 @@ import {
   panelSeverityLabels,
   panelVerdictLabels,
   type JudgedFinding,
-  type PanelResult,
   type PanelReviewer,
 } from '../../../shared/domain/panel'
+import type { PanelResult } from '../../../shared/domain/panelSession'
 import { panelFindingMarkdown, panelReviewMarkdown } from '../../../shared/domain/panelMarkdown'
 import type { ReviewLocation } from '../../../shared/domain/review'
 import type { Teammate } from '../../../shared/domain/teammates'
@@ -26,6 +26,7 @@ import {
   saveDraftComment,
 } from '../../components/FindingComment'
 import { FindingText } from '../../components/FindingText'
+import { GroundingSummary, GroundingVerdict } from './GroundingNotes'
 import { PanelFaces, reviewerName } from './PanelFaces'
 
 export interface PanelDraftContext {
@@ -46,7 +47,7 @@ interface TourProps {
   context: PanelDraftContext
 }
 
-/** The judged review: a summary, then one step per finding, each a possible draft comment. */
+/** The grounded review: a summary, then one step per finding, each a possible draft comment. */
 export function PanelTour(props: TourProps) {
   const { result, index, advance, context } = props
   const finding = result.advice.findings[index - 1]
@@ -143,7 +144,12 @@ function FindingDraftAction({
   )
 }
 
-function FindingStep({ finding, reviewers, teammates }: TourProps & { finding: JudgedFinding }) {
+function FindingStep({
+  finding,
+  result,
+  reviewers,
+  teammates,
+}: TourProps & { finding: JudgedFinding }) {
   const question = finding.tag === 'decision'
   return (
     <>
@@ -156,6 +162,7 @@ function FindingStep({ finding, reviewers, teammates }: TourProps & { finding: J
       </p>
       <PanelFaces ids={finding.raisedBy} reviewers={reviewers} teammates={teammates} />
       <FindingText>{finding.body}</FindingText>
+      <GroundingVerdict result={result} id={finding.id} />
       {question ? (
         <p className="panel-question">
           This is a question for the author: the answer depends on intent the code cannot show.
@@ -200,9 +207,13 @@ function SummaryStep({ result, reviewers, teammates }: TourProps) {
         teammates={teammates}
       />
       <FindingText>{advice.summary}</FindingText>
+      {result.grounding && <GroundingSummary grounding={result.grounding} reviewers={reviewers} />}
       {advice.setAside.length > 0 && (
         <details className="finding-notes">
-          <summary>Set aside by the judge · {advice.setAside.length}</summary>
+          <summary>
+            {result.grounding ? 'Rejected by both models' : 'Set aside by the judge'} ·{' '}
+            {advice.setAside.length}
+          </summary>
           <ul>
             {advice.setAside.map((item, index) => (
               <li key={index}>
