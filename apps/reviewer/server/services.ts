@@ -292,8 +292,8 @@ function checkoutOpener(workspaces: ReviewWorkspaces) {
       lease.release()
       signal.throwIfAborted()
     }
-    const { directory, sha } = lease.workspace
-    return { directory, sha, release: lease.release }
+    const { directory, sha, paths } = lease.workspace
+    return { directory, sha, paths, release: lease.release }
   }
 }
 

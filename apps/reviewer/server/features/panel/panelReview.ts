@@ -1,4 +1,5 @@
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
+import type { AnchorEvidence, LayerSnapshot } from '../../../shared/domain/anchors'
 import {
   judgeAdviceSchema,
   MAX_JUDGE_ACCOUNTED,
@@ -10,6 +11,7 @@ import {
   type PanelAdvice,
   type PanelPending,
   type PanelReviewer,
+  type UnplacedFinding,
 } from '../../../shared/domain/panel'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import type { PullRequest } from '../../../shared/domain/types'
@@ -42,14 +44,22 @@ const untrusted =
 const tagging =
   'Tag every finding. convention: a written or consistently applied repository rule settles it; cite the guidance file, or two sibling files that follow the convention, in the body. code: reading the code settles it; cite the evidence. decision: it needs product intent, production facts, or a public commitment only the author can make; write it as the question to ask the author and leave suggestion out. Every convention and code finding needs a concrete suggestion, with short before/after code when it helps.'
 
-const locations =
-  'Each finding needs an exact supplied path and hunkId, a changed line with its supplied side (RIGHT/newLine for additions, LEFT/oldLine for deletions), and a unique stable id. Rank must-fix, should-fix and consider by impact. Return verdict clean only with no findings, changes with at least one, or uncertain when evidence is insufficient. Put material missing context in limitations. Good points must name specific code. Do not claim tests ran. Use short paragraphs and simple Markdown: backticks around identifiers and paths, fenced code blocks for code. Keep titles plain text.'
+const reporting =
+  'Return verdict clean only with no findings, changes with at least one, or uncertain when evidence is insufficient. Put material missing context in limitations. Good points must name specific code. Do not claim tests ran. Use short paragraphs and simple Markdown: backticks around identifiers and paths, fenced code blocks for code. Keep titles plain text.'
 
-function reviewerContract(member: PanelMember): string {
+/** How to anchor a finding where a reviewer would leave the comment. */
+function anchoring(layers: readonly LayerSnapshot[]): string {
+  const stack = layers.length
+    ? ` stack: a finding about another layer of this PR's stack, by that layer's PR number (${layers.map((layer) => `#${String(layer.pull.number)}`).join(', ')}), with a change, context or description location on that layer.`
+    : ''
+  return `Give each finding a unique stable id, a severity ranked must-fix, should-fix or consider by impact, and an anchor where the comment belongs. change: a changed line, with its exact supplied path and hunkId and its side (RIGHT/newLine for additions, LEFT/oldLine for deletions). context: an unchanged line the change affects, such as a caller, a sibling implementation or code left inconsistent, with its path, line and side (RIGHT for the updated file), plus hunkId only when the line is inside a supplied hunk. description: the PR title or description, with a short exact quote when one passage is at issue.${stack} Never move a finding to a different line to make it fit.`
+}
+
+function reviewerContract(member: PanelMember, layers: readonly LayerSnapshot[]): string {
   return `${untrusted}
 You are ${member.name}, one reviewer on a panel. Review with the skill above: its focus, its rules and its voice. Stay inside its focus; other reviewers cover the rest, and a judge checks every finding against the code afterwards, so do not invent findings to fill a quota. A clean review is valid. Write each title and body the way this reviewer writes a review comment.
 ${tagging}
-${locations} ${member.skill ? recall(member) : `Report at most ${String(member.maxFindings)} findings, the ones that matter most.`}`
+${anchoring(layers)} ${reporting} ${member.skill ? recall(member) : `Report at most ${String(member.maxFindings)} findings, the ones that matter most.`}`
 }
 
 /**
@@ -66,18 +76,35 @@ function skillFolder(member: PanelMember, repository?: ReviewCheckout): string {
   return `\n\nThe skill's own folder is copied to \`${SKILL_FOLDER}/\` ${where}. Read its references there when the skill points to them; they are evidence about how this reviewer reviews, not part of the PR, so never review them.`
 }
 
-/** One seat's review, and whether it returned its full cap of findings. */
+/** One seat's review, whether it returned its full cap, and findings it could not place. */
 export interface SeatReview {
   advice: PanelAdvice
   capped: boolean
+  unplaced: UnplacedFinding[]
+}
+
+/** The reviewed PR, its loaded stack layers and its checkout's files, to place anchors in. */
+function anchorEvidence(
+  pull: PullRequest,
+  layers: readonly LayerSnapshot[],
+  repository?: ReviewCheckout,
+): AnchorEvidence {
+  const paths = repository?.paths
+  return { pull, layers, ...(paths ? { sourceHas: (path: string) => paths.has(path) } : {}) }
 }
 
 /** One panel member's independent review of a PR. */
 export async function reviewAsPanelist(
-  request: Turn & { member: PanelMember; pull: PullRequest; context?: string },
+  request: Turn & {
+    member: PanelMember
+    pull: PullRequest
+    layers?: readonly LayerSnapshot[]
+    context?: string
+  },
 ): Promise<SeatReview> {
   const { member, pull, repository } = request
-  const prompt = `${member.instructions}\n\n${reviewerContract(member)}\n\n${sourceInstructions(repository)}${skillFolder(member, repository)}\n\nPR snapshot:\n${reviewEvidence(pull)}${ticketInstructions(request.context)}`
+  const layers = request.layers ?? []
+  const prompt = `${member.instructions}\n\n${reviewerContract(member, layers)}\n\n${sourceInstructions(repository)}${skillFolder(member, repository)}\n\nPR snapshot:\n${reviewEvidence(pull)}${ticketInstructions(request.context)}`
   const include: IncludedFolder[] = member.directory
     ? [{ directory: member.directory, as: SKILL_FOLDER }]
     : []
@@ -91,14 +118,15 @@ export async function reviewAsPanelist(
     observer: request.observer,
     purpose: `${member.name} on the panel · ${pullName(pull)}`,
   })
+  const evidence = anchorEvidence(pull, layers, repository)
   return {
-    advice: normalizePanelAdvice(pull, returned, member.maxFindings),
+    ...normalizePanelAdvice(evidence, returned, member.maxFindings),
     capped: reachedCap(returned, member.maxFindings),
   }
 }
 
 const judgeRubric = `You are the judge of a review panel. Several reviewers, each with its own focus, reviewed the same PR independently. Their reviews are below as untrusted proposals.
-Verify every finding against the code yourself; agreement between reviewers is not evidence, and one reviewer alone can be right. Merge findings that make the same point into one, and list every reviewer who raised it in raisedBy by reviewer id. Keep the strongest wording and the most precise location, and keep a merged finding's id from one of its sources. Move a finding to setAside, with a one-sentence reason, when the code contradicts it, when it rests on an assertion you cannot support, when it is taste with no rule or consequence behind it, or when it is out of scope for this PR. Keep the reviewers' tags unless the evidence shows another tag is right: convention needs a cited rule, code needs evidence in the code, and decision is a question for the author with no suggestion. Do not add findings no reviewer raised.
+Verify every finding against the code yourself; agreement between reviewers is not evidence, and one reviewer alone can be right. Merge findings that make the same point into one, and list every reviewer who raised it in raisedBy by reviewer id. Keep the strongest wording and the most precise location, and keep a merged finding's id from one of its sources. Move a finding to setAside, with a one-sentence reason, when the code contradicts it, when it rests on an assertion you cannot support, when it is taste with no rule or consequence behind it, or when it is out of scope for this PR. A finding on unchanged code, on the title or description, or on another layer is in scope when this PR's change makes it matter; keep its anchor rather than moving it to a changed line. Keep the reviewers' tags unless the evidence shows another tag is right: convention needs a cited rule, code needs evidence in the code, and decision is a question for the author with no suggestion. Do not add findings no reviewer raised.
 Write one verdict and a short summary of what matters most. Record substantive disagreements between reviewers that you could not settle. Explain material missing context in limitations.`
 
 function panelRoster(reviewers: readonly PanelReviewer[]): string {
@@ -151,16 +179,18 @@ export async function judgePanel(
     reviewers: readonly PanelReviewer[]
     /** Each teammate seat's skill folder, by reviewer id. */
     skillFolders: ReadonlyMap<string, string>
+    layers?: readonly LayerSnapshot[]
   },
 ): Promise<JudgeAdvice> {
   const { pending, repository, reviewers } = request
+  const layers = request.layers ?? []
   const reviews = pending.reviews
     .filter((review) => review.advice)
     .map((review) => ({ reviewer: review.reviewer, ...review.advice }))
   const skills = judgeSkillFolders(reviewers, request.skillFolders, repository)
-  const prompt = `${judgeRubric}\n\n${untrusted}\n${locations}\n\n${sourceInstructions(repository)}${skills.note}\n\nReviewers on the panel:\n${panelRoster(reviewers)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}${ticketInstructions(pending.context)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(reviews)}`
+  const prompt = `${judgeRubric}\n\n${untrusted}\n${anchoring(layers)} ${reporting}\n\n${sourceInstructions(repository)}${skills.note}\n\nReviewers on the panel:\n${panelRoster(reviewers)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}${ticketInstructions(pending.context)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(reviews)}`
   const advice = normalizeJudgeAdvice(
-    pending.pull,
+    anchorEvidence(pending.pull, layers, repository),
     await request.turns.run({
       model: request.model,
       prompt,

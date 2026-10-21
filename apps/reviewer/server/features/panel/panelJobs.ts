@@ -256,7 +256,13 @@ export class PanelJobs {
       landed: (reviewer, { advice: seat, error }) => {
         pending.reviews.push({
           reviewer: reviewer.id,
-          ...(seat ? { advice: seat.advice, ...(seat.capped ? { capped: true } : {}) } : {}),
+          ...(seat
+            ? {
+                advice: seat.advice,
+                ...(seat.capped ? { capped: true } : {}),
+                ...(seat.unplaced.length ? { unplaced: seat.unplaced } : {}),
+              }
+            : {}),
           ...(error === undefined ? {} : { error }),
         })
         this.reportReviewers(session, pending)

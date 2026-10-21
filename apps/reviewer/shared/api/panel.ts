@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   judgeAdviceSchema,
   panelAdviceSchema,
+  panelFindingSchema,
   panelReviewerSchema,
   panelReviewSummarySchema,
   panelSeatRequestSchema,
@@ -15,6 +16,7 @@ import { pullSchema } from './reviewSchemas'
 const review = z.object({
   reviewer: seatIdSchema,
   advice: panelAdviceSchema.optional(),
+  unplaced: z.array(z.object({ finding: panelFindingSchema, problem: z.string() })).optional(),
   capped: z.boolean().optional(),
   error: z.string().optional(),
 })

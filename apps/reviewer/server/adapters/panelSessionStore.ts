@@ -1,6 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite'
+import type { FindingLocation as ChangeLocation } from '../../shared/domain/findings'
 import {
   panelReviewSummarySchema,
+  type PanelFinding,
   type PanelReviewSummary,
   type PanelSession,
 } from '../../shared/domain/panel'
@@ -28,7 +30,7 @@ export class PanelSessionStore {
   }
   get(id: string): PanelSession | undefined {
     const row = this.database.prepare('SELECT session FROM panel_sessions WHERE id = ?').get(id)
-    return row ? (JSON.parse(String(row.session)) as PanelSession) : undefined
+    return row ? readSession(row.session) : undefined
   }
   /** The newest panel in a repository, or the newest that covered `url`. */
   latest(repository: string, url?: string): PanelSession | undefined {
@@ -45,7 +47,7 @@ export class PanelSessionStore {
             'SELECT session FROM panel_sessions WHERE repository = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
           )
           .get(repository)
-    return row ? (JSON.parse(String(row.session)) as PanelSession) : undefined
+    return row ? readSession(row.session) : undefined
   }
   /** The latest judged result of each PR in a repository. */
   reviews(repository: string): PanelReviewSummary[] {
@@ -78,4 +80,28 @@ export class PanelSessionStore {
       }),
     )
   }
+}
+
+/**
+ * A saved session in today's shape. Findings saved before anchors point at a changed line with
+ * flat `path`, `hunkId`, `line` and `side` fields; those become change anchors.
+ */
+function readSession(saved: unknown): PanelSession {
+  const session = JSON.parse(String(saved)) as PanelSession
+  const advices = [
+    ...session.results.flatMap((result) => [result.advice, ...result.reviews.map((r) => r.advice)]),
+    ...(session.pending?.reviews.map((review) => review.advice) ?? []),
+  ]
+  for (const advice of advices)
+    advice?.findings.forEach((finding, index, findings) => {
+      findings[index] = withAnchor(finding)
+    })
+  return session
+}
+
+function withAnchor<F extends PanelFinding>(finding: F): F {
+  if ('anchor' in finding) return finding
+  const { path, hunkId, line, side, ...rest } = finding as unknown as Omit<F, 'anchor'> &
+    Pick<ChangeLocation, 'path' | 'hunkId' | 'line' | 'side'>
+  return { ...rest, anchor: { kind: 'change', path, hunkId, line, side } } as unknown as F
 }

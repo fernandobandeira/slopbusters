@@ -30,7 +30,7 @@ export function pointsAtChange(pull: PullRequest, finding: FindingLocation): boo
  * replaces the comment instead of adding another.
  */
 export function findingCommentId(prefix: string, pull: PullRequest, finding: FindingLocation) {
-  const source = JSON.stringify([
+  return stableId(prefix, [
     pull.url,
     pull.headSha,
     pull.baseSha,
@@ -40,6 +40,11 @@ export function findingCommentId(prefix: string, pull: PullRequest, finding: Fin
     finding.line,
     finding.side,
   ])
+}
+
+/** A short id that is the same whenever `parts` are, such as a draft entry for one finding. */
+export function stableId(prefix: string, parts: unknown[]): string {
+  const source = JSON.stringify(parts)
   // FNV-1a keeps the stable annotation ID below the draft contract's 100-character limit.
   let hash = 14695981039346656037n
   for (const byte of new TextEncoder().encode(source))

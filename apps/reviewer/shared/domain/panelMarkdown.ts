@@ -8,13 +8,12 @@ import {
   type PanelReviewer,
   type SetAside,
 } from './panel'
-import { DiffSide } from './types'
+import { anchorLabel, type Anchor } from './anchors'
 
 export function panelFindingMarkdown(finding: PanelFinding, raisedBy?: string): string {
-  const side = finding.side === DiffSide.left ? 'original' : 'updated'
   return [
     `**${panelSeverityLabels[finding.severity]} · ${findingTagLabels[finding.tag]}: ${finding.title}**`,
-    `\`${finding.path}:${String(finding.line)}\` · ${side} code${raisedBy ? ` · raised by ${raisedBy}` : ''}`,
+    `${anchorMarkdown(finding.anchor)}${raisedBy ? ` · raised by ${raisedBy}` : ''}`,
     finding.body,
     finding.suggestion && finding.tag !== 'decision'
       ? `**Suggested change**\n\n${finding.suggestion}`
@@ -22,6 +21,12 @@ export function panelFindingMarkdown(finding: PanelFinding, raisedBy?: string): 
   ]
     .filter(Boolean)
     .join('\n\n')
+}
+
+/** `src/a.ts:12` · updated code, with the path and line in backticks. */
+function anchorMarkdown(anchor: Anchor): string {
+  const [where = '', ...rest] = anchorLabel(anchor).split(' · ')
+  return anchor.kind === 'description' ? where : [`\`${where}\``, ...rest].join(' · ')
 }
 
 function setAsideMarkdown(item: SetAside, raisedBy: string): string {

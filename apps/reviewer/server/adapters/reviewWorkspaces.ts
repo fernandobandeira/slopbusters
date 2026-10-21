@@ -24,6 +24,8 @@ export interface WorkspaceLease {
 export interface ReviewCheckout {
   readonly directory: string
   readonly sha: string
+  /** The checkout's files, relative to its directory, when known. */
+  readonly paths?: ReadonlySet<string>
   readonly release: () => void
 }
 

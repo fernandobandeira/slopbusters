@@ -1,10 +1,12 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '~/components/ui/button'
+import { anchorLabel, type Anchor } from '../../../shared/domain/anchors'
 import { snapshotMatches } from '../../../shared/domain/findings'
 import {
   findingTagLabels,
   panelCommentBody,
   panelCommentId,
+  panelCommentsInline,
   panelDraftComment,
   panelSeverityLabels,
   panelVerdictLabels,
@@ -15,10 +17,11 @@ import {
 import { panelFindingMarkdown, panelReviewMarkdown } from '../../../shared/domain/panelMarkdown'
 import type { ReviewLocation } from '../../../shared/domain/review'
 import type { Teammate } from '../../../shared/domain/teammates'
-import { DiffSide, type PullRequest, type ReviewDraft } from '../../../shared/domain/types'
+import type { PullRequest, ReviewDraft } from '../../../shared/domain/types'
 import { CopyButton } from '../../components/CopyButton'
 import {
   FindingComment,
+  FindingSummaryEntry,
   removeDraftComment,
   saveDraftComment,
 } from '../../components/FindingComment'
@@ -66,22 +69,7 @@ export function PanelTour(props: TourProps) {
         )}
       </div>
       {finding ? (
-        <FindingComment
-          key={`${result.fingerprint}:${finding.id}`}
-          commentId={panelCommentId(result.pull, finding)}
-          location={`${finding.path}:${String(finding.line)} (${finding.side})`}
-          initialBody={panelCommentBody(finding)}
-          toComment={(body) => panelDraftComment(result.pull, finding, body)}
-          comments={context.draft.comments}
-          disabled={stale || !context.ready}
-          actions={<CopyButton label="Copy" text={panelFindingMarkdown(finding)} />}
-          onSave={(comment) => {
-            context.setDraft((draft) => saveDraftComment(draft, comment))
-          }}
-          onDelete={(id) => {
-            context.setDraft((draft) => removeDraftComment(draft, id))
-          }}
-        />
+        <FindingDraftAction result={result} finding={finding} stale={stale} context={context} />
       ) : (
         <div className="finding-actions" key={result.fingerprint}>
           <CopyButton
@@ -107,6 +95,54 @@ export function PanelTour(props: TourProps) {
   )
 }
 
+/** An inline comment when the finding sits on a line of this PR, else a passage of the summary. */
+function FindingDraftAction({
+  result,
+  finding,
+  stale,
+  context,
+}: {
+  result: PanelResult
+  finding: JudgedFinding
+  stale: boolean
+  context: PanelDraftContext
+}) {
+  const key = `${result.fingerprint}:${finding.id}`
+  const entry = {
+    location: anchorLabel(finding.anchor),
+    initialBody: panelCommentBody(finding),
+    disabled: stale || !context.ready,
+    actions: <CopyButton label="Copy" text={panelFindingMarkdown(finding)} />,
+  }
+  const id = panelCommentId(result.pull, finding)
+  if (!panelCommentsInline(result.pull, finding))
+    return (
+      <FindingSummaryEntry
+        key={key}
+        {...entry}
+        entryId={id}
+        initialBody={`**${anchorLabel(finding.anchor)}**\n\n${entry.initialBody}`}
+        draft={context.draft}
+        setDraft={context.setDraft}
+      />
+    )
+  return (
+    <FindingComment
+      key={key}
+      {...entry}
+      commentId={id}
+      toComment={(body) => panelDraftComment(result.pull, finding, body)}
+      comments={context.draft.comments}
+      onSave={(comment) => {
+        context.setDraft((draft) => saveDraftComment(draft, comment))
+      }}
+      onDelete={(commentId) => {
+        context.setDraft((draft) => removeDraftComment(draft, commentId))
+      }}
+    />
+  )
+}
+
 function FindingStep({ finding, reviewers, teammates }: TourProps & { finding: JudgedFinding }) {
   const question = finding.tag === 'decision'
   return (
@@ -116,10 +152,7 @@ function FindingStep({ finding, reviewers, teammates }: TourProps & { finding: J
       </span>
       <h2 className="finding-title">{finding.title}</h2>
       <p className="finding-location">
-        <code>
-          {finding.path}:{finding.line}
-        </code>{' '}
-        · {finding.side === DiffSide.left ? 'original' : 'updated'} code
+        <AnchorText anchor={finding.anchor} />
       </p>
       <PanelFaces ids={finding.raisedBy} reviewers={reviewers} teammates={teammates} />
       <FindingText>{finding.body}</FindingText>
@@ -135,6 +168,18 @@ function FindingStep({ finding, reviewers, teammates }: TourProps & { finding: J
           </div>
         )
       )}
+    </>
+  )
+}
+
+/** `src/a.ts:12 · updated code`, with the file and line set as code. */
+function AnchorText({ anchor }: { anchor: Anchor }) {
+  const [where, ...rest] = anchorLabel(anchor).split(' · ')
+  if (anchor.kind === 'description') return <>{where}</>
+  return (
+    <>
+      <code>{where}</code>
+      {rest.map((part) => ` · ${part}`).join('')}
     </>
   )
 }
@@ -178,6 +223,7 @@ function SummaryStep({ result, reviewers, teammates }: TourProps) {
           </ul>
         </details>
       )}
+      <UnplacedFindings result={result} reviewers={reviewers} />
       {notes
         .filter(([, entries]) => entries.length)
         .map(([title, entries]) => (
@@ -193,6 +239,35 @@ function SummaryStep({ result, reviewers, teammates }: TourProps) {
           </details>
         ))}
     </>
+  )
+}
+
+/** Findings a reviewer anchored somewhere the snapshot does not contain, kept as written. */
+function UnplacedFindings({
+  result,
+  reviewers,
+}: {
+  result: PanelResult
+  reviewers: PanelReviewer[]
+}) {
+  const unplaced = result.reviews.flatMap((review) =>
+    (review.unplaced ?? []).map((item) => ({ ...item, reviewer: review.reviewer })),
+  )
+  if (!unplaced.length) return null
+  return (
+    <details className="finding-notes">
+      <summary>Not placed in this snapshot · {unplaced.length}</summary>
+      <ul>
+        {unplaced.map(({ finding, problem, reviewer }) => (
+          <li key={`${reviewer}:${finding.id}`}>
+            <strong>{finding.title}</strong>{' '}
+            <span className="muted">· {reviewerName(reviewers, reviewer)}</span>
+            <FindingText>{finding.body}</FindingText>
+            <p className="panel-set-aside-reason">{problem}</p>
+          </li>
+        ))}
+      </ul>
+    </details>
   )
 }
 

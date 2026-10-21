@@ -12,7 +12,8 @@ import type {
 import { PanelJobs } from '../server/features/panel/panelJobs'
 import { PanelMembers } from '../server/features/panel/panelMembers'
 import { Teammates } from '../server/features/teammates/teammates'
-import type { ReviewerId } from '../shared/domain/panel'
+import * as routes from '../shared/api'
+import type { PanelFinding, PanelSession, ReviewerId } from '../shared/domain/panel'
 import { Provider } from '../shared/domain/types'
 import { fixtureJudgeAdvice, fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
 import { fixturePull } from './fixtures/pull'
@@ -343,6 +344,32 @@ describe('starting a panel', () => {
     expect((await jobs.start(repository, [url], everyone)).id).toBe(session.id)
     await expect(jobs.start(repository, [url], ['unclebob'])).rejects.toThrow(/Finish or cancel/)
     expect(jobs.cancel(session.id).status).toBe('cancelled')
+  })
+
+  it('reads a session saved before anchors, with each finding on its changed line', async () => {
+    const jobs = panel(recordingTurns(reply).turns)
+    const session = await jobs.start(repository, [url], ['unclebob'])
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
+    const saved = jobs.get(session.id)
+    const flat = (finding: PanelFinding) => {
+      const { anchor, ...rest } = finding
+      return anchor.kind === 'change' ? { ...rest, ...anchor, kind: undefined } : finding
+    }
+    const legacy = JSON.parse(
+      JSON.stringify(saved, (key, value: unknown) =>
+        key === 'findings' ? (value as PanelFinding[]).map(flat) : value,
+      ),
+    ) as PanelSession
+    store.panel.save({ ...legacy, id: 'legacy' })
+
+    const loaded = jobs.get('legacy')
+
+    expect(loaded.results[0]?.advice.findings[0]?.anchor).toEqual(
+      saved.results[0]?.advice.findings[0]?.anchor,
+    )
+    expect(() => routes.getPanel.response.parse(loaded)).not.toThrow()
   })
 
   it('marks a panel interrupted by a restart as cancelled', async () => {

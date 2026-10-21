@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as routes from '../shared/api'
 import type { ApiContract } from '../shared/api/contract'
-import type { PanelSession } from '../shared/domain/panel'
+import type { PanelFinding, PanelSession } from '../shared/domain/panel'
 import { Provider, type ReviewDraft } from '../shared/domain/types'
 import { PanelCompanion } from '../src/features/panel/PanelCompanion'
 import { call } from '../src/lib/api'
@@ -17,6 +17,9 @@ vi.mock('../src/lib/api', async (original) => ({
 }))
 
 const pull = fixturePull()
+function anchorPath({ anchor }: PanelFinding) {
+  return anchor.kind === 'change' || anchor.kind === 'context' ? anchor.path : undefined
+}
 function session(): PanelSession {
   const advice = fixtureJudgeAdvice(['teammate:avery', 'unclebob'])
   advice.findings = [
@@ -57,7 +60,16 @@ function session(): PanelSession {
         advice,
         reviews: [
           { reviewer: 'unclebob', advice: fixturePanelAdvice() },
-          { reviewer: 'teammate:avery', advice: fixturePanelAdvice() },
+          {
+            reviewer: 'teammate:avery',
+            advice: fixturePanelAdvice(),
+            unplaced: [
+              {
+                finding: fixturePanelFinding({ id: 'gone', title: 'Update the old caller' }),
+                problem: 'src/gone.ts is not in the snapshot or the reviewed source.',
+              },
+            ],
+          },
         ],
       },
     ],
@@ -101,6 +113,10 @@ describe('the review panel companion', () => {
     expect(await screen.findByRole('heading', { name: 'Changes to make' })).toBeTruthy()
     expect(screen.getByText('Set aside by the judge · 1')).toBeTruthy()
     expect(screen.getByText('Set aside: Taste with no rule behind it.')).toBeTruthy()
+    expect(screen.getByText('Not placed in this snapshot · 1')).toBeTruthy()
+    expect(
+      screen.getByText('src/gone.ts is not in the snapshot or the reviewed source.'),
+    ).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
 
     expect(screen.getByRole('heading', { name: 'Who may edit archived projects?' })).toBeTruthy()
@@ -113,9 +129,60 @@ describe('the review panel companion', () => {
     expect(draft.comments).toEqual([
       expect.objectContaining({
         body: 'Who may edit archived projects?\n\nShould editors still update an archived project?',
-        path: fixturePanelFinding().path,
+        path: anchorPath(fixturePanelFinding()),
       }),
     ])
+  })
+})
+
+describe('a finding without a line', () => {
+  it('adds a finding about the PR description to the review summary, not to a line', async () => {
+    const described = session()
+    described.results[0]?.advice.findings.push({
+      ...fixturePanelFinding({
+        id: 'describe-roles',
+        title: 'Say which roles changed',
+        body: 'The description does not mention viewers.',
+        anchor: { kind: 'description', field: 'description' },
+      }),
+      raisedBy: ['teammate:avery'],
+    })
+    vi.mocked(call).mockImplementation((route: ApiContract) => {
+      if (route === routes.getPanel) return Promise.resolve(described)
+      if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
+      return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
+    })
+    let draft: ReviewDraft = { comments: [], summary: 'Looks close.', viewedFileIds: [] }
+    render(
+      <MemoryRouter>
+        <PanelCompanion
+          sessionId="panel-1"
+          pull={pull}
+          draft={draft}
+          setDraft={(action) => {
+            draft = action(draft)
+          }}
+          ready
+          openReview={vi.fn()}
+          focusLine={vi.fn()}
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Changes to make' })
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
+    expect(screen.getByText('PR description')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Add review comment' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Add to review summary' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save to review draft' }))
+
+    expect(draft.comments).toEqual([])
+    expect(draft.summary).toMatch(
+      /^Looks close\.\n\n<!-- panel:\w+ -->\n\*\*PR description\*\*\n\nSay which roles changed\n\nThe description does not mention viewers\./,
+    )
   })
 })
 

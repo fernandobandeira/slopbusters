@@ -1,8 +1,16 @@
 import { z } from 'zod'
-import { findingCommentId, findingDraftComment, pointsAtChange } from './findings'
+import {
+  anchorProblem,
+  anchorSchema,
+  inlineLocation,
+  placeAnchor,
+  type Anchor,
+  type AnchorEvidence,
+} from './anchors'
+import { findingCommentId, findingDraftComment, stableId } from './findings'
 import { organizationSchema, type OrganizationPreferences } from './preferences'
 import { teammateIdSchema } from './teammates'
-import { DiffSide, Provider, type DraftComment, type PullRequest } from './types'
+import { Provider, type DraftComment, type PullRequest } from './types'
 
 /** The reviewers Slopbusters ships; teammates join them as `teammate:<id>`. */
 export const builtInReviewers = {
@@ -116,10 +124,7 @@ export const panelFindingSchema = z
     body: z.string().min(1).max(3000),
     /** Required for convention and code findings; a decision is a question, not a fix. */
     suggestion: z.string().min(1).max(4000).optional(),
-    path: z.string().min(1).max(1000),
-    hunkId: z.string().min(1).max(200),
-    line: z.number().int().positive(),
-    side: z.enum(DiffSide),
+    anchor: anchorSchema,
   })
   .strict()
 export type PanelFinding = z.infer<typeof panelFindingSchema>
@@ -172,23 +177,24 @@ export const judgeAdviceSchema = z
 export type JudgeAdvice = z.infer<typeof judgeAdviceSchema>
 
 /**
- * Keep a reviewer's findings that point at changed lines, the first `maxFindings` of them in the
- * order the reviewer ranked them, and a verdict that agrees with what is left.
+ * Keep a reviewer's findings whose anchors the evidence can place, the first `maxFindings` of
+ * them in the order the reviewer ranked them, and a verdict that agrees with what is left.
+ * Findings it cannot place are returned apart, so they stay visible without moving elsewhere.
  */
 export function normalizePanelAdvice(
-  pull: PullRequest,
+  evidence: AnchorEvidence,
   input: unknown,
   maxFindings: number,
-): PanelAdvice {
+): { advice: PanelAdvice; unplaced: UnplacedFinding[] } {
   const advice = panelAdviceSchema.parse(input)
-  const kept = usableFindings(pull, advice.findings, advice.limitations)
-  if (kept.length > maxFindings)
+  const { placed, unplaced } = placeFindings(evidence, advice.findings, advice.limitations)
+  if (placed.length > maxFindings)
     advice.limitations.push(
-      `Kept the first ${String(maxFindings)} of ${String(kept.length)} ranked findings.`,
+      `Kept the first ${String(maxFindings)} of ${String(placed.length)} ranked findings.`,
     )
-  advice.findings = kept.slice(0, maxFindings)
+  advice.findings = placed.slice(0, maxFindings)
   advice.verdict = agreeingVerdict(advice.verdict, advice.findings.length)
-  return advice
+  return { advice, unplaced }
 }
 
 /**
@@ -199,9 +205,12 @@ export function reachedCap(advice: Pick<PanelAdvice, 'findings'>, maxFindings: n
   return advice.findings.length >= maxFindings
 }
 
-/** The judge's advice, keeping only findings that point at changes and that a reviewer raised. */
+/**
+ * The judge's advice, keeping only findings a reviewer raised. A finding the evidence cannot
+ * place is set aside with the reason, rather than moved to another line.
+ */
 export function normalizeJudgeAdvice(
-  pull: PullRequest,
+  evidence: AnchorEvidence,
   input: unknown,
   reviewers: readonly string[],
 ): JudgeAdvice {
@@ -214,31 +223,61 @@ export function normalizeJudgeAdvice(
     advice.limitations.push(
       `Dropped ${String(advice.findings.length - attributed.length)} findings no reviewer on the panel raised.`,
     )
-  advice.findings = rankFindings(usableFindings(pull, attributed, advice.limitations))
-  advice.setAside = advice.setAside.map((item) => ({
-    ...item,
-    raisedBy: item.raisedBy.filter((id) => known.has(id)),
-  }))
+  const { placed, unplaced } = placeFindings(evidence, attributed, advice.limitations)
+  advice.findings = rankFindings(placed)
+  advice.setAside = [
+    ...advice.setAside.map((item) => ({
+      ...item,
+      raisedBy: item.raisedBy.filter((id) => known.has(id)),
+    })),
+    ...unplaced.map(({ finding, problem }) => ({
+      title: finding.title,
+      body: finding.body,
+      ...codeLocation(finding.anchor),
+      raisedBy: finding.raisedBy,
+      reason: `Its location could not be checked: ${problem}`,
+    })),
+  ]
   advice.verdict = agreeingVerdict(advice.verdict, advice.findings.length)
   return advice
 }
 
-function usableFindings<F extends PanelFinding>(
-  pull: PullRequest,
+/** A finding whose anchor the evidence cannot place, and why. */
+export interface UnplacedFinding<F extends PanelFinding = PanelFinding> {
+  finding: F
+  problem: string
+}
+
+function placeFindings<F extends PanelFinding>(
+  evidence: AnchorEvidence,
   findings: F[],
   limitations: string[],
-): F[] {
+): { placed: F[]; unplaced: UnplacedFinding<F>[] } {
   const ids = new Set<string>()
-  const usable = findings.filter((finding) => {
-    if (ids.has(finding.id) || !pointsAtChange(pull, finding)) return false
+  const placed: F[] = []
+  const unplaced: UnplacedFinding<F>[] = []
+  let repeated = 0
+  for (const finding of findings) {
+    if (ids.has(finding.id)) {
+      repeated++
+      continue
+    }
     ids.add(finding.id)
-    return true
-  })
-  if (usable.length < findings.length)
+    const problem = anchorProblem(finding.anchor, evidence)
+    if (problem) unplaced.push({ finding, problem })
+    else placed.push({ ...finding, anchor: placeAnchor(finding.anchor, evidence) })
+  }
+  if (repeated) limitations.push(`Dropped ${String(repeated)} findings that repeated an id.`)
+  if (unplaced.length)
     limitations.push(
-      `Dropped ${String(findings.length - usable.length)} findings that did not point at a changed line of this snapshot or repeated an id.`,
+      `${String(unplaced.length)} findings point at a location the supplied evidence does not contain; they are listed apart and were not moved.`,
     )
-  return usable
+  return { placed, unplaced }
+}
+
+function codeLocation(anchor: Anchor): { path?: string; line?: number } {
+  const location = anchor.kind === 'stack' ? anchor.location : anchor
+  return location.kind === 'description' ? {} : { path: location.path, line: location.line }
 }
 
 /** Repository rules first, then what the code settles, then questions; severity within each. */
@@ -256,14 +295,23 @@ function agreeingVerdict(verdict: PanelAdvice['verdict'], findings: number) {
 }
 
 export function panelCommentId(pull: PullRequest, finding: PanelFinding): string {
-  return findingCommentId('panel', pull, finding)
+  const inline = inlineLocation(pull, finding.id, finding.anchor)
+  return inline
+    ? findingCommentId('panel', pull, inline)
+    : stableId('panel', [pull.url, pull.headSha, pull.baseSha, finding.id, finding.anchor])
+}
+/** Whether a finding can be an inline comment on this PR; otherwise it goes in the summary. */
+export function panelCommentsInline(pull: PullRequest, finding: PanelFinding): boolean {
+  return Boolean(inlineLocation(pull, finding.id, finding.anchor))
 }
 export function panelDraftComment(
   pull: PullRequest,
   finding: PanelFinding,
   body: string,
 ): DraftComment {
-  return findingDraftComment(panelCommentId(pull, finding), pull, finding, body)
+  const location = inlineLocation(pull, finding.id, finding.anchor)
+  if (!location) throw new Error('This finding belongs in the review summary, not on a line.')
+  return findingDraftComment(panelCommentId(pull, finding), pull, location, body)
 }
 /** The comment a finding starts as: a fix to make, or for a decision the question to answer. */
 export function panelCommentBody(finding: PanelFinding): string {
@@ -276,6 +324,8 @@ export interface PanelReview {
   /** The seat that wrote it. */
   reviewer: string
   advice?: PanelAdvice
+  /** Findings whose location the evidence could not place, kept as the seat wrote them. */
+  unplaced?: UnplacedFinding[]
   /** The seat returned its full cap, so it may have had more findings than it reported. */
   capped?: boolean
   error?: string

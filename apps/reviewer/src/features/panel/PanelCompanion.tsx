@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
 import { Check, CircleAlert, LoaderCircle, X } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
+import { anchorLine } from '../../../shared/domain/anchors'
 import { snapshotMatches } from '../../../shared/domain/findings'
 import { seatRequests, type PanelSession } from '../../../shared/domain/panel'
 import type { Teammate } from '../../../shared/domain/teammates'
@@ -43,7 +44,7 @@ export function PanelCompanion(
     onSessionUpdate()
   }, [job.session?.id, job.session?.results.length, job.session?.status])
   useEffect(() => {
-    focusLine(current ? tour.finding : undefined)
+    focusLine(current && tour.finding ? anchorLine(tour.finding.anchor) : undefined)
     return () => {
       focusLine(undefined)
     }
