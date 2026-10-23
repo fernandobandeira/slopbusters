@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { CommandTimeoutError } from '../server/adapters/process'
 import type { StructuredTurnRequest } from '../server/adapters/t3Engine/engineTurns'
 import { fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
 import {
@@ -126,6 +127,26 @@ describe('a grounding debate that stops', () => {
     expect(after.map((request) => request.model)).toEqual([companionJudge, judge])
     expect(after[0]?.prompt).toContain('The current list:')
     expect(jobs.get(session.id).results[0]?.grounding?.outcome).toBe('agreed')
+  })
+
+  it('says a turn ran out of time, with room for a long turn, and keeps what came before', async () => {
+    const { turns, requests } = recordingTurns((request) => {
+      if (isGrounding(request) && request.model.provider === companion.provider)
+        throw new CommandTimeoutError('Codex')
+      return reply(request)
+    })
+    const jobs = panel(turns)
+
+    const session = await jobs.start(repository, [url], everyone)
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('failed')
+    })
+
+    expect(jobs.get(session.id).error).toBe(
+      'Grounding turn 2 on gpt-6-astra ran out of time after 20 minutes. Retry continues from the last finished turn.',
+    )
+    expect(requests.find(isGrounding)?.timeoutMs).toBe(20 * 60 * 1000)
+    expect(jobs.get(session.id).pending?.grounding?.turns).toHaveLength(1)
   })
 
   it('keeps the debate when the app stops, so a retry after restart resumes it', async () => {

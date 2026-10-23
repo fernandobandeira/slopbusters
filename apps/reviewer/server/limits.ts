@@ -126,3 +126,10 @@ export const MAX_PANEL_HISTORY_CHARS = 60_000
 export const MAX_GROUNDING_SOURCES = 40
 /** Grounding turns before the debate stops and keeps what the two models did agree on. */
 export const MAX_GROUNDING_TURNS = 6
+/**
+ * One grounding turn checks every selected source against the code, so a strong model reading a
+ * large repository needs far longer than a single review pass.
+ */
+export const GROUNDING_TURN_TIMEOUT_MS = 20 * 60 * 1000
+/** A planning pass checks one finding. */
+export const PLANNING_TIMEOUT_MS = 10 * 60 * 1000

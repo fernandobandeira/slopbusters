@@ -9,6 +9,7 @@ import type { PanelSessionStore } from '../../adapters/panelSessionStore'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
+import { PLANNING_TIMEOUT_MS } from '../../limits'
 import { reviewEvidence } from '../../reviewSnapshot'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { pullName, sourceInstructions } from '../reviewPrompts'
@@ -94,6 +95,7 @@ export class PanelGates {
           signal: controller.signal,
           directory: repository?.directory,
           observer,
+          timeoutMs: PLANNING_TIMEOUT_MS,
           purpose: `Panel plan · ${pullName(result.pull)}`,
         })
       const reply = this.options.sessions

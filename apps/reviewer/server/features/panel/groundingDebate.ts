@@ -14,7 +14,9 @@ import type { PanelPending } from '../../../shared/domain/panelSession'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
-import { MAX_GROUNDING_SOURCES, MAX_GROUNDING_TURNS } from '../../limits'
+import { CommandTimeoutError } from '../../adapters/process'
+import { UserError } from '../../errors'
+import { GROUNDING_TURN_TIMEOUT_MS, MAX_GROUNDING_SOURCES, MAX_GROUNDING_TURNS } from '../../limits'
 import { reviewEvidence } from '../../reviewSnapshot'
 import { debate, unanimousApproval } from '../flows/debate'
 import { pullName, sourceInstructions, ticketInstructions } from '../reviewPrompts'
@@ -97,10 +99,17 @@ async function settle(
       })),
       turn: async (role) => {
         const model = (role === 'primary' ? state.roles.primary : secondary) ?? state.roles.primary
-        const reply = await request.track(
-          { label: `Grounding · turn ${String(state.turns.length + 1)}`, model },
-          (observer) => groundingTurn(request, state, { role, model, observer }),
-        )
+        const number = state.turns.length + 1
+        const reply = await request
+          .track({ label: `Grounding · turn ${String(number)}`, model }, (observer) =>
+            groundingTurn(request, state, { role, model, observer }),
+          )
+          .catch((error: unknown) => {
+            if (!(error instanceof CommandTimeoutError)) throw error
+            throw new UserError(
+              `Grounding turn ${String(number)} on ${model.model} ran out of time after ${String(GROUNDING_TURN_TIMEOUT_MS / 60_000)} minutes. Retry continues from the last finished turn.`,
+            )
+          })
         request.signal.throwIfAborted()
         const move = recordTurn(state, { role, model, reply })
         request.save()
@@ -136,6 +145,7 @@ function groundingTurn(
     directory: repository?.directory,
     include: skills.include,
     observer: turn.observer,
+    timeoutMs: GROUNDING_TURN_TIMEOUT_MS,
     purpose: `Panel grounding · ${pullName(pending.pull)}`,
   })
 }
