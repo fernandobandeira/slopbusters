@@ -8,7 +8,8 @@ import { useActivePanel } from '../features/panel/useActivePanel'
 
 /**
  * The PR header's panel actions: the latest panel result, and asking the panel again. While a
- * panel is still working on the PR, it takes the picker's place and opens that panel instead.
+ * panel is still working on the PR, it takes the picker's place and opens that panel instead. A
+ * panel that stopped with saved work sits beside the picker, so a retry is one click away.
  */
 export function PullPanelActions({
   repository,
@@ -62,17 +63,28 @@ export function PullPanelActions({
         />
       ) : (
         !(asking && active.loading) && (
-          <PanelPicker
-            repository={repository}
-            pull={pull}
-            provider={provider}
-            onOpen={(sessionId) => {
-              active.reload()
-              onOpen(sessionId)
-            }}
-            openOnMount={asking}
-            onClose={onDismissAsk}
-          />
+          <>
+            {active.stopped && (
+              <ActivePanelButton
+                session={active.stopped}
+                number={pull.number}
+                onOpen={() => {
+                  if (active.stopped) onOpen(active.stopped.id)
+                }}
+              />
+            )}
+            <PanelPicker
+              repository={repository}
+              pull={pull}
+              provider={provider}
+              onOpen={(sessionId) => {
+                active.reload()
+                onOpen(sessionId)
+              }}
+              openOnMount={asking}
+              onClose={onDismissAsk}
+            />
+          </>
         )
       )}
     </>

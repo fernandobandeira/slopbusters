@@ -4,7 +4,10 @@ import type { PanelSession } from '../../../shared/domain/panelSession'
 import { useApiQuery } from '../../lib/useApiQuery'
 import { PanelStack } from './PanelStack'
 
-/** The panel still working on this PR, with its reviewers' faces; opens the companion on it. */
+/**
+ * The panel still working on this PR, or stopped with saved work, with its reviewers' faces;
+ * opens the companion on it.
+ */
 export function ActivePanelButton({
   session,
   number,
@@ -15,8 +18,12 @@ export function ActivePanelButton({
   onOpen: () => void
 }) {
   const teammates = useApiQuery(routes.listTeammates, {}).data?.teammates
-  const running = session.status === 'running'
-  const label = running ? 'Panel reviewing…' : 'Panel needs you'
+  const label =
+    session.status === 'running'
+      ? 'Panel reviewing…'
+      : session.status === 'partial'
+        ? 'Panel needs you'
+        : 'Panel stopped · retry'
   return (
     <Button
       size="sm"

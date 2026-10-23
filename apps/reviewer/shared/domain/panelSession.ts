@@ -75,3 +75,15 @@ export interface PanelSession {
   error?: string
   createdAt: string
 }
+
+/**
+ * A panel that failed or was cancelled, as when the app quit, with reviews or grounding turns
+ * saved that a retry would keep.
+ */
+export function stoppedWithWork(session: Pick<PanelSession, 'status' | 'pending'>): boolean {
+  if (session.status !== 'failed' && session.status !== 'cancelled') return false
+  const pending = session.pending
+  return Boolean(
+    pending?.reviews.some((review) => review.advice) || pending?.grounding?.turns.length,
+  )
+}

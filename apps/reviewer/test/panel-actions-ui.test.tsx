@@ -104,3 +104,25 @@ describe('the PR header while a panel works on the PR', () => {
     expect(onSettled).toHaveBeenCalledOnce()
   })
 })
+
+describe('the PR header after a panel stopped', () => {
+  it('offers the stopped panel beside the picker, so a retry after restart is one click', async () => {
+    serve(() => panel('cancelled'))
+    const onOpen = renderActions()
+
+    const button = await screen.findByRole('button', { name: /^Open the review panel on PR/ })
+    fireEvent.click(button)
+
+    expect(button.textContent).toContain('Panel stopped · retry')
+    expect(screen.getByRole('button', { name: /^Ask the review panel/ })).toBeTruthy()
+    expect(onOpen).toHaveBeenCalledWith('panel-1')
+  })
+
+  it('offers nothing to resume when the stopped panel saved no reviews', async () => {
+    serve(() => ({ ...panel('failed'), pending: undefined }))
+    renderActions()
+
+    expect(await screen.findByRole('button', { name: /^Ask the review panel/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Open the review panel on PR/ })).toBeNull()
+  })
+})
