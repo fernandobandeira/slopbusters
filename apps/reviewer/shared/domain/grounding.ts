@@ -33,6 +33,18 @@ export const groundingResolutionLabels: Record<GroundingResolution, string> = {
   unverified: 'Not checked by a second model',
 }
 
+/**
+ * Where a problem comes from: lines this PR (or its stack) changed, code it left alone whose
+ * meaning it changes, or code that was already wrong regardless of it. The last is a follow-up.
+ */
+export const groundingOrigins = ['change', 'exposed', 'preexisting'] as const
+export type GroundingOrigin = (typeof groundingOrigins)[number]
+export const groundingOriginLabels: Record<GroundingOrigin, string> = {
+  change: 'Caused by this change',
+  exposed: 'Exposed by this change',
+  preexisting: 'Already there · follow-up',
+}
+
 /** The short key a round gives a seat's finding, so colliding seat-local ids stay distinct. */
 const sourceKeySchema = z.string().regex(/^f\d{1,3}$/)
 
@@ -76,6 +88,8 @@ export const groundedEntrySchema = z
     plan: z.string().min(1).max(400).optional(),
     /** Required for `authorsCall`: the decision only the author can make. */
     question: z.string().min(1).max(300).optional(),
+    /** Absent only on lists grounded before origins were recorded. */
+    origin: z.enum(groundingOrigins).optional(),
     destination: destinationSchema,
   })
   .strict()
@@ -218,6 +232,10 @@ function entryProblems(
   selected: ReadonlyMap<string, GroundingCandidate>,
 ): string[] {
   const problems = [...verdictProblems(entry), ...evidenceProblems(entry)]
+  if (!entry.origin)
+    problems.push(
+      'say in origin whether this change caused it, exposed it, or it was there before.',
+    )
   if (entry.destination.kind !== 'unresolved' && !scope.pulls.includes(entry.destination.pull))
     problems.push(`PR #${String(entry.destination.pull)} is not this PR or a loaded layer.`)
   const decisions = entry.sources.every((key) => selected.get(key)?.finding.tag === 'decision')

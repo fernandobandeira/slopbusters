@@ -4,7 +4,11 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as routes from '../shared/api'
 import type { ApiContract } from '../shared/api/contract'
-import { selectCandidates, type GroundingState } from '../shared/domain/grounding'
+import {
+  selectCandidates,
+  type GroundingOrigin,
+  type GroundingState,
+} from '../shared/domain/grounding'
 import { groundedAdvice, recordTurn, resolveEntries } from '../shared/domain/groundingResult'
 import type { PanelSession } from '../shared/domain/panelSession'
 import { PanelCompanion } from '../src/features/panel/PanelCompanion'
@@ -21,7 +25,7 @@ vi.mock('../src/lib/api', async (original) => ({
 const pull = fixturePull()
 
 /** Avery raised two findings and Uncle Bob one; the round grounded two and deferred one. */
-function grounded(): GroundingState {
+function grounded(origin: GroundingOrigin = 'change'): GroundingState {
   const avery = fixturePanelAdvice([
     fixturePanelFinding({ id: 'audit', title: 'Reuse the audit helper' }),
     fixturePanelFinding({ id: 'rename', title: 'Rename the guard' }),
@@ -51,6 +55,7 @@ function grounded(): GroundingState {
         reason: 'The helper already writes the audit row.',
         evidence: ['src/audit.ts:4'],
         plan: 'Call writeAudit instead of the inline insert.',
+        origin,
         destination: { kind: 'code' as const, pull: pull.number },
       },
       {
@@ -59,6 +64,7 @@ function grounded(): GroundingState {
         verdict: 'notTrue' as const,
         reason: 'The guard is called by the editor route.',
         evidence: ['src/routes/editor.ts:18'],
+        origin: 'change' as const,
         destination: { kind: 'code' as const, pull: pull.number },
       },
     ],
@@ -74,8 +80,8 @@ function grounded(): GroundingState {
   return state
 }
 
-function session(): PanelSession {
-  const grounding = grounded()
+function session(origin?: GroundingOrigin): PanelSession {
+  const grounding = grounded(origin)
   return {
     id: 'panel-1',
     repository: 'review-room/example',
@@ -102,6 +108,7 @@ function session(): PanelSession {
 }
 
 afterEach(() => {
+  localStorage.clear()
   cleanup()
   vi.clearAllMocks()
 })
@@ -141,9 +148,47 @@ describe('a grounded panel result', () => {
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
 
     expect(screen.getByRole('heading', { name: 'Reuse the audit helper' })).toBeTruthy()
-    expect(screen.getByText('Worth fixing · Both models agree')).toBeTruthy()
+    expect(
+      screen.getByText('Worth fixing · Both models agree · Caused by this change'),
+    ).toBeTruthy()
     expect(screen.getByText('Call writeAudit instead of the inline insert.')).toBeTruthy()
     expect(screen.getByText('src/audit.ts:4')).toBeTruthy()
+  })
+})
+
+describe('a problem that was there before this PR', () => {
+  it('is kept apart as a follow-up and left unticked', async () => {
+    vi.mocked(call).mockImplementation((route: ApiContract) => {
+      if (route === routes.getPanel) return Promise.resolve(session('preexisting'))
+      if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
+      return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
+    })
+    render(
+      <MemoryRouter>
+        <PanelCompanion
+          sessionId="panel-1"
+          pull={pull}
+          draft={{ comments: [], summary: '', viewedFileIds: [] }}
+          setDraft={vi.fn()}
+          ready
+          openReview={vi.fn()}
+          focusLine={vi.fn()}
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText('Worth fixing 1 · Not true 1 · 1 already there, follow-up'),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Choose fixes' }))
+
+    expect(screen.getByText('Already there · follow-ups · 1')).toBeTruthy()
+    expect(screen.queryByText(/^Worth fixing · \d/)).toBeNull()
+    expect(
+      screen.getByRole<HTMLInputElement>('checkbox', { name: 'Reuse the audit helper' }).checked,
+    ).toBe(false)
   })
 })
 

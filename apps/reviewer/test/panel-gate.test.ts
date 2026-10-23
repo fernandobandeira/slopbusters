@@ -50,6 +50,12 @@ describe('the gate before Proceed', () => {
     ])
   })
 
+  it('leaves a problem that was there before this PR for the author to pick up', () => {
+    const entries = [entry('g1', { origin: 'exposed' }), entry('g2', { origin: 'preexisting' })]
+
+    expect(initialGate(entries).actions.map((action) => action.selected)).toEqual([true, false])
+  })
+
   it('keeps an overridden rejection from launching until the author writes its plan', () => {
     const entries = [rejected('g1')]
 

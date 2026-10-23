@@ -27,6 +27,7 @@ function entry(sources: string[], changes: Partial<GroundedEntry> = {}): Grounde
     reason: 'The audit helper already does this.',
     evidence: ['src/audit.ts:4'],
     plan: 'Reuse the audit helper.',
+    origin: 'change',
     destination: { kind: 'code', pull: 12 },
     ...changes,
   }
@@ -131,6 +132,17 @@ describe('a grounded list', () => {
     ).toEqual([
       'g-f1: without a verdict, say in missing which evidence would settle it.',
       "g-f2: an author's call needs the question to ask.",
+    ])
+  })
+
+  it('says where each problem comes from, without letting that decide the verdict', () => {
+    const problems = groundingProblems(
+      turn([entry(['f1'], { origin: undefined }), entry(['f2'], { origin: 'preexisting' })]),
+      scope(candidates),
+    )
+
+    expect(problems).toEqual([
+      'g-f1: say in origin whether this change caused it, exposed it, or it was there before.',
     ])
   })
 

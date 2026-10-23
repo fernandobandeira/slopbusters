@@ -159,6 +159,7 @@ Verdicts:
 - tasteSkip: a preference consistent with the reviewer but with no demonstrated cost, which the author can skip.
 - authorsCall: it depends on product intent, production facts or a public commitment. question says what to ask the author. A source tagged decision starts here, and preferring an answer does not settle it.
 - Leave verdict out when the evidence needed to decide is unavailable, and say in missing what would settle it. Never pick a verdict just to fill the field.
+origin: change when lines this PR or its stack changed cause the problem; exposed when the code is outside the change but the change makes it wrong or newly relevant; preexisting when it was already wrong without this PR, which makes it a follow-up. Origin never changes the verdict: a preexisting problem can still be legit, and an entry is not rejected for being outside the change.
 reason: one or two sentences with the evidence or what is missing. destination: the PR whose code must change (code), the PR whose title or description needs a new draft (metadata), or unresolved with why; a comment on one layer can need its change on another.`
 
 function turnInstructions(state: GroundingState, role: GroundingRole): string {

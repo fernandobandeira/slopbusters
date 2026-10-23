@@ -44,12 +44,18 @@ export interface GateItem {
   problem?: string
 }
 
-/** The gate before the author has touched it: entries both models agree are worth fixing. */
+/**
+ * The gate before the author has touched it: entries both models agree are worth fixing, except
+ * problems that were there before this PR, which the author picks up only by choice.
+ */
 export function initialGate(entries: readonly ResolvedEntry[]): Gate {
   return {
     actions: entries.map((entry) => ({
       entry: entry.id,
-      selected: entry.verdict === 'legit' && entry.resolution === 'agreed',
+      selected:
+        entry.verdict === 'legit' &&
+        entry.resolution === 'agreed' &&
+        entry.origin !== 'preexisting',
     })),
   }
 }

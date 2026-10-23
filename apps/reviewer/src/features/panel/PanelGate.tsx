@@ -1,6 +1,7 @@
 import { LoaderCircle } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import {
+  groundingOriginLabels,
   groundingResolutionLabels,
   groundingVerdictLabels,
   type GroundingState,
@@ -13,23 +14,35 @@ import { usePanelGate } from './usePanelGate'
 
 type Gate = ReturnType<typeof usePanelGate>
 
-/** How the gate groups entries: what to fix first, then what needs the author, then the rest. */
+const settled = (entry: ResolvedEntry) => entry.resolution !== 'disputed'
+const followUp = (entry: ResolvedEntry) =>
+  entry.origin === 'preexisting' && ['legit', 'authorsCall'].includes(entry.verdict ?? '')
+
+/**
+ * How the gate groups entries: what to fix first, then what needs the author, then problems that
+ * were there before this PR, then the rest.
+ */
 const groups: { title: string; open: boolean; matches: (entry: ResolvedEntry) => boolean }[] = [
   {
     title: 'Worth fixing',
     open: true,
-    matches: (entry) => entry.verdict === 'legit' && entry.resolution !== 'disputed',
+    matches: (entry) => entry.verdict === 'legit' && settled(entry) && !followUp(entry),
   },
   {
     title: 'Questions for you',
     open: true,
-    matches: (entry) => entry.verdict === 'authorsCall' && entry.resolution !== 'disputed',
+    matches: (entry) => entry.verdict === 'authorsCall' && settled(entry) && !followUp(entry),
   },
-  { title: 'The models disagree', open: true, matches: (entry) => entry.resolution === 'disputed' },
+  { title: 'The models disagree', open: true, matches: (entry) => !settled(entry) },
   {
     title: 'Needs evidence',
     open: true,
-    matches: (entry) => !entry.verdict && entry.resolution !== 'disputed',
+    matches: (entry) => !entry.verdict && settled(entry),
+  },
+  {
+    title: 'Already there · follow-ups',
+    open: true,
+    matches: (entry) => followUp(entry) && settled(entry),
   },
   {
     title: 'Rejected',
@@ -37,7 +50,7 @@ const groups: { title: string; open: boolean; matches: (entry: ResolvedEntry) =>
     matches: (entry) =>
       Boolean(entry.verdict) &&
       !['legit', 'authorsCall'].includes(entry.verdict ?? '') &&
-      entry.resolution !== 'disputed',
+      settled(entry),
   },
 ]
 
@@ -109,6 +122,7 @@ function GateRow({
       <p className="finding-severity">
         {entry.verdict ? groundingVerdictLabels[entry.verdict] : 'No verdict yet'} ·{' '}
         {groundingResolutionLabels[entry.resolution]}
+        {entry.origin && ` · ${groundingOriginLabels[entry.origin]}`}
       </p>
       <FindingText>{entry.reason}</FindingText>
       {entry.question && <AnswerField item={item} gate={gate} />}

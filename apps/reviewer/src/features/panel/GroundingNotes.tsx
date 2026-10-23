@@ -1,4 +1,5 @@
 import {
+  groundingOriginLabels,
   groundingResolutionLabels,
   groundingVerdictLabels,
   groundingVerdicts,
@@ -19,6 +20,7 @@ export function GroundingVerdict({ result, id }: { result: PanelResult; id: stri
     <div className="panel-grounding">
       <p className="finding-severity">
         {verdictLabel(entry)} · {groundingResolutionLabels[entry.resolution]}
+        {entry.origin && ` · ${groundingOriginLabels[entry.origin]}`}
       </p>
       <FindingText>{entry.reason}</FindingText>
       <EntryDetails entry={entry} />
@@ -107,6 +109,8 @@ export function GroundingSummary({
     const count = resolved.filter((entry) => entry.verdict === verdict).length
     return count ? [`${verdictLabel({ verdict })} ${String(count)}`] : []
   })
+  const followUps = resolved.filter((entry) => entry.origin === 'preexisting').length
+  if (followUps) verdicts.push(`${String(followUps)} already there, follow-up`)
   return (
     <>
       <p className="muted panel-grounding-counts">{counts.join(' · ')}</p>
