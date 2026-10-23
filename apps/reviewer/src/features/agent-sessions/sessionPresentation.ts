@@ -1,5 +1,5 @@
 import type { AgentSession } from '../../../shared/domain/agentSession'
-import type { OrganizationPreferences } from '../../../shared/domain/preferences'
+import { providerModels, type OrganizationPreferences } from '../../../shared/domain/preferences'
 import { issuePath, reviewPath } from '../../lib/routes'
 
 export const agentNames: Record<AgentSession['kind'], string> = {
@@ -10,10 +10,12 @@ export const agentNames: Record<AgentSession['kind'], string> = {
   jobs: 'Steve Jobs',
   panel: 'Review panel',
 }
+/** The model's short name, such as "Astra 6"; a model the app no longer runs shows its id. */
 export function modelName(model: OrganizationPreferences) {
-  if (model.model === 'gpt-6.1-sol') return 'Sol 6.1'
-  if (model.model === 'claude-opus-5-5') return 'Opus 5.5'
-  return model.model.replace(/^claude-/, '').replace(/-/g, ' ')
+  const known = Object.values(providerModels)
+    .flatMap((roles) => Object.values(roles))
+    .find((item) => item.model === model.model)
+  return known?.label ?? model.model.replace(/^claude-/, '').replace(/-/g, ' ')
 }
 /**
  * Where a session's subject opens: the PR it reviewed, the panel on that PR, which shows a panel
