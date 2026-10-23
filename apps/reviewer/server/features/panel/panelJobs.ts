@@ -9,7 +9,7 @@ import type {
   PanelReview,
   PanelSession,
 } from '../../../shared/domain/panelSession'
-import type { OrganizationPreferences } from '../../../shared/domain/preferences'
+import type { ModelPair, OrganizationPreferences } from '../../../shared/domain/preferences'
 import { blocksNewReview, reviewedPullsLabel } from '../../../shared/domain/reviewSession'
 import type { PullStackResult } from '../../../shared/domain/stacks'
 import type { PullRequest } from '../../../shared/domain/types'
@@ -30,8 +30,10 @@ interface Options {
   store: PanelSessionStore
   turns: StructuredTurns
   members: PanelMembers
-  /** The primary and companion models ground; each seat reviews on its provider's model. */
-  models: () => { primary: OrganizationPreferences; companion?: OrganizationPreferences }
+  /** Each seat reviews on its provider's model. */
+  models: () => ModelPair
+  /** The stronger models that ground the seats' findings; no companion when only one provider runs. */
+  judges: () => Pick<ModelPair, 'primary'> & Partial<Pick<ModelPair, 'companion'>>
   loadPull: (url: string) => Promise<PullRequest>
   /** What reviewers already said on a PR, for teammates whose GitHub login is known. */
   history?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewHistory>
@@ -85,7 +87,8 @@ export class PanelJobs {
       repository,
       urls,
       model: models.primary,
-      ...(models.companion ? { companion: models.companion } : {}),
+      companion: models.companion,
+      judges: this.options.judges(),
       reviewers,
       status: 'running',
       progress: 'Loading PR snapshots and their stacks…',
@@ -209,7 +212,7 @@ export class PanelJobs {
     const reviewers = session.reviewers.filter((reviewer) =>
       pending.reviews.some((review) => review.reviewer === reviewer.id && review.advice),
     )
-    const companion = session.companion ?? this.options.models().companion
+    const judges = session.judges ?? this.options.judges()
     return groundPanel({
       ...run,
       turns: this.options.turns,
@@ -217,9 +220,9 @@ export class PanelJobs {
       reviewers,
       skillFolders: await this.options.members.skillFolders(reviewers, session.model.provider),
       models: {
-        primary: session.model,
-        ...(companion && companion.provider !== session.model.provider
-          ? { secondary: companion }
+        primary: judges.primary,
+        ...(judges.companion && judges.companion.provider !== judges.primary.provider
+          ? { secondary: judges.companion }
           : {}),
       },
       save: () => {

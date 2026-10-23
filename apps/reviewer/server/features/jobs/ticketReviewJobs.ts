@@ -7,17 +7,14 @@ import {
   type JobsAnswer,
   type JobsSession,
 } from '../../../shared/domain/jobs'
-import {
-  organizationDefaults,
-  type OrganizationPreferences,
-} from '../../../shared/domain/preferences'
+import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import type { Ticket } from '../../../shared/domain/tickets'
-import { Provider } from '../../../shared/domain/types'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { ReviewerStore } from '../../adapters/store'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { publicError, UserError } from '../../errors'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
+import { savedModels } from '../models'
 import { FlowJobs } from '../flows/flowJobs'
 import { failedSeats, reviewSeats } from '../flows/panel'
 import type { TicketService } from '../tickets/tickets'
@@ -160,15 +157,7 @@ export class TicketReviewJobs {
   }
 
   private models() {
-    const { organization: primary, companion } = this.options.store.getPreferences()
-    if (!primary) throw new UserError('Choose your primary model in Settings first.')
-    return {
-      primary,
-      companion: companion ?? {
-        provider: Provider.claude,
-        model: organizationDefaults.claude.model,
-      },
-    }
+    return savedModels(this.options.store.getPreferences())
   }
   private recover(session: JobsSession): JobsSession {
     return this.jobs.recover(

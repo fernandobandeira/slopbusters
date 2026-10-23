@@ -6,7 +6,7 @@ import { Provider, type PullRequest } from '../shared/domain/types'
 import { loadDraft } from '../src/features/review/drafts'
 import { OrganizationEmptyState } from '../src/features/review/OrganizationEmptyState'
 import { OrganizationSettings } from '../src/features/settings/OrganizationSettings'
-import { organizationDefaults } from '../shared/domain/preferences'
+import { modelFor, providerModels } from '../shared/domain/preferences'
 import { ReviewWorkspace } from '../src/features/review/ReviewWorkspace'
 import { fixturePull } from './fixtures/pull'
 
@@ -32,7 +32,7 @@ function renderWorkspace(pull: PullRequest) {
       { initialEntries: ['/repos/review-room/example/pulls/128'] },
       createElement(ReviewWorkspace, {
         pull,
-        organization: { provider: Provider.codex, model: organizationDefaults.codex.model },
+        organization: modelFor(Provider.codex),
         onUpdate: vi.fn(),
         onReload: vi.fn(),
         reloading: false,
@@ -87,7 +87,7 @@ describe('organization before review', () => {
   it('shows progress and cancellation with progress and cancellation while working', () => {
     const markup = renderToStaticMarkup(
       createElement(OrganizationEmptyState, {
-        organization: { provider: Provider.claude, model: organizationDefaults.claude.model },
+        organization: modelFor(Provider.claude),
         organizing: true,
         onOrganize: vi.fn(),
         onCancel: vi.fn(),
@@ -104,17 +104,17 @@ describe('organization before review', () => {
 
 describe('organization settings', () => {
   it.each([Provider.codex, Provider.claude])(
-    'suggests the requested default for %s',
+    'names the fixed models when %s is primary',
     (provider) => {
       const markup = renderToStaticMarkup(
         createElement(OrganizationSettings, {
-          organization: { provider, model: organizationDefaults[provider].model },
+          organization: modelFor(provider),
           firstRun: true,
           onSave: vi.fn(),
         }),
       )
-      expect(markup).toContain(organizationDefaults[provider].model)
-      expect(markup).toContain(organizationDefaults[provider].label)
+      expect(markup).toContain(providerModels[provider].review.label)
+      expect(markup).toContain(providerModels[provider].judge.label)
       expect(markup).toContain('Get started')
     },
   )

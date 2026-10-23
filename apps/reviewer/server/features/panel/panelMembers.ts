@@ -8,7 +8,7 @@ import {
   type PanelSeatRequest,
   type ReviewerId,
 } from '../../../shared/domain/panel'
-import { modelForProvider, type OrganizationPreferences } from '../../../shared/domain/preferences'
+import type { ModelPair, OrganizationPreferences } from '../../../shared/domain/preferences'
 import { installedFor } from '../../../shared/domain/teammates'
 import { Provider } from '../../../shared/domain/types'
 import { UserError } from '../../errors'
@@ -35,7 +35,7 @@ export class PanelMembers {
    */
   async describe(
     requests: readonly PanelSeatRequest[],
-    models: { primary: OrganizationPreferences; companion?: OrganizationPreferences },
+    models: ModelPair,
   ): Promise<PanelReviewer[]> {
     const asked = await Promise.all(
       requests.map(async (request) => {
@@ -55,7 +55,7 @@ export class PanelMembers {
       asked.flatMap(({ id, providers }) =>
         providers.map(async (provider) => {
           const reviewer = await this.reviewer(id, provider)
-          const model = modelForProvider(provider, models)
+          const model = provider === models.primary.provider ? models.primary : models.companion
           if (providers.length === 1) return { ...reviewer, model }
           return {
             ...reviewer,

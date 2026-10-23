@@ -97,7 +97,9 @@ it('asks for a model first, reports a missing session, and needs a PR for Linus'
     const noUrl = await post(configured, { persona: 'linus', sessionId: 'linus-1' })
 
     expect(noModel.status).toBe(400)
-    expect(await noModel.json()).toEqual({ error: 'Choose your primary model in Settings first.' })
+    expect(await noModel.json()).toEqual({
+      error: 'Choose your primary provider in Settings first.',
+    })
     expect(missing.status).toBe(400)
     expect(await missing.json()).toEqual({ error: 'This Bob review is no longer available.' })
     expect(noUrl.status).toBe(400)

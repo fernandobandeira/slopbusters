@@ -165,7 +165,6 @@ export function App() {
     preferences,
     preferencesError,
     saveOrganization,
-    saveCompanion,
     reload: reloadPreferences,
   } = usePreferences()
   useEffect(() => {
@@ -394,10 +393,8 @@ export function App() {
                   key={preferences ? 'loaded' : 'loading'}
                   inboxUrl={inboxPath(repository, filter)}
                   organization={preferences?.organization}
-                  companion={preferences?.companion}
                   status={status}
                   onSave={saveOrganization}
-                  onSaveCompanion={saveCompanion}
                   teammates={<TeammateSettings />}
                 />
               }

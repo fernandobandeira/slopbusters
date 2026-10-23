@@ -121,9 +121,11 @@ describe('automatic organization API', () => {
           error: 'Organization failed. Please retry.',
         })
       })
-      const next = { provider: Provider.codex, model: 'custom-model' }
-      await put(`${app.url}/api/preferences`, { organization: next })
+      await put(`${app.url}/api/preferences`, {
+        organization: { provider: Provider.codex, model: 'custom-model' },
+      })
       await organize(url)
+      const next = { provider: Provider.codex, model: 'gpt-6.1-sol' }
       expect(organizePull).toHaveBeenLastCalledWith(turns, fixturePull(), next, {
         signal: anySignal,
         observer: anyObserver,

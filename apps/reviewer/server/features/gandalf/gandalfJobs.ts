@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { GandalfSession, GandalfTask, GandalfTurn } from '../../../shared/domain/gandalf'
-import { organizationDefaults } from '../../../shared/domain/preferences'
-import { Provider, type PullRequest } from '../../../shared/domain/types'
+import { savedModels } from '../models'
+import type { PullRequest } from '../../../shared/domain/types'
 import type { ReviewerStore } from '../../adapters/store'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import type { ConflictWorkspace } from '../../adapters/conflictWorkspace'
@@ -156,13 +156,7 @@ export class GandalfJobs {
     return this.jobs.active().some((session) => session.repository === repository)
   }
   private models() {
-    const { organization: primary, companion } = this.options.store.getPreferences()
-    if (!primary) throw new UserError('Choose your primary model in Settings first.')
-    const provider = primary.provider === Provider.codex ? Provider.claude : Provider.codex
-    return {
-      primary,
-      companion: companion ?? { provider, model: organizationDefaults[provider].model },
-    }
+    return savedModels(this.options.store.getPreferences())
   }
   private launch(session: GandalfSession) {
     this.jobs.launch(session, (signal) => this.runWithRecovery(session, signal))

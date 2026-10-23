@@ -1,9 +1,8 @@
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import type { LinusAdvice } from '../../../shared/domain/linus'
-import { organizationDefaults } from '../../../shared/domain/preferences'
-import { Provider, type PullRequest } from '../../../shared/domain/types'
+import { savedModels } from '../models'
+import type { PullRequest } from '../../../shared/domain/types'
 import { fetchPull } from '../pulls/github'
-import { UserError } from '../../errors'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { loadLinusSkill, reconcileWithLinus, reviewWithLinus } from './linusReview'
@@ -26,17 +25,7 @@ export class LinusJobs extends DualReviewJobs<LinusAdvice> {
       name: 'Linus',
       kind: 'linus',
       sessions: options.sessions,
-      models: () => {
-        const { organization: primary, companion } = store.getPreferences()
-        if (!primary) throw new UserError('Choose your primary model in Settings first.')
-        return {
-          primary,
-          companion: companion ?? {
-            provider: Provider.claude,
-            model: organizationDefaults.claude.model,
-          },
-        }
-      },
+      models: () => savedModels(store.getPreferences()),
       skill: () => loadLinusSkill(staticDirectory, skillDirectory),
       save: (session) => {
         store.saveLinusSession(session)

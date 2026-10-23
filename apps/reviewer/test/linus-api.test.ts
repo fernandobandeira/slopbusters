@@ -166,10 +166,12 @@ describe('Linus review API and persistence', () => {
       expect((await request(endpoint, 'POST', body)).status).toBe(400)
       expect(reviewWithLinus).not.toHaveBeenCalled()
       await request(`${app.url}/api/preferences`, 'PUT', { organization: primary, theme: 'nord' })
-      await request(`${app.url}/api/preferences`, 'PUT', { companion })
+      await request(`${app.url}/api/preferences`, 'PUT', {
+        organization: { ...primary, model: 'custom-model' },
+        companion,
+      })
       expect(await (await fetch(`${app.url}/api/preferences`)).json()).toEqual({
         organization: primary,
-        companion,
         theme: 'nord',
       })
       expect(

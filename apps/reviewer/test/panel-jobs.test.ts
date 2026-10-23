@@ -9,8 +9,10 @@ import { Provider } from '../shared/domain/types'
 import { fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
 import {
   companion,
+  companionJudge,
   everyone,
   isGrounding,
+  judge,
   panelHarness,
   primary,
   reply,
@@ -246,9 +248,9 @@ describe('a reviewer on both providers', () => {
       ]),
     )
     expect(requests.filter(isGrounding).map((request) => request.model)).toEqual([
-      primary,
-      companion,
-      primary,
+      judge,
+      companionJudge,
+      judge,
     ])
     expect(requests.find(isGrounding)?.prompt).toContain('- unclebob@codex: Uncle Bob (Codex)')
     expect(jobs.get(session.id).reviewers.map((seat) => [seat.id, seat.model])).toEqual([

@@ -58,8 +58,10 @@ export interface PanelSession {
   repository: string
   urls: string[]
   model: OrganizationPreferences
-  /** The other provider's model, which grounds with the primary; absent when unavailable. */
+  /** The other provider's review model. */
   companion?: OrganizationPreferences
+  /** The stronger models that ground findings; absent on sessions from before they were fixed. */
+  judges?: { primary: OrganizationPreferences; companion?: OrganizationPreferences }
   reviewers: PanelReviewer[]
   status: 'running' | 'partial' | 'complete' | 'failed' | 'cancelled'
   progress: string

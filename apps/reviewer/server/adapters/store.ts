@@ -17,7 +17,7 @@ import {
   readReviewChanges,
 } from './reviewProgressStore'
 import type { PullRequest, ReviewDraft } from '../../shared/domain/types'
-import type { Preferences } from '../../shared/domain/preferences'
+import { withFixedModels, type Preferences } from '../../shared/domain/preferences'
 import { gandalfSessionSchema, type GandalfSession } from '../../shared/domain/gandalf'
 import type { BobSession } from '../../shared/domain/bob'
 import { readSavedBobReviews } from './savedBobReviews'
@@ -199,7 +199,7 @@ export class ReviewerStore {
   }
   getPreferences(): Preferences {
     const row = this.database.prepare('SELECT value FROM preferences WHERE id = 1').get()
-    return row ? (JSON.parse(String(row.value)) as Preferences) : {}
+    return row ? withFixedModels(JSON.parse(String(row.value)) as Preferences) : {}
   }
   saveLinusSession(session: LinusSession): void {
     this.database

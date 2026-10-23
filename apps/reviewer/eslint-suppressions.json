@@ -447,9 +447,6 @@
   "src/features/settings/OrganizationSettings.tsx": {
     "@typescript-eslint/no-deprecated": {
       "count": 1
-    },
-    "max-lines-per-function": {
-      "count": 1
     }
   },
   "src/features/source-navigation/SourceContextDialog.tsx": {

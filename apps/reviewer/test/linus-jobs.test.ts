@@ -202,7 +202,7 @@ describe('dual Linus review sessions', () => {
       expect(jobs.get(session.id).status).toBe('failed')
     })
     expect(jobs.get(session.id).results).toHaveLength(1)
-    store.savePreferences({ organization: { ...primary, model: 'updated-primary' } })
+    store.savePreferences({ organization: companion })
     jobs.retry(session.id)
     await vi.waitFor(() => {
       expect(jobs.get(session.id).status).toBe('complete')
@@ -210,7 +210,7 @@ describe('dual Linus review sessions', () => {
     expect(fetchPull).toHaveBeenCalledTimes(3)
     expect(jobs.get(session.id).results).toHaveLength(2)
     expect(jobs.get(session.id).results[0]!.reviewers[0]!.model).toBe(primary.model)
-    expect(jobs.get(session.id).results[1]!.reviewers[0]!.model).toBe('updated-primary')
+    expect(jobs.get(session.id).results[1]!.reviewers[0]!.model).toBe(companion.model)
   })
   it('cancels both reviewers and ignores late results', async () => {
     vi.mocked(reviewWithLinus).mockImplementation(

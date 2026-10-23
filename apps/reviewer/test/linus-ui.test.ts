@@ -79,7 +79,7 @@ describe('Linus entry and model settings', () => {
     )
     expect(markup).toBe('')
   })
-  it('offers only the shared primary setting and one companion setting', () => {
+  it('offers only a primary provider and names the fixed models', () => {
     const markup = renderToStaticMarkup(
       createElement(
         MemoryRouter,
@@ -88,14 +88,14 @@ describe('Linus entry and model settings', () => {
           inboxUrl: '/',
           organization: { provider: Provider.codex, model: 'gpt-6.1-sol' },
           onSave: vi.fn(),
-          onSaveCompanion: vi.fn(),
         }),
       ),
     )
-    expect(markup).toContain('Primary model')
-    expect(markup).toContain('Companion model')
-    expect(markup).toContain('claude-opus-5-5')
-    expect(markup.match(/class="organization-settings"/g)).toHaveLength(2)
-    expect(markup).not.toContain('Reconciliation model')
+    expect(markup).toContain('Primary provider')
+    expect(markup).not.toContain('Companion model')
+    expect(markup.match(/class="organization-settings"/g)).toHaveLength(1)
+    expect(markup).toContain('Reviews run on Sol 6.1 and Opus 5.5.')
+    expect(markup).toContain('Astra 6 and Fable 5.1 check panel')
+    expect(markup).not.toContain('<input id=')
   })
 })

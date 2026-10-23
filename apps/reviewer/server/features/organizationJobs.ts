@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { ReviewerStore } from '../adapters/store'
 import type { StructuredTurns } from '../adapters/t3Engine/engineTurns'
 import { organizePull } from './organization/organize'
+import { savedModels } from './models'
 import { JOB_RETENTION_MS } from '../limits'
 import { UserError, publicError } from '../errors'
 
@@ -27,9 +28,7 @@ export class OrganizationJobs {
 
   start(pullId: string, force: boolean) {
     if (this.stopped) throw new UserError('The reviewer is shutting down.', 503)
-    const organization = this.store.getPreferences().organization
-    if (!organization)
-      throw new UserError('Choose your coding provider and model in Settings first.')
+    const organization = savedModels(this.store.getPreferences()).primary
     const pull = this.store.getPull(pullId)
     const running = [...this.jobs].find(
       ([, job]) => job.pullId === pull.id && job.status === 'running',

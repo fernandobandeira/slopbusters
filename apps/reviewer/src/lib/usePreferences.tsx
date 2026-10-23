@@ -44,8 +44,5 @@ export function usePreferences() {
     saveOrganization: async (organization: OrganizationPreferences) => {
       await context.save({ organization })
     },
-    saveCompanion: async (companion: OrganizationPreferences) => {
-      await context.save({ companion })
-    },
   }
 }

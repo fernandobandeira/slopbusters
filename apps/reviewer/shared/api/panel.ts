@@ -29,6 +29,9 @@ const session = z.object({
   urls: z.array(z.string()),
   model: organizationSchema,
   companion: organizationSchema.optional(),
+  judges: z
+    .object({ primary: organizationSchema, companion: organizationSchema.optional() })
+    .optional(),
   reviewers: z.array(panelReviewerSchema),
   status: z.enum(['running', 'partial', 'complete', 'failed', 'cancelled']),
   progress: z.string(),

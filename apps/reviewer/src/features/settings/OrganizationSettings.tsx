@@ -2,14 +2,13 @@ import { useId, useState, type FormEvent } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { Provider, type AppStatus } from '../../../shared/domain/types'
 import {
-  organizationDefaults,
-  organizationSchema,
+  modelFor,
   providerLabel,
+  providerModels,
   type OrganizationPreferences,
 } from '../../../shared/domain/preferences'
 import { OpenAI, ClaudeAI } from '~/components/Icons'
 import { Button } from '~/components/ui/button'
-import { Input } from '~/components/ui/input'
 import { message } from '../../lib/api'
 
 export function OrganizationSettings({
@@ -17,34 +16,25 @@ export function OrganizationSettings({
   status,
   onSave,
   firstRun = false,
-  companion = false,
 }: {
   organization?: OrganizationPreferences
   status?: AppStatus
   onSave: (organization: OrganizationPreferences) => Promise<void>
   firstRun?: boolean
-  companion?: boolean
 }) {
   const id = useId()
   const [provider, setProvider] = useState(organization?.provider ?? Provider.codex)
-  const [models, setModels] = useState(() => ({
-    codex: organizationDefaults.codex.model,
-    claude: organizationDefaults.claude.model,
-    ...(organization && { [organization.provider]: organization.model }),
-  }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
-  const model = models[provider]
-  const valid = organizationSchema.safeParse({ provider, model }).success
   async function save(event: FormEvent) {
     event.preventDefault()
-    if (!valid || saving) return
+    if (saving) return
     setSaving(true)
     setError('')
     setSaved(false)
     try {
-      await onSave(organizationSchema.parse({ provider, model }))
+      await onSave(modelFor(provider))
       setSaved(true)
     } catch (cause) {
       setError(message(cause))
@@ -79,33 +69,10 @@ export function OrganizationSettings({
           </label>
         ))}
       </fieldset>
-      <label htmlFor={`${id}-model`}>Model</label>
-      <Input
-        id={`${id}-model`}
-        value={model}
-        disabled={saving}
-        required
-        maxLength={160}
-        aria-describedby={`${id}-suggestion`}
-        list={`${id}-models`}
-        onChange={(event) => {
-          setModels({ ...models, [provider]: event.target.value })
-          setSaved(false)
-        }}
-      />
-      <datalist id={`${id}-models`}>
-        <option value={organizationDefaults[provider].model}>
-          {organizationDefaults[provider].label}
-        </option>
-      </datalist>
-      <p className="muted" id={`${id}-suggestion`}>
-        Suggested: {organizationDefaults[provider].label}. Enter any model supported by{' '}
-        {providerLabel(provider)}.
-      </p>
       <p className="muted">
-        {companion
-          ? `The companion reviews independently. Your primary model reconciles both reviews and guides Linus’s conversation.`
-          : `Your signed-in ${providerLabel(provider)} account groups PR changes, reviews with Linus, and reconciles the companion’s findings.`}
+        Reviews run on {providerModels.codex.review.label} and {providerModels.claude.review.label}.{' '}
+        {providerModels.codex.judge.label} and {providerModels.claude.judge.label} check panel
+        findings against the code.
       </p>
       {status && (!status[provider].available || status[provider].authenticated === false) && (
         <p role="status" className="inbox-warning">
@@ -114,7 +81,7 @@ export function OrganizationSettings({
       )}
       {error && <p role="alert">Could not save your preferences: {error}</p>}
       {saved && <p role="status">Preferences saved.</p>}
-      <Button type="submit" disabled={!valid || saving}>
+      <Button type="submit" disabled={saving}>
         {saving && <LoaderCircle size={14} className="animate-spin" aria-hidden="true" />}
         {saving ? 'Saving…' : firstRun ? 'Get started' : 'Save preferences'}
       </Button>

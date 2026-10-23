@@ -6,27 +6,20 @@ import { LanguageServerSettings } from './LanguageServerSettings'
 import { ReviewWorkspaceSettings } from './ReviewWorkspaceSettings'
 import { LinearSettings } from './LinearSettings'
 import { OrganizationSettings } from './OrganizationSettings'
-import { Provider, type AppStatus } from '../../../shared/domain/types'
-import {
-  organizationDefaults,
-  type OrganizationPreferences,
-} from '../../../shared/domain/preferences'
+import type { AppStatus } from '../../../shared/domain/types'
+import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 
 export function SettingsPage({
   inboxUrl,
   organization,
-  companion,
   status,
   onSave,
-  onSaveCompanion,
   teammates,
 }: {
   inboxUrl: string
   organization?: OrganizationPreferences
-  companion?: OrganizationPreferences
   status?: AppStatus
   onSave: (organization: OrganizationPreferences) => Promise<void>
-  onSaveCompanion: (companion: OrganizationPreferences) => Promise<void>
   /** The Teammates section, composed by the app. */
   teammates?: ReactNode
 }) {
@@ -37,23 +30,12 @@ export function SettingsPage({
       </Link>
       <h1>Settings</h1>
       <section className="settings-section" aria-labelledby="organization-settings-title">
-        <h2 id="organization-settings-title">Primary model</h2>
+        <h2 id="organization-settings-title">Primary provider</h2>
         <p className="muted">
-          Group PR changes, review with Linus, and reconcile both reviewers’ recommendations.
+          Groups PR changes, leads Linus’s conversation, and reconciles both reviewers’
+          recommendations. The other provider reviews alongside it.
         </p>
         <OrganizationSettings organization={organization} status={status} onSave={onSave} />
-      </section>
-      <section className="settings-section" aria-labelledby="companion-settings-title">
-        <h2 id="companion-settings-title">Companion model</h2>
-        <p className="muted">Review alongside the primary model and challenge its reasoning.</p>
-        <OrganizationSettings
-          organization={
-            companion ?? { provider: Provider.claude, model: organizationDefaults.claude.model }
-          }
-          status={status}
-          onSave={onSaveCompanion}
-          companion
-        />
       </section>
       {teammates}
       <LinearSettings />

@@ -3,11 +3,12 @@ import type { StructuredTurnRequest } from '../server/adapters/t3Engine/engineTu
 import { fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
 import {
   companion,
+  companionJudge,
   everyone,
   groundingReply,
   isGrounding,
+  judge,
   panelHarness,
-  primary,
   reply,
   repository,
   url,
@@ -82,7 +83,7 @@ describe('a grounding debate that does not settle', () => {
     const { turns, requests } = recordingTurns(reply)
     const jobs = panel(turns, {
       loadPull: () => Promise.resolve(fixturePull()),
-      models: () => ({ primary }),
+      judges: () => ({ primary: judge }),
     })
 
     const session = await jobs.start(repository, [url], everyone)
@@ -90,7 +91,7 @@ describe('a grounding debate that does not settle', () => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
 
-    expect(requests.filter(isGrounding).map((request) => request.model)).toEqual([primary])
+    expect(requests.filter(isGrounding).map((request) => request.model)).toEqual([judge])
     const [result] = jobs.get(session.id).results
     expect(result?.grounding?.outcome).toBe('single')
     expect(result?.grounding?.resolved?.map((entry) => entry.resolution)).toEqual(['unverified'])
@@ -122,7 +123,7 @@ describe('a grounding debate that stops', () => {
 
     const after = requests.slice(before)
     expect(after.every(isGrounding)).toBe(true)
-    expect(after.map((request) => request.model)).toEqual([companion, primary])
+    expect(after.map((request) => request.model)).toEqual([companionJudge, judge])
     expect(after[0]?.prompt).toContain('The current list:')
     expect(jobs.get(session.id).results[0]?.grounding?.outcome).toBe('agreed')
   })
@@ -155,6 +156,6 @@ describe('a grounding debate that stops', () => {
       expect(restarted.get(session.id).status).toBe('complete')
     })
 
-    expect(requests.map((request) => request.model)).toEqual([companion, primary])
+    expect(requests.map((request) => request.model)).toEqual([companionJudge, judge])
   })
 })

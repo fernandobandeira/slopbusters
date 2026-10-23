@@ -23,6 +23,7 @@ import { configureSourceAssetsDirectory } from './adapters/treeSymbols'
 import { BobJobs } from './features/bob/bobJobs'
 import { LinusJobs } from './features/linus/linusJobs'
 import { OrganizationJobs } from './features/organizationJobs'
+import { savedModels } from './features/models'
 import { GandalfJobs } from './features/gandalf/gandalfJobs'
 import { createGandalfPlanner } from './features/gandalf/gandalfPlan'
 import { openConflictWorkspace } from './adapters/conflictWorkspace'
@@ -179,7 +180,8 @@ export function createServices(options: ReviewerServerOptions) {
     turns,
     sessions: agentSessions,
     members: panelMembers,
-    models: () => ({ primary: chatModel(), companion: store.getPreferences().companion }),
+    models: () => savedModels(store.getPreferences()),
+    judges: () => savedModels(store.getPreferences(), 'judge'),
     loadPull: pulls.fetchPull,
     stack: (url) => stacks.getStackMetadata(url),
     history: async (pull) => {
@@ -192,11 +194,7 @@ export function createServices(options: ReviewerServerOptions) {
     openRepository,
     context: tickets.contextForPull,
   })
-  const chatModel = () => {
-    const model = store.getPreferences().organization
-    if (!model) throw new UserError('Choose your primary model in Settings first.')
-    return model
-  }
+  const chatModel = () => savedModels(store.getPreferences()).primary
   return {
     store,
     github,

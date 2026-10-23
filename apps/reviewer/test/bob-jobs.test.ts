@@ -128,15 +128,12 @@ describe('Bob dual review lifecycle', () => {
 })
 
 describe('Bob settings and saved reviews', () => {
-  it('defaults to Codex when Claude is primary and requires different providers', () => {
-    store.savePreferences({ organization: companion, companion: undefined })
+  it('pairs a Claude primary with Codex, ignoring an old same-provider companion', () => {
+    store.savePreferences({ organization: companion, companion })
     const session = jobs.start(repository, [fixturePull().url])
     expect(session.primary).toEqual(companion)
-    expect(session.companion.provider).toBe(Provider.codex)
+    expect(session.companion).toEqual(primary)
     jobs.cancel(session.id)
-
-    store.savePreferences({ organization: primary, companion: primary })
-    expect(() => jobs.start(repository, [fixturePull().url])).toThrow(/both Codex and Claude/)
   })
   it('recovers interrupted sessions and retains completed results after reopening storage', async () => {
     const session = jobs.start(repository, [fixturePull().url])
