@@ -54,6 +54,8 @@ import { Teammates } from './features/teammates/teammates'
 import { PanelMembers } from './features/panel/panelMembers'
 import { PanelJobs } from './features/panel/panelJobs'
 import { PanelFixes } from './features/panel/panelFixes'
+import { localSnapshot } from './features/panel/localRound'
+import { loadOriginals } from './features/pulls/originals'
 import { PanelGates } from './features/panel/panelGates'
 import { PanelRoutes } from './features/panel/panelRoutes'
 import { loadBuiltInSkill } from './features/panel/builtInSkills'
@@ -189,6 +191,21 @@ export function createServices(options: ReviewerServerOptions) {
     models: () => savedModels(store.getPreferences()),
     judges: () => savedModels(store.getPreferences(), 'judge'),
     loadPull: pulls.fetchPull,
+    loadLocal: (local) =>
+      localSnapshot(local, {
+        loadPull: pulls.fetchPull,
+        importCommit: (pull, round) =>
+          repository.importLocal(
+            { owner: pull.owner, repo: pull.repo, sha: round.sha },
+            { checkout: round.worktreePath, branch: round.branch },
+          ),
+        originals: (pull, files) =>
+          loadOriginals(
+            repository,
+            { owner: pull.owner, repo: pull.repo, sha: pull.mergeBaseSha ?? pull.baseSha },
+            files,
+          ),
+      }),
     stack: (url) => stacks.getStackMetadata(url),
     history: async (pull) => {
       const [discussions, reviews] = await Promise.all([
@@ -220,6 +237,7 @@ export function createServices(options: ReviewerServerOptions) {
     hosts: chatHosts,
     loadPull: pulls.fetchPull,
     model: chatModel,
+    jobs: panelJobs,
     prepareWorktree: (checkout, pull, sha) =>
       prepareFixWorktree(checkout, pull, sha, {
         root: join(options.dataDirectory, 'fix-worktrees'),

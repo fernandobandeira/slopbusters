@@ -4,7 +4,7 @@ import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
 import { anchorLine } from '../../../shared/domain/anchors'
 import { snapshotMatches } from '../../../shared/domain/findings'
-import type { PanelSession } from '../../../shared/domain/panelSession'
+import type { PanelResult, PanelSession } from '../../../shared/domain/panelSession'
 import type { Teammate } from '../../../shared/domain/teammates'
 import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { ReviewerFace } from '../../components/ReviewerFace'
@@ -14,7 +14,7 @@ import { reviewerFaceSrc } from '../../lib/reviewerFaces'
 import { useApiQuery } from '../../lib/useApiQuery'
 import { type PanelDraftContext } from './PanelTour'
 import { PanelResultView } from './PanelResultView'
-import { OutdatedReview, ReviewAgain } from './ReviewAgain'
+import { LocalRoundNotice, OutdatedReview, ReviewAgain } from './ReviewAgain'
 import { usePanelSession } from './usePanelSession'
 import { usePanelTour } from './usePanelTour'
 import '../../linus.css'
@@ -105,14 +105,8 @@ function PanelBody({
           hasResult={Boolean(tour.result)}
         />
       )}
-      {session && tour.result && !snapshotMatches(context.pull, tour.result.pull) && (
-        <OutdatedReview
-          session={session}
-          url={context.pull.url}
-          onOpen={context.onOpen}
-          reviewedSha={tour.result.pull.headSha}
-          currentSha={context.pull.headSha}
-        />
+      {session && tour.result && (
+        <RoundNotice session={session} result={tour.result} context={context} />
       )}
       {session && tour.result && (
         <PanelResultView
@@ -143,6 +137,29 @@ function PanelBody({
         </p>
       )}
     </>
+  )
+}
+
+/** Why comments are off: the round read local fixes, or the PR moved on since. */
+function RoundNotice({
+  session,
+  result,
+  context,
+}: {
+  session: PanelSession
+  result: PanelResult
+  context: PanelDraftContext & { onOpen: (sessionId: string) => void }
+}) {
+  if (session.local) return <LocalRoundNotice session={session} />
+  if (snapshotMatches(context.pull, result.pull)) return null
+  return (
+    <OutdatedReview
+      session={session}
+      url={context.pull.url}
+      onOpen={context.onOpen}
+      reviewedSha={result.pull.headSha}
+      currentSha={context.pull.headSha}
+    />
   )
 }
 

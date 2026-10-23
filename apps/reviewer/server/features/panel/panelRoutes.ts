@@ -51,7 +51,7 @@ export class PanelRoutes {
       session.repository,
       [target],
       seatRequests(session.reviewers, session.model.provider),
-      carriedFindings(result, items, target, pull),
+      { carried: carriedFindings(result, items, target, pull) },
     )
     const latest = this.find(id, url)
     latest.result.routed = [

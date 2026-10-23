@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import type { LayerSnapshot } from '../../../shared/domain/anchors'
 import type { PanelReviewer, PanelSeatRequest } from '../../../shared/domain/panel'
-import type { CarriedFinding } from '../../../shared/domain/panelFix'
+import type { CarriedFinding, LocalRound } from '../../../shared/domain/panelFix'
 import type {
   PanelPending,
   PanelPreparation,
@@ -23,6 +23,7 @@ import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { FlowJobs } from '../flows/flowJobs'
 import { failedSeats, reviewSeats } from '../flows/panel'
 import type { PanelMembers } from './panelMembers'
+import { roundLoader } from './localRound'
 import { layersOf, preparePanelRound } from './panelPreparation'
 import { groundPanel } from './groundingDebate'
 import { reviewAsPanelist } from './panelReview'
@@ -36,6 +37,8 @@ interface Options {
   /** The stronger models that ground the seats' findings; no companion when only one provider runs. */
   judges: () => Pick<ModelPair, 'primary'> & Partial<Pick<ModelPair, 'companion'>>
   loadPull: (url: string) => Promise<PullRequest>
+  /** The PR as a local round's fix commits leave it. */
+  loadLocal?: (local: LocalRound) => Promise<PullRequest>
   /** What reviewers already said on a PR, which every seat reads. */
   history?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewHistory>
   /** The PR's stack, so seats see its other open layers. */
@@ -72,8 +75,8 @@ export class PanelJobs {
     repository: string,
     urls: string[],
     requests: PanelSeatRequest[],
-    /** Findings another layer's round sent to these PRs. */
-    carried?: CarriedFinding[],
+    /** Findings another layer's round sent here, or the local fix commits to review. */
+    round: { carried?: CarriedFinding[]; local?: LocalRound } = {},
   ): Promise<PanelSession> {
     const models = this.options.models()
     const reviewers = await this.options.members.describe(requests, models)
@@ -97,7 +100,8 @@ export class PanelJobs {
       progress: 'Loading PR snapshots and their stacks…',
       results: [],
       createdAt: new Date().toISOString(),
-      ...(carried?.length ? { carried } : {}),
+      ...(round.carried?.length ? { carried: round.carried } : {}),
+      ...(round.local ? { local: round.local } : {}),
     }
     this.options.sessions?.start(session.id, 'panel', session)
     this.save(session)
@@ -247,6 +251,7 @@ export class PanelJobs {
   private async prepareRound(session: PanelSession, signal: AbortSignal) {
     const preparation = await preparePanelRound(session.urls, {
       ...this.options,
+      loadPull: roundLoader(session.local, this.options),
       signal,
       progress: (progress) => {
         this.progress(session, progress)

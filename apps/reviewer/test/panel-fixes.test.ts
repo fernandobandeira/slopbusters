@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { ChatHosts } from '../server/adapters/t3Engine/chatHosts'
 import type { EngineThreadOperations } from '../server/adapters/t3Engine/engineThreads'
@@ -29,7 +33,9 @@ async function reviewed(options: { current?: ReturnType<typeof fixturePull> } = 
     }),
   }
   const prepareWorktree = vi.fn().mockResolvedValue(worktree)
+  const start = vi.fn().mockResolvedValue({ id: 'local-round' })
   const fixes = new PanelFixes({
+    jobs: { start },
     store: harness.store.panel,
     hosts,
     loadPull: () => Promise.resolve(options.current ?? fixturePull()),
@@ -38,7 +44,7 @@ async function reviewed(options: { current?: ReturnType<typeof fixturePull> } = 
   })
   const result = () => harness.store.panel.get(session.id)?.results[0]
   const revision = () => gateRevision(result()?.fingerprint ?? '', result()?.gate)
-  return { id: session.id, fixes, startThread, open, prepareWorktree, result, revision }
+  return { id: session.id, fixes, startThread, open, prepareWorktree, result, revision, start }
 }
 
 describe('sending the chosen fixes to a fix thread', () => {
@@ -101,5 +107,51 @@ describe('sending the chosen fixes to a fix thread', () => {
     expect(startThread).toHaveBeenCalledTimes(1)
     expect((startThread.mock.calls[0]?.[0] as { threadId: string }).threadId).toBe(failed?.threadId)
     expect(result()?.handoff?.state).toBe('sent')
+  })
+})
+
+describe('reviewing the fixes once the thread committed them', () => {
+  it('starts a round with the same panel over the fix branch’s local head', async () => {
+    const { id, fixes, result, revision, start } = await reviewed()
+    await fixes.proceed(id, url, revision())
+    const directory = mkdtempSync(join(tmpdir(), 'panel-fixes-'))
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-C', directory, ...args], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: 'T',
+          GIT_AUTHOR_EMAIL: 't@example.com',
+          GIT_COMMITTER_NAME: 'T',
+          GIT_COMMITTER_EMAIL: 't@example.com',
+        },
+      }).trim()
+    git('init', '--quiet')
+    git('commit', '--quiet', '--allow-empty', '-m', 'Reviewed')
+    const reviewedSha = git('rev-parse', 'HEAD')
+    writeFileSync(join(directory, 'a.ts'), 'export const a = 1\n')
+    git('add', '.')
+    git('commit', '--quiet', '-m', 'Fix')
+    const saved = harness.store.panel.get(id)
+    const launch = saved?.results[0]?.handoff?.launch
+    if (saved && launch) {
+      launch.worktreePath = directory
+      launch.reviewedSha = reviewedSha
+      harness.store.panel.save(saved)
+    }
+
+    await fixes.reviewLocal(id, url)
+
+    expect(start.mock.calls[0]?.[3]).toMatchObject({
+      local: {
+        url,
+        worktreePath: directory,
+        sha: git('rev-parse', 'HEAD'),
+        reviewedSha,
+        from: id,
+      },
+    })
+    expect(result()?.handoff?.state).toBe('sent')
+    rmSync(directory, { recursive: true, force: true })
   })
 })

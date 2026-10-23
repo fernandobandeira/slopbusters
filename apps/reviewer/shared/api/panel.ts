@@ -10,7 +10,12 @@ import {
 } from '../domain/panel'
 import { groundingStateSchema } from '../domain/grounding'
 import { gateSchema } from '../domain/panelGate'
-import { fixHandoffSchema, layerRouteSchema, metadataDraftSchema } from '../domain/panelFix'
+import {
+  fixHandoffSchema,
+  layerRouteSchema,
+  localRoundSchema,
+  metadataDraftSchema,
+} from '../domain/panelFix'
 import type { PanelSession } from '../domain/panelSession'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, pullUrlSchema, repositoryQuery } from './contract'
@@ -39,6 +44,7 @@ const session = z.object({
   progress: z.string(),
   createdAt: z.string(),
   error: z.string().optional(),
+  local: localRoundSchema.optional(),
   results: z.array(
     z.object({
       pull: pullSchema,
@@ -120,6 +126,12 @@ export const routePanelLayer = defineRoute('POST', '/panel/:id/route-layer', {
 export const draftPanelMetadata = defineRoute('POST', '/panel/:id/metadata', {
   params: idParams,
   request: z.object({ url: pullUrlSchema, field: z.enum(['title', 'description']) }).strict(),
+  response: session,
+})
+/** Review the committed local fixes of a PR's fix thread in a new round; nothing is pushed. */
+export const reviewLocalFixes = defineRoute('POST', '/panel/:id/review-local', {
+  params: idParams,
+  request: z.object({ url: pullUrlSchema }).strict(),
   response: session,
 })
 export const cancelPanel = defineRoute('DELETE', '/panel/:id', {

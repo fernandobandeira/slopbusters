@@ -45,11 +45,16 @@ describe('a finding that belongs on another layer', () => {
     const session = await routes.toLayer(id, url, 13)
 
     expect(start).toHaveBeenCalledTimes(1)
-    const [startedIn, urls, seats, carried] = start.mock.calls[0] as unknown[]
+    const [startedIn, urls, seats, round] = start.mock.calls[0] as [
+      unknown,
+      unknown,
+      unknown,
+      { carried: unknown },
+    ]
     expect(startedIn).toBe(repository)
     expect(urls).toEqual(['https://github.com/review-room/example/pull/13'])
     expect(seats).toEqual(expect.arrayContaining([{ id: 'unclebob', providers: ['claude'] }]))
-    expect(carried).toEqual(
+    expect(round.carried).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           url: 'https://github.com/review-room/example/pull/13',
@@ -72,7 +77,7 @@ describe('a finding that belongs on another layer', () => {
       finding: fixturePanelFinding({ id: 'sent' }),
     }
 
-    const session = await jobs.start(repository, [url], everyone, [carried])
+    const session = await jobs.start(repository, [url], everyone, { carried: [carried] })
     await vi.waitFor(() => {
       expect(jobs.get(session.id).status).toBe('complete')
     })

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { seatRequests } from '../../../shared/domain/panel'
 import {
   gateItems,
   gateRevision,
@@ -16,6 +17,8 @@ import { publicError, UserError } from '../../errors'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { engineModel } from '../chat/personaChats'
 import { fixSeed } from './fixSeed'
+import { committedFixes } from './localRound'
+import type { PanelJobs } from './panelJobs'
 
 interface Options {
   store: PanelSessionStore
@@ -24,6 +27,8 @@ interface Options {
   /** The model fix threads run on: the primary review model. */
   model: () => OrganizationPreferences
   prepareWorktree: (checkout: string, pull: PullRequest, sha: string) => Promise<FixWorktree>
+  /** Starts the round that reviews a fix thread's local commits. */
+  jobs?: Pick<PanelJobs, 'start'>
   sessions?: AgentSessions
 }
 
@@ -47,6 +52,34 @@ export class PanelFixes {
     return launch
   }
 
+  /**
+   * Review a fix thread's committed local fixes in a new round with the same panel. GitHub need not
+   * have them; unsaved changes, or a branch with no new commits, are refused.
+   */
+  async reviewLocal(id: string, url: string): Promise<PanelSession> {
+    const { session, result } = this.find(id, url)
+    const launch = result.handoff?.state === 'sent' ? result.handoff.launch : undefined
+    if (!launch || !this.options.jobs)
+      throw new UserError('Send fixes to a fix thread before reviewing them.')
+    const sha = await committedFixes(launch.worktreePath, launch.reviewedSha)
+    return this.options.jobs.start(
+      session.repository,
+      [url],
+      seatRequests(session.reviewers, session.model.provider),
+      {
+        local: {
+          url,
+          worktreePath: launch.worktreePath,
+          branch: launch.branch,
+          sha,
+          reviewedSha: launch.reviewedSha,
+          mergeBaseSha: result.pull.mergeBaseSha ?? result.pull.baseSha,
+          from: session.id,
+        },
+      },
+    )
+  }
+
   private async launch(id: string, url: string, revision: string): Promise<PanelSession> {
     const { session, result } = this.find(id, url)
     const previous = result.handoff
@@ -57,7 +90,7 @@ export class PanelFixes {
         409,
       )
     }
-    const items = await this.readyFixes(url, result, revision)
+    const items = await this.readyFixes(url, result, revision, Boolean(session.local))
     const handoff: FixHandoff = {
       revision,
       // A retry after a failed launch reuses the thread id, so it cannot start a second thread.
@@ -77,7 +110,7 @@ export class PanelFixes {
   }
 
   /** The fixes for this PR the author saw ready, provided the PR is still at the reviewed head. */
-  private async readyFixes(url: string, result: PanelResult, revision: string) {
+  private async readyFixes(url: string, result: PanelResult, revision: string, local: boolean) {
     if (revision !== gateRevision(result.fingerprint, result.gate))
       throw new UserError(
         'Your choices changed since you pressed Proceed. Check them and try again.',
@@ -87,6 +120,8 @@ export class PanelFixes {
       gateItems(result.grounding?.resolved ?? [], result.gate, result.pull.number),
     ).filter((item) => item.route?.kind === 'fix')
     if (!items.length) throw new UserError('Choose at least one fix for this PR that is ready.')
+    // A local round reviewed commits GitHub does not have; its next fixes start from them.
+    if (local) return items
     const current = await this.options.loadPull(url)
     if (current.headSha !== result.pull.headSha || current.baseSha !== result.pull.baseSha)
       throw new UserError(

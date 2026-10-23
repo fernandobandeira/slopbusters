@@ -75,3 +75,19 @@ export function ReviewAgain(props: Props) {
     </div>
   )
 }
+
+/** A round over local fix commits: GitHub has another head, so comments stay off by design. */
+export function LocalRoundNotice({ session }: { session: PanelSession }) {
+  const { local } = session
+  if (!local) return null
+  return (
+    <div className="linus-notice panel-outdated" role="status">
+      <p>
+        <strong>Reviewing local fixes.</strong> This round read <code>{local.branch}</code> at{' '}
+        <code>{local.sha.slice(0, 7)}</code>, which is not pushed; it started from{' '}
+        <code>{local.reviewedSha.slice(0, 7)}</code>. Comments and line guidance are off, since
+        GitHub would place them against its own head. Send fixes again to continue from this commit.
+      </p>
+    </div>
+  )
+}

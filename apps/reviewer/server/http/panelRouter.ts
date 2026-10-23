@@ -49,6 +49,10 @@ export function panelRouter({ panelJobs, panelGates, panelFixes, panelRoutes, st
   handle(router, routes.draftPanelMetadata, ({ params, body }) =>
     panelRoutes.draftMetadata(params.id, body.url, body.field),
   )
+  handle(router, routes.reviewLocalFixes, ({ params, body }, _request, response) => {
+    response.status(202)
+    return panelFixes.reviewLocal(params.id, body.url)
+  })
   handle(router, routes.cancelPanel, ({ params }) => panelJobs.cancel(params.id))
   return router
 }

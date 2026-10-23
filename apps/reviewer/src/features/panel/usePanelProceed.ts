@@ -40,5 +40,27 @@ export function usePanelProceed(
       setSending(false)
     }
   }
-  return { sending, error, proceed: () => void proceed() }
+  /** Start a round over the fix thread's committed local fixes, then open it. */
+  async function reviewLocal(onOpen: (sessionId: string) => void) {
+    if (sending) return
+    setSending(true)
+    setError('')
+    try {
+      const round = await call(routes.reviewLocalFixes, {
+        params: { id: session.id },
+        body: { url: result.pull.url },
+      })
+      onOpen(round.id)
+    } catch (cause) {
+      setError(message(cause))
+    } finally {
+      setSending(false)
+    }
+  }
+  return {
+    sending,
+    error,
+    proceed: () => void proceed(),
+    reviewLocal: (onOpen: (sessionId: string) => void) => void reviewLocal(onOpen),
+  }
 }

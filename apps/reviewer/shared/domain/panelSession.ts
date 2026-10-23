@@ -1,6 +1,6 @@
 import type { GroundingState } from './grounding'
 import type { Gate } from './panelGate'
-import type { CarriedFinding, FixHandoff, LayerRoute, MetadataDraft } from './panelFix'
+import type { CarriedFinding, FixHandoff, LayerRoute, LocalRound, MetadataDraft } from './panelFix'
 import type { JudgeAdvice, PanelAdvice, PanelReviewer, UnplacedFinding } from './panel'
 import type { OrganizationPreferences } from './preferences'
 import type { PullRequest, PullReviewBody, ReviewThread } from './types'
@@ -77,6 +77,8 @@ export interface PanelSession {
   progress: string
   results: PanelResult[]
   pending?: PanelPending
+  /** Set when this round reviews local fix commits instead of GitHub's head. */
+  local?: LocalRound
   /** Findings another layer's round sent here, grounded with this round's sources. */
   carried?: CarriedFinding[]
   /** Kept on the server; the API leaves the loaded layers out. */

@@ -97,7 +97,14 @@ export function PanelGate({
           </details>
         )
       })}
-      <PanelProceed session={session} result={result} gate={gate} replace={replace} moved={moved} />
+      <PanelProceed
+        session={session}
+        result={result}
+        gate={gate}
+        replace={replace}
+        moved={moved}
+        onOpen={onOpen}
+      />
       <PanelDestinations
         session={session}
         result={result}

@@ -47,8 +47,9 @@ export function PanelResultView({
           replace={replace}
           onOpen={onOpen}
           moved={
-            context.pull.headSha !== result.pull.headSha ||
-            context.pull.baseSha !== result.pull.baseSha
+            !session.local &&
+            (context.pull.headSha !== result.pull.headSha ||
+              context.pull.baseSha !== result.pull.baseSha)
           }
         />
       ) : (

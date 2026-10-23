@@ -80,51 +80,85 @@ export class LocalSourceRepository {
     return ready
   }
 
-  private async fetch(directory: string, owner: string, repo: string, sha: string) {
-    // Fetches mutate the shared shallow boundary, so serialize them per repository.
-    const previous = this.queues.get(directory) ?? Promise.resolve()
-    const next = previous
-      .catch(() => undefined)
-      .then(async () => {
-        await this.initialize(directory)
-        const ref = `refs/review/${sha}`
-        try {
-          const saved = await this.git(directory, ['rev-parse', '--verify', ref], 1024)
-          if (saved.trim() === sha) return
-        } catch {
-          if (this.controller.signal.aborted)
-            throw new UserError('Source navigation is shutting down.')
-        }
-        await this.git(
-          directory,
-          [
-            '-c',
-            'credential.helper=',
-            '-c',
-            'credential.helper=!gh auth git-credential',
-            '-c',
-            'gc.auto=0',
-            '-c',
-            'maintenance.auto=false',
-            'fetch',
-            '--quiet',
-            '--depth=1',
-            '--no-tags',
-            '--no-recurse-submodules',
-            '--no-write-fetch-head',
-            this.remoteUrl(owner, repo),
-            `${sha}:${ref}`,
-          ],
-          4096,
+  /**
+   * Copy a commit that exists only in a local checkout, such as a fix branch's, so reviews can
+   * read it as they read GitHub's commits. The branch must still point at `sha`.
+   */
+  async importLocal(
+    { owner, repo, sha }: { owner: string; repo: string; sha: string },
+    { checkout, branch }: { checkout: string; branch: string },
+  ) {
+    const { directory } = this.identity(owner, repo, sha)
+    const ref = `refs/review/${sha}`
+    await this.serialize(directory, async () => {
+      await this.initialize(directory)
+      await this.git(
+        directory,
+        [
           'fetch',
-        )
-      })
+          '--quiet',
+          '--depth=1',
+          '--no-tags',
+          '--no-recurse-submodules',
+          '--no-write-fetch-head',
+          checkout,
+          `+refs/heads/${branch}:${ref}`,
+        ],
+        4096,
+      )
+      const saved = await this.git(directory, ['rev-parse', '--verify', ref], 1024)
+      if (saved.trim() !== sha)
+        throw new UserError(`${branch} moved while it was being read. Try again.`)
+    })
+  }
+
+  /** Fetches mutate the shared shallow boundary, so they run one at a time per repository. */
+  private async serialize(directory: string, task: () => Promise<void>) {
+    const previous = this.queues.get(directory) ?? Promise.resolve()
+    const next = previous.catch(() => undefined).then(task)
     this.queues.set(directory, next)
     try {
       await next
     } finally {
       if (this.queues.get(directory) === next) this.queues.delete(directory)
     }
+  }
+
+  private async fetch(directory: string, owner: string, repo: string, sha: string) {
+    await this.serialize(directory, async () => {
+      await this.initialize(directory)
+      const ref = `refs/review/${sha}`
+      try {
+        const saved = await this.git(directory, ['rev-parse', '--verify', ref], 1024)
+        if (saved.trim() === sha) return
+      } catch {
+        if (this.controller.signal.aborted)
+          throw new UserError('Source navigation is shutting down.')
+      }
+      await this.git(
+        directory,
+        [
+          '-c',
+          'credential.helper=',
+          '-c',
+          'credential.helper=!gh auth git-credential',
+          '-c',
+          'gc.auto=0',
+          '-c',
+          'maintenance.auto=false',
+          'fetch',
+          '--quiet',
+          '--depth=1',
+          '--no-tags',
+          '--no-recurse-submodules',
+          '--no-write-fetch-head',
+          this.remoteUrl(owner, repo),
+          `${sha}:${ref}`,
+        ],
+        4096,
+        'fetch',
+      )
+    })
   }
 
   private snapshotData(owner: string, repo: string, sha: string) {

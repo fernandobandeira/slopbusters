@@ -69,3 +69,22 @@ export interface CarriedFinding {
 export function carriedAnchor(anchor: Anchor, pull: number): Anchor {
   return anchor.kind === 'stack' && anchor.pull === pull ? anchor.location : anchor
 }
+
+/**
+ * A round over a fix branch's local commits, which GitHub does not have. Its PR snapshot has the
+ * local head, so comments, which GitHub would place against its own head, stay off.
+ */
+export const localRoundSchema = z.object({
+  url: z.string(),
+  worktreePath: z.string(),
+  branch: z.string(),
+  /** The committed local head this round reviews. */
+  sha: z.string(),
+  /** The PR head the fixes started from, which GitHub may still have. */
+  reviewedSha: z.string(),
+  /** What the local diff is against: the reviewed PR's merge base. */
+  mergeBaseSha: z.string(),
+  /** The panel round whose fixes these are. */
+  from: z.string(),
+})
+export type LocalRound = z.infer<typeof localRoundSchema>

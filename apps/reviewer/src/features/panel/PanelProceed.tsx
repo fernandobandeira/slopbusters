@@ -15,6 +15,7 @@ export function PanelProceed({
   gate,
   replace,
   moved,
+  onOpen,
 }: {
   session: PanelSession
   result: PanelResult
@@ -22,10 +23,33 @@ export function PanelProceed({
   replace: (session: PanelSession) => void
   /** The PR has new commits since the review, so its plans may not apply. */
   moved: boolean
+  onOpen: (sessionId: string) => void
 }) {
   const proceed = usePanelProceed(session, result, gate.gate, replace)
   const { handoff } = result
-  if (handoff?.state === 'sent' && handoff.launch) return <SentNotice handoff={handoff} />
+  if (handoff?.state === 'sent' && handoff.launch)
+    return (
+      <div className="linus-notice panel-proceed" role="status">
+        <SentNotice handoff={handoff} />
+        <Button
+          size="sm"
+          disabled={proceed.sending}
+          onClick={() => {
+            proceed.reviewLocal(onOpen)
+          }}
+        >
+          {proceed.sending && (
+            <LoaderCircle size={14} className="animate-spin" aria-hidden="true" />
+          )}
+          Review local fixes
+        </Button>
+        <p className="muted">
+          Once the thread has committed its fixes, the panel reviews them on the fix branch. Nothing
+          needs to be pushed.
+        </p>
+        {proceed.error && <p role="alert">{proceed.error}</p>}
+      </div>
+    )
   const fixes = gate.ready.filter((item) => item.route?.kind === 'fix').length
   return (
     <div className="panel-proceed">
@@ -47,7 +71,7 @@ function SentNotice({ handoff }: { handoff: FixHandoff }) {
   if (!launch) return null
   const count = handoff.entries.length
   return (
-    <div className="linus-notice panel-proceed" role="status">
+    <>
       <p>
         <strong>
           Sent {count} {count === 1 ? 'fix' : 'fixes'} to “{launch.title}”
@@ -57,7 +81,7 @@ function SentNotice({ handoff }: { handoff: FixHandoff }) {
         <code>{launch.reviewedSha.slice(0, 7)}</code>, commits what passes verification, and never
         pushes.
       </p>
-    </div>
+    </>
   )
 }
 
