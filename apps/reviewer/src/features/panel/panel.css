@@ -307,3 +307,9 @@
   margin-top: 6px;
   color: var(--warning, var(--muted-foreground));
 }
+.panel-outdated {
+  border-color: var(--warning);
+}
+.panel-outdated p {
+  margin: 0 0 8px;
+}

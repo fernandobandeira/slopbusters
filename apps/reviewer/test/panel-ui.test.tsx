@@ -136,6 +136,50 @@ describe('the review panel companion', () => {
   })
 })
 
+describe('a review of commits the PR has moved past', () => {
+  it('says so above the findings, keeps comments off, and reviews the current commits', async () => {
+    const current = { ...pull, headSha: 'b'.repeat(40) }
+    const onOpen = vi.fn()
+    const focusLine = vi.fn()
+    vi.mocked(call).mockImplementation((route: ApiContract) => {
+      if (route === routes.getPanel) return Promise.resolve(session())
+      if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
+      if (route === routes.startPanel) return Promise.resolve({ ...session(), id: 'panel-2' })
+      return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
+    })
+    render(
+      <MemoryRouter>
+        <PanelCompanion
+          sessionId="panel-1"
+          pull={current}
+          draft={{ comments: [], summary: '', viewedFileIds: [] }}
+          setDraft={vi.fn()}
+          ready
+          openReview={vi.fn()}
+          focusLine={focusLine}
+          onOpen={onOpen}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('New commits since this review.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
+    expect(screen.getByRole('button', { name: 'Add review comment' })).toHaveProperty(
+      'disabled',
+      true,
+    )
+    expect(focusLine).not.toHaveBeenCalledWith(expect.anything())
+    fireEvent.click(screen.getByRole('button', { name: 'Review the current PR' }))
+
+    await vi.waitFor(() => {
+      expect(onOpen).toHaveBeenCalledWith('panel-2')
+    })
+    const started = vi.mocked(call).mock.calls.find(([route]) => route === routes.startPanel)
+    expect(started?.[1]).toMatchObject({ body: { urls: [pull.url] } })
+  })
+})
+
 describe('a finding without a line', () => {
   it('adds a finding about the PR description to the review summary, not to a line', async () => {
     const described = session()

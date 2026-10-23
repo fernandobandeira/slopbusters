@@ -1,21 +1,20 @@
-import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
+import { useEffect, useEffectEvent, type ReactNode } from 'react'
 import { Check, CircleAlert, LoaderCircle, X } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
 import { anchorLine } from '../../../shared/domain/anchors'
 import { snapshotMatches } from '../../../shared/domain/findings'
-import { seatRequests } from '../../../shared/domain/panel'
 import type { PanelSession } from '../../../shared/domain/panelSession'
 import type { Teammate } from '../../../shared/domain/teammates'
 import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { ReviewerFace } from '../../components/ReviewerFace'
 import { PanelStack } from './PanelStack'
 import { ProviderMark } from './ProviderMark'
-import { call, message } from '../../lib/api'
 import { reviewerFaceSrc } from '../../lib/reviewerFaces'
 import { useApiQuery } from '../../lib/useApiQuery'
 import { type PanelDraftContext } from './PanelTour'
 import { PanelResultView } from './PanelResultView'
+import { OutdatedReview, ReviewAgain } from './ReviewAgain'
 import { usePanelSession } from './usePanelSession'
 import { usePanelTour } from './usePanelTour'
 import '../../linus.css'
@@ -104,6 +103,15 @@ function PanelBody({
           session={session}
           teammates={teammates}
           hasResult={Boolean(tour.result)}
+        />
+      )}
+      {session && tour.result && !snapshotMatches(context.pull, tour.result.pull) && (
+        <OutdatedReview
+          session={session}
+          url={context.pull.url}
+          onOpen={context.onOpen}
+          reviewedSha={tour.result.pull.headSha}
+          currentSha={context.pull.headSha}
         />
       )}
       {session && tour.result && (
@@ -263,42 +271,6 @@ function ContinueWith({
         ))}
       </ul>
     </details>
-  )
-}
-
-function ReviewAgain({
-  session,
-  url,
-  onOpen,
-}: {
-  session: PanelSession
-  url: string
-  onOpen: (sessionId: string) => void
-}) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  async function start() {
-    setBusy(true)
-    setError('')
-    try {
-      const reviewers = seatRequests(session.reviewers, session.model.provider)
-      const next = await call(routes.startPanel, {
-        body: { repository: session.repository, urls: [url], reviewers },
-      })
-      onOpen(next.id)
-    } catch (cause) {
-      setError(message(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <div className="linus-footer">
-      <button disabled={busy} onClick={() => void start()}>
-        Review this PR again with the same panel
-      </button>
-      {error && <p role="alert">{error}</p>}
-    </div>
   )
 }
 

@@ -63,11 +63,6 @@ export function PanelTour(props: TourProps) {
       </div>
       <div className="finding-tour-content" aria-live="polite">
         {finding ? <FindingStep {...props} finding={finding} /> : <SummaryStep {...props} />}
-        {stale && (
-          <p className="linus-notice">
-            This PR changed after the panel reviewed it. Ask the panel again before adding comments.
-          </p>
-        )}
       </div>
       {finding ? (
         <FindingDraftAction result={result} finding={finding} stale={stale} context={context} />
