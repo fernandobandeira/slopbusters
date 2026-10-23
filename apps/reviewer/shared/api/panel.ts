@@ -9,6 +9,7 @@ import {
   seatIdSchema,
 } from '../domain/panel'
 import { groundingStateSchema } from '../domain/grounding'
+import { gateSchema } from '../domain/panelGate'
 import type { PanelSession } from '../domain/panelSession'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, pullUrlSchema, repositoryQuery } from './contract'
@@ -44,6 +45,7 @@ const session = z.object({
       advice: judgeAdviceSchema,
       reviews: z.array(review),
       grounding: groundingStateSchema.optional(),
+      gate: gateSchema.optional(),
     }),
   ),
   pending: z
@@ -81,6 +83,18 @@ export const continuePanel = defineRoute('POST', '/panel/:id/continue', {
 })
 export const retryPanel = defineRoute('POST', '/panel/:id/retry', {
   params: idParams,
+  response: session,
+})
+/** Save what the author chose to fix on one reviewed PR. */
+export const savePanelGate = defineRoute('PUT', '/panel/:id/gate', {
+  params: idParams,
+  request: z.object({ url: pullUrlSchema, gate: gateSchema }).strict(),
+  response: session,
+})
+/** Ask the grounding models for a plan for one entry, from the author's answer if it has one. */
+export const planPanelFix = defineRoute('POST', '/panel/:id/plan', {
+  params: idParams,
+  request: z.object({ url: pullUrlSchema, entry: z.string().min(1).max(40) }).strict(),
   response: session,
 })
 export const cancelPanel = defineRoute('DELETE', '/panel/:id', {

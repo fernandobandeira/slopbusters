@@ -51,6 +51,7 @@ import { TeammateStore } from './adapters/teammateStore'
 import { Teammates } from './features/teammates/teammates'
 import { PanelMembers } from './features/panel/panelMembers'
 import { PanelJobs } from './features/panel/panelJobs'
+import { PanelGates } from './features/panel/panelGates'
 import { loadBuiltInSkill } from './features/panel/builtInSkills'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
@@ -195,6 +196,13 @@ export function createServices(options: ReviewerServerOptions) {
     openRepository,
     context: tickets.contextForPull,
   })
+  const panelGates = new PanelGates({
+    store: store.panel,
+    turns,
+    judges: () => savedModels(store.getPreferences(), 'judge'),
+    sessions: agentSessions,
+    openRepository,
+  })
   const chatModel = () => savedModels(store.getPreferences()).primary
   const removeWorkspace = async (identity: { owner: string; repo: string; sha: string }) => {
     await typeScriptNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
@@ -224,6 +232,7 @@ export function createServices(options: ReviewerServerOptions) {
     jobs,
     teammates,
     panelJobs,
+    panelGates,
     chats: {
       continueInT3Code: async (request: ContinueChatRequest) => {
         const model = chatModel()

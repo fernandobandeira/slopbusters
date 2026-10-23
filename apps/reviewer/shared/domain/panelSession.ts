@@ -1,4 +1,5 @@
 import type { GroundingState } from './grounding'
+import type { Gate } from './panelGate'
 import type { JudgeAdvice, PanelAdvice, PanelReviewer, UnplacedFinding } from './panel'
 import type { OrganizationPreferences } from './preferences'
 import type { PullRequest, PullReviewBody, ReviewThread } from './types'
@@ -29,6 +30,8 @@ export interface PanelResult {
   reviews: PanelReview[]
   /** How grounding accounted for every finding; absent on sessions judged before grounding. */
   grounding?: GroundingState
+  /** What the author chose to fix; absent until they change the default selection. */
+  gate?: Gate
 }
 /** What reviewers already said on a PR: its inline threads and its reviews' bodies. */
 export interface ReviewHistory {
