@@ -5,7 +5,14 @@ import { UserError } from '../errors'
 import type { Services } from '../services'
 import { handle } from './contractRouter'
 
-export function panelRouter({ panelJobs, panelGates, panelFixes, panelRoutes, store }: Services) {
+export function panelRouter({
+  panelJobs,
+  panelGates,
+  panelFixes,
+  panelRoutes,
+  fixChecks,
+  store,
+}: Services) {
   const router = Router()
   handle(router, routes.savedPanelReviews, ({ query }) => ({
     reviews: store.panel.reviews(query.repository),
@@ -53,6 +60,7 @@ export function panelRouter({ panelJobs, panelGates, panelFixes, panelRoutes, st
     response.status(202)
     return panelFixes.reviewLocal(params.id, body.url)
   })
+  handle(router, routes.checkLocalFixes, ({ params, body }) => fixChecks.check(params.id, body.url))
   handle(router, routes.cancelPanel, ({ params }) => panelJobs.cancel(params.id))
   return router
 }

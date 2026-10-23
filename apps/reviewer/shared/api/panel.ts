@@ -134,6 +134,12 @@ export const reviewLocalFixes = defineRoute('POST', '/panel/:id/review-local', {
   request: z.object({ url: pullUrlSchema }).strict(),
   response: session,
 })
+/** Ask the other provider's model whether the committed local fixes applied the sent plans. */
+export const checkLocalFixes = defineRoute('POST', '/panel/:id/check-local', {
+  params: idParams,
+  request: z.object({ url: pullUrlSchema }).strict(),
+  response: session,
+})
 export const cancelPanel = defineRoute('DELETE', '/panel/:id', {
   params: idParams,
   response: session,

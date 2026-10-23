@@ -6,9 +6,18 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ChatHosts } from '../server/adapters/t3Engine/chatHosts'
 import type { EngineThreadOperations } from '../server/adapters/t3Engine/engineThreads'
 import { UserError } from '../server/errors'
+import { FixChecks } from '../server/features/panel/fixCheck'
 import { PanelFixes } from '../server/features/panel/panelFixes'
 import { gateRevision } from '../shared/domain/panelGate'
-import { everyone, panelHarness, primary, reply, repository, url } from './fixtures/panelJobs'
+import {
+  companion,
+  everyone,
+  panelHarness,
+  primary,
+  reply,
+  repository,
+  url,
+} from './fixtures/panelJobs'
 import { fixturePull } from './fixtures/pull'
 import { recordingTurns } from './fixtures/turns'
 
@@ -110,48 +119,96 @@ describe('sending the chosen fixes to a fix thread', () => {
   })
 })
 
+/** Point the sent handoff at a real worktree whose branch has one fix commit after the review. */
+function committedFix(id: string) {
+  const directory = mkdtempSync(join(tmpdir(), 'panel-fixes-'))
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-C', directory, ...args], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'T',
+        GIT_AUTHOR_EMAIL: 't@example.com',
+        GIT_COMMITTER_NAME: 'T',
+        GIT_COMMITTER_EMAIL: 't@example.com',
+      },
+    }).trim()
+  git('init', '--quiet')
+  git('commit', '--quiet', '--allow-empty', '-m', 'Reviewed')
+  const reviewedSha = git('rev-parse', 'HEAD')
+  writeFileSync(join(directory, 'a.ts'), 'export const a = 1\n')
+  git('add', '.')
+  git('commit', '--quiet', '-m', 'Fix')
+  const saved = harness.store.panel.get(id)
+  const launch = saved?.results[0]?.handoff?.launch
+  if (saved && launch) {
+    launch.worktreePath = directory
+    launch.reviewedSha = reviewedSha
+    harness.store.panel.save(saved)
+  }
+  return {
+    directory,
+    reviewedSha,
+    sha: git('rev-parse', 'HEAD'),
+    remove: () => {
+      rmSync(directory, { recursive: true, force: true })
+    },
+  }
+}
+
 describe('reviewing the fixes once the thread committed them', () => {
   it('starts a round with the same panel over the fix branch’s local head', async () => {
     const { id, fixes, result, revision, start } = await reviewed()
     await fixes.proceed(id, url, revision())
-    const directory = mkdtempSync(join(tmpdir(), 'panel-fixes-'))
-    const git = (...args: string[]) =>
-      execFileSync('git', ['-C', directory, ...args], {
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          GIT_AUTHOR_NAME: 'T',
-          GIT_AUTHOR_EMAIL: 't@example.com',
-          GIT_COMMITTER_NAME: 'T',
-          GIT_COMMITTER_EMAIL: 't@example.com',
-        },
-      }).trim()
-    git('init', '--quiet')
-    git('commit', '--quiet', '--allow-empty', '-m', 'Reviewed')
-    const reviewedSha = git('rev-parse', 'HEAD')
-    writeFileSync(join(directory, 'a.ts'), 'export const a = 1\n')
-    git('add', '.')
-    git('commit', '--quiet', '-m', 'Fix')
-    const saved = harness.store.panel.get(id)
-    const launch = saved?.results[0]?.handoff?.launch
-    if (saved && launch) {
-      launch.worktreePath = directory
-      launch.reviewedSha = reviewedSha
-      harness.store.panel.save(saved)
-    }
+    const fix = committedFix(id)
 
     await fixes.reviewLocal(id, url)
 
     expect(start.mock.calls[0]?.[3]).toMatchObject({
       local: {
         url,
-        worktreePath: directory,
-        sha: git('rev-parse', 'HEAD'),
-        reviewedSha,
+        worktreePath: fix.directory,
+        sha: fix.sha,
+        reviewedSha: fix.reviewedSha,
         from: id,
       },
     })
     expect(result()?.handoff?.state).toBe('sent')
-    rmSync(directory, { recursive: true, force: true })
+    fix.remove()
+  })
+
+  it('asks the other provider whether each sent plan was applied, at the local commit', async () => {
+    const { id, fixes, result, revision } = await reviewed()
+    await fixes.proceed(id, url, revision())
+    const fix = committedFix(id)
+    const { turns, requests } = recordingTurns(() => ({
+      summary: 'The audit helper is used.',
+      results: [
+        {
+          entry: 'g1',
+          status: 'applied',
+          note: 'The handler calls writeAudit.',
+          evidence: ['src/a.ts:1'],
+        },
+      ],
+    }))
+    const loadLocal = vi.fn().mockResolvedValue({ ...fixturePull(), headSha: fix.sha })
+    const checks = new FixChecks({
+      store: harness.store.panel,
+      turns,
+      checker: () => companion,
+      loadLocal,
+    })
+
+    await checks.check(id, url)
+
+    expect(loadLocal).toHaveBeenCalledWith(expect.objectContaining({ sha: fix.sha }))
+    expect(requests[0]?.model).toEqual(companion)
+    expect(requests[0]?.prompt).toContain('"plan":"Reuse the audit helper."')
+    expect(result()?.handoff?.check).toMatchObject({
+      sha: fix.sha,
+      results: [{ entry: 'g1', status: 'applied' }],
+    })
+    fix.remove()
   })
 })

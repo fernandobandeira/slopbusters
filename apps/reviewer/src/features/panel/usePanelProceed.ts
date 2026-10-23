@@ -57,8 +57,27 @@ export function usePanelProceed(
       setSending(false)
     }
   }
+  /** Ask the other provider's model whether the committed fixes applied the sent plans. */
+  async function check() {
+    if (sending) return
+    setSending(true)
+    setError('')
+    try {
+      replace(
+        await call(routes.checkLocalFixes, {
+          params: { id: session.id },
+          body: { url: result.pull.url },
+        }),
+      )
+    } catch (cause) {
+      setError(message(cause))
+    } finally {
+      setSending(false)
+    }
+  }
   return {
     sending,
+    check: () => void check(),
     error,
     proceed: () => void proceed(),
     reviewLocal: (onOpen: (sessionId: string) => void) => void reviewLocal(onOpen),

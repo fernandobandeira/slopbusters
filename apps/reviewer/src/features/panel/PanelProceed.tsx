@@ -1,6 +1,7 @@
 import { LoaderCircle } from 'lucide-react'
 import { Button } from '~/components/ui/button'
-import type { FixHandoff } from '../../../shared/domain/panelFix'
+import { leadSource } from '../../../shared/domain/grounding'
+import { fixCheckLabels, type FixCheck, type FixHandoff } from '../../../shared/domain/panelFix'
 import type { PanelResult, PanelSession } from '../../../shared/domain/panelSession'
 import type { usePanelGate } from './usePanelGate'
 import { usePanelProceed } from './usePanelProceed'
@@ -31,21 +32,28 @@ export function PanelProceed({
     return (
       <div className="linus-notice panel-proceed" role="status">
         <SentNotice handoff={handoff} />
-        <Button
-          size="sm"
-          disabled={proceed.sending}
-          onClick={() => {
-            proceed.reviewLocal(onOpen)
-          }}
-        >
-          {proceed.sending && (
-            <LoaderCircle size={14} className="animate-spin" aria-hidden="true" />
-          )}
-          Review local fixes
-        </Button>
+        {handoff.check && <FixCheckResults result={result} check={handoff.check} />}
+        <div className="linus-actions">
+          <Button
+            size="sm"
+            disabled={proceed.sending}
+            onClick={() => {
+              proceed.reviewLocal(onOpen)
+            }}
+          >
+            {proceed.sending && (
+              <LoaderCircle size={14} className="animate-spin" aria-hidden="true" />
+            )}
+            Review local fixes
+          </Button>
+          <Button size="sm" variant="outline" disabled={proceed.sending} onClick={proceed.check}>
+            {handoff.check ? 'Check local fixes again' : 'Check local fixes'}
+          </Button>
+        </div>
         <p className="muted">
-          Once the thread has committed its fixes, the panel reviews them on the fix branch. Nothing
-          needs to be pushed.
+          Once the thread has committed its fixes, the panel can review them on the fix branch, or
+          the other provider’s model can check that each plan was applied. Nothing needs to be
+          pushed.
         </p>
         {proceed.error && <p role="alert">{proceed.error}</p>}
       </div>
@@ -82,6 +90,31 @@ function SentNotice({ handoff }: { handoff: FixHandoff }) {
         pushes.
       </p>
     </>
+  )
+}
+
+/** The other provider's verdict on each sent fix, at the commit it read. */
+function FixCheckResults({ result, check }: { result: PanelResult; check: FixCheck }) {
+  const entries = result.grounding?.resolved ?? []
+  const candidates = result.grounding?.candidates ?? []
+  return (
+    <div className="panel-fix-check">
+      <p>
+        <strong>Checked by {check.model.model}</strong> at <code>{check.sha.slice(0, 7)}</code>:{' '}
+        {check.summary}
+      </p>
+      <ul>
+        {check.results.map((item) => {
+          const entry = entries.find((candidate) => candidate.id === item.entry)
+          const title = entry ? leadSource(entry, candidates)?.finding.title : undefined
+          return (
+            <li key={item.entry}>
+              <strong>{fixCheckLabels[item.status]}</strong> · {title ?? item.entry}: {item.note}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 

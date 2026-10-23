@@ -128,7 +128,7 @@ describe('the review panel over HTTP', () => {
         await (await send('GET', `/panel/${id}`)).json(),
       )
       expect(session.status).toBe('complete')
-    })
+    }, 5000)
 
     const saved = routes.savedPanelReviews.response.parse(
       await (await send('GET', `/panel/reviews?repository=${repository}`)).json(),

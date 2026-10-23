@@ -2,6 +2,32 @@ import { z } from 'zod'
 import type { Anchor } from './anchors'
 import type { PanelFinding } from './panel'
 
+export const fixCheckStatuses = ['applied', 'partial', 'missing', 'wrong'] as const
+export const fixCheckLabels: Record<(typeof fixCheckStatuses)[number], string> = {
+  applied: 'Applied',
+  partial: 'Partly applied',
+  missing: 'Not applied',
+  wrong: 'Applied wrongly',
+}
+
+/** What the other provider's model found when it checked the committed fixes against the plans. */
+export const fixCheckSchema = z.object({
+  /** The local commit it read. */
+  sha: z.string(),
+  model: z.object({ provider: z.string(), model: z.string() }),
+  summary: z.string(),
+  results: z.array(
+    z.object({
+      entry: z.string(),
+      status: z.enum(fixCheckStatuses),
+      note: z.string(),
+      evidence: z.array(z.string()),
+    }),
+  ),
+  createdAt: z.string(),
+})
+export type FixCheck = z.infer<typeof fixCheckSchema>
+
 /**
  * The fixes the author sent from one reviewed PR to a T3 Code thread. Saved before the launch so a
  * repeated or retried Proceed finds it instead of starting a second thread; `sent` only once the
@@ -17,6 +43,8 @@ export const fixHandoffSchema = z.object({
   /** The grounded entries the thread was asked to fix. */
   entries: z.array(z.string()),
   error: z.string().optional(),
+  /** The last check of the committed fixes by the other provider's model. */
+  check: fixCheckSchema.optional(),
   launch: z
     .object({
       title: z.string(),

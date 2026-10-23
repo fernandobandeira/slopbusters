@@ -2,9 +2,11 @@ import { createHash } from 'node:crypto'
 import type { LocalRound } from '../../../shared/domain/panelFix'
 import type { ChangedFile, PullRequest } from '../../../shared/domain/types'
 import { hardenedGit } from '../../adapters/git'
+import type { LocalSourceRepository } from '../../adapters/sourceRepository'
 import { UserError } from '../../errors'
 import { MAX_GIT_OUTPUT_BYTES, MAX_WORKSPACE_STATUS_OUTPUT_BYTES } from '../../limits'
 import { detectTransfers, fileGroups, parseFile } from '../diff'
+import { loadOriginals } from '../pulls/originals'
 
 export interface LocalSources {
   /** The PR as GitHub has it, for its title, description and identity. */
@@ -13,6 +15,28 @@ export interface LocalSources {
   importCommit: (pull: PullRequest, local: LocalRound) => Promise<void>
   /** Fill in the files' original contents at the merge base, when source is available. */
   originals?: (pull: PullRequest, files: ChangedFile[]) => Promise<void>
+}
+
+/** Local snapshots that read source from the app's source cache, where the commit is copied. */
+export function localSnapshotLoader(
+  repository: LocalSourceRepository,
+  loadPull: (url: string) => Promise<PullRequest>,
+) {
+  return (local: LocalRound) =>
+    localSnapshot(local, {
+      loadPull,
+      importCommit: (pull, round) =>
+        repository.importLocal(
+          { owner: pull.owner, repo: pull.repo, sha: round.sha },
+          { checkout: round.worktreePath, branch: round.branch },
+        ),
+      originals: (pull, files) =>
+        loadOriginals(
+          repository,
+          { owner: pull.owner, repo: pull.repo, sha: pull.mergeBaseSha ?? pull.baseSha },
+          files,
+        ),
+    })
 }
 
 /** How a round loads its PRs: a local round's PR from its fix commits, any other from GitHub. */
