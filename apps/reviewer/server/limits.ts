@@ -53,6 +53,11 @@ export const T3_ENGINE_STOP_TIMEOUT_MS = 10_000
 export const T3_ENGINE_CLONE_TIMEOUT_MS = 15 * 60_000
 /** A structured turn's engine call outlives the turn so the interrupt can still be sent. */
 export const T3_ENGINE_TURN_MARGIN_MS = 30_000
+/**
+ * How long the engine may take to open a provider session for a turn it accepted. A turn that is
+ * still not running by then never will be, so it fails now instead of at its full timeout.
+ */
+export const T3_ENGINE_TURN_START_TIMEOUT_MS = 2 * 60_000
 /** Room left under the engine's message limit for anything it adds to a turn's input. */
 export const T3_ENGINE_TURN_INPUT_MARGIN_CHARS = 4000
 /** Copying a review checkout for one structured turn; a clone on APFS takes moments. */
@@ -131,5 +136,7 @@ export const MAX_GROUNDING_TURNS = 6
  * large repository needs far longer than a single review pass.
  */
 export const GROUNDING_TURN_TIMEOUT_MS = 20 * 60 * 1000
+/** A panel seat reads a whole PR, and its skill may ask for a deep pass through the repository. */
+export const PANEL_REVIEW_TIMEOUT_MS = 15 * 60 * 1000
 /** A planning pass checks one finding. */
 export const PLANNING_TIMEOUT_MS = 10 * 60 * 1000

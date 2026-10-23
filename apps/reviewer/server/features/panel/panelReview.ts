@@ -11,9 +11,15 @@ import {
 import type { ReviewHistory } from '../../../shared/domain/panelSession'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import type { PullRequest } from '../../../shared/domain/types'
+import { CommandTimeoutError } from '../../adapters/process'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { IncludedFolder, StructuredTurns } from '../../adapters/t3Engine/engineTurns'
-import { MAX_PANEL_HISTORY_CHARS, MAX_PANEL_LAYER_EVIDENCE_CHARS } from '../../limits'
+import { UserError } from '../../errors'
+import {
+  MAX_PANEL_HISTORY_CHARS,
+  MAX_PANEL_LAYER_EVIDENCE_CHARS,
+  PANEL_REVIEW_TIMEOUT_MS,
+} from '../../limits'
 import { reviewEvidence } from '../../reviewSnapshot'
 import { pullName, sourceInstructions, ticketInstructions } from '../reviewPrompts'
 
@@ -194,16 +200,24 @@ export async function reviewAsPanelist(
   const include: IncludedFolder[] = member.directory
     ? [{ directory: member.directory, as: SKILL_FOLDER }]
     : []
-  const returned = await request.turns.run({
-    model: request.model,
-    prompt,
-    schema: panelAdviceSchema,
-    signal: request.signal,
-    directory: repository?.directory,
-    include,
-    observer: request.observer,
-    purpose: `${member.name} on the panel · ${pullName(pull)}`,
-  })
+  const returned = await request.turns
+    .run({
+      model: request.model,
+      prompt,
+      schema: panelAdviceSchema,
+      signal: request.signal,
+      directory: repository?.directory,
+      include,
+      observer: request.observer,
+      timeoutMs: PANEL_REVIEW_TIMEOUT_MS,
+      purpose: `${member.name} on the panel · ${pullName(pull)}`,
+    })
+    .catch((error: unknown) => {
+      if (!(error instanceof CommandTimeoutError)) throw error
+      throw new UserError(
+        `${member.name} on ${request.model.model} ran out of time after ${String(PANEL_REVIEW_TIMEOUT_MS / 60_000)} minutes. Retry runs this seat again.`,
+      )
+    })
   const evidence = anchorEvidence(pull, layers, repository)
   return {
     ...normalizePanelAdvice(evidence, returned, member.maxFindings),

@@ -1,6 +1,7 @@
 import { mkdirSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { CommandTimeoutError } from '../server/adapters/process'
 import type {
   StructuredTurnRequest,
   StructuredTurns,
@@ -200,6 +201,24 @@ describe('a panel reviewer that fails', () => {
     expect(jobs.get(session.id).results[0]?.advice.limitations.join(' ')).toMatch(
       /grounding saw 2 of 3 reviews/,
     )
+  })
+
+  it('gives each reviewer fifteen minutes and says which one ran out of time', async () => {
+    const { turns, requests } = recordingTurns((request) => {
+      if (request.purpose?.startsWith('Terminator')) throw new CommandTimeoutError('Codex')
+      return reply(request)
+    })
+    const jobs = panel(turns)
+
+    const session = await jobs.start(repository, [url], everyone)
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('partial')
+    })
+
+    const seats = requests.filter((request) => !isGrounding(request))
+    expect(seats.every((request) => request.timeoutMs === 15 * 60_000)).toBe(true)
+    const failed = jobs.get(session.id).pending?.reviews.find((review) => review.error)
+    expect(failed?.error).toMatch(/^Terminator on .+ ran out of time after 15 minutes\./)
   })
 
   it('retries only the reviewers that failed', async () => {

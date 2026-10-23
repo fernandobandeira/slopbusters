@@ -73,6 +73,11 @@ export class TurnFollower {
     private readonly observer?: ProviderObserver,
   ) {}
 
+  /** Whether the provider picked the turn up: it ran, or it already ended. */
+  get began(): boolean {
+    return this.running || this.outcome !== undefined
+  }
+
   receive(item: OrchestrationThreadStreamItem): TurnStep {
     const responses: ClientOrchestrationCommand[] = []
     let start = false

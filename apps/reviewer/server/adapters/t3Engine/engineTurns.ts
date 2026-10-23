@@ -19,11 +19,12 @@ import {
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import { Provider } from '../../../shared/domain/types'
-import { logError } from '../../errors'
+import { logError, UserError } from '../../errors'
 import {
   PROVIDER_TIMEOUT_MS,
   T3_ENGINE_TURN_INPUT_MARGIN_CHARS,
   T3_ENGINE_TURN_MARGIN_MS,
+  T3_ENGINE_TURN_START_TIMEOUT_MS,
 } from '../../limits'
 import { copyForInspection, listInspectionFiles } from '../inspectionCopy'
 import { CommandTimeoutError } from '../process'
@@ -91,7 +92,7 @@ interface Workspace {
   release(): Promise<void>
 }
 
-type FollowedTurn = TurnOutcome | { readonly status: 'cancelled' | 'timeout' }
+type FollowedTurn = TurnOutcome | { readonly status: 'cancelled' | 'timeout' | 'unstarted' }
 
 /**
  * Structured turns on a T3 Code engine. Each run gets its own project in a disposable copy of the
@@ -100,7 +101,10 @@ type FollowedTurn = TurnOutcome | { readonly status: 'cancelled' | 'timeout' }
  * deleted, when the run ends.
  */
 export class EngineTurns implements StructuredTurns {
-  constructor(private readonly connection: Pick<EngineConnection, 'run'>) {}
+  constructor(
+    private readonly connection: Pick<EngineConnection, 'run'>,
+    private readonly startTimeoutMs = T3_ENGINE_TURN_START_TIMEOUT_MS,
+  ) {}
 
   async run<T>(request: StructuredTurnRequest<T>): Promise<T> {
     request.signal.throwIfAborted()
@@ -169,7 +173,13 @@ export class EngineTurns implements StructuredTurns {
     }
     const outcome = await this.connection.run(
       (client) =>
-        followTurn(client, { start, follower, signal: request.signal, timeoutMs: remaining }),
+        followTurn(client, {
+          start,
+          follower,
+          signal: request.signal,
+          timeoutMs: remaining,
+          startTimeoutMs: Math.min(this.startTimeoutMs, remaining),
+        }),
       remaining + T3_ENGINE_TURN_MARGIN_MS,
     )
     const agent = agentName(request.model)
@@ -184,6 +194,10 @@ export class EngineTurns implements StructuredTurns {
         throw new Error('The operation was cancelled.')
       case 'timeout':
         throw new CommandTimeoutError(agent)
+      case 'unstarted':
+        throw new UserError(
+          `${agent} never started this turn: T3 Code accepted it but opened no session within ${String(Math.round(this.startTimeoutMs / 60_000))} minutes. Restart Slopbusters, then retry.`,
+        )
     }
   }
 
@@ -296,7 +310,8 @@ export class EngineTurns implements StructuredTurns {
 
 /**
  * Subscribe to the thread, send the prompt once the snapshot arrives, and answer what the agent
- * asks until the turn ends. Cancelling or running out of time interrupts the turn first.
+ * asks until the turn ends. Cancelling, running out of time, or a turn the provider never picks
+ * up within `startTimeoutMs` interrupts the turn first.
  */
 function followTurn(
   client: EngineClient,
@@ -305,6 +320,7 @@ function followTurn(
     follower: TurnFollower
     signal: AbortSignal
     timeoutMs: number
+    startTimeoutMs: number
   },
 ): Effect.Effect<FollowedTurn, unknown> {
   const { start, follower } = input
@@ -328,10 +344,14 @@ function followTurn(
       })),
     ),
   )
-  const stopped = Effect.raceFirst(
+  const unstarted = Effect.sleep(input.startTimeoutMs).pipe(
+    Effect.flatMap(() => (follower.began ? Effect.never : Effect.succeed('unstarted' as const))),
+  )
+  const stopped = Effect.raceAll([
     whenAborted(input.signal),
     Effect.sleep(input.timeoutMs).pipe(Effect.as('timeout' as const)),
-  ).pipe(
+    unstarted,
+  ]).pipe(
     Effect.flatMap((status) =>
       dispatch({
         type: 'thread.turn.interrupt',
