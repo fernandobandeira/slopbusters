@@ -55,6 +55,7 @@ import { PanelMembers } from './features/panel/panelMembers'
 import { PanelJobs } from './features/panel/panelJobs'
 import { PanelFixes } from './features/panel/panelFixes'
 import { PanelGates } from './features/panel/panelGates'
+import { PanelRoutes } from './features/panel/panelRoutes'
 import { loadBuiltInSkill } from './features/panel/builtInSkills'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
@@ -206,6 +207,13 @@ export function createServices(options: ReviewerServerOptions) {
     sessions: agentSessions,
     openRepository,
   })
+  const panelRoutes = new PanelRoutes({
+    store: store.panel,
+    turns,
+    jobs: panelJobs,
+    judges: () => savedModels(store.getPreferences(), 'judge'),
+    sessions: agentSessions,
+  })
   const chatModel = () => savedModels(store.getPreferences()).primary
   const panelFixes = new PanelFixes({
     store: store.panel,
@@ -249,6 +257,7 @@ export function createServices(options: ReviewerServerOptions) {
     panelJobs,
     panelGates,
     panelFixes,
+    panelRoutes,
     chats: {
       continueInT3Code: async (request: ContinueChatRequest) => {
         const model = chatModel()

@@ -14,6 +14,7 @@ export function PanelResultView({
   teammates,
   context,
   replace,
+  onOpen,
 }: {
   session: PanelSession
   result: PanelResult
@@ -21,6 +22,7 @@ export function PanelResultView({
   teammates?: Teammate[]
   context: PanelDraftContext
   replace: (session: PanelSession) => void
+  onOpen: (sessionId: string) => void
 }) {
   const [choosing, setChoosing] = useState(false)
   const gated = Boolean(result.grounding?.resolved?.length)
@@ -43,6 +45,7 @@ export function PanelResultView({
           session={session}
           result={result}
           replace={replace}
+          onOpen={onOpen}
           moved={
             context.pull.headSha !== result.pull.headSha ||
             context.pull.baseSha !== result.pull.baseSha

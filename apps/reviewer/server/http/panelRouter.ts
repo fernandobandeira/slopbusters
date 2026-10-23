@@ -5,7 +5,7 @@ import { UserError } from '../errors'
 import type { Services } from '../services'
 import { handle } from './contractRouter'
 
-export function panelRouter({ panelJobs, panelGates, panelFixes, store }: Services) {
+export function panelRouter({ panelJobs, panelGates, panelFixes, panelRoutes, store }: Services) {
   const router = Router()
   handle(router, routes.savedPanelReviews, ({ query }) => ({
     reviews: store.panel.reviews(query.repository),
@@ -42,6 +42,12 @@ export function panelRouter({ panelJobs, panelGates, panelFixes, store }: Servic
   )
   handle(router, routes.proceedPanelFixes, ({ params, body }) =>
     panelFixes.proceed(params.id, body.url, body.revision),
+  )
+  handle(router, routes.routePanelLayer, ({ params, body }) =>
+    panelRoutes.toLayer(params.id, body.url, body.pull),
+  )
+  handle(router, routes.draftPanelMetadata, ({ params, body }) =>
+    panelRoutes.draftMetadata(params.id, body.url, body.field),
   )
   handle(router, routes.cancelPanel, ({ params }) => panelJobs.cancel(params.id))
   return router

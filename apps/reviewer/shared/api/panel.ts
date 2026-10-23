@@ -10,7 +10,7 @@ import {
 } from '../domain/panel'
 import { groundingStateSchema } from '../domain/grounding'
 import { gateSchema } from '../domain/panelGate'
-import { fixHandoffSchema } from '../domain/panelFix'
+import { fixHandoffSchema, layerRouteSchema, metadataDraftSchema } from '../domain/panelFix'
 import type { PanelSession } from '../domain/panelSession'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, pullUrlSchema, repositoryQuery } from './contract'
@@ -48,6 +48,8 @@ const session = z.object({
       grounding: groundingStateSchema.optional(),
       gate: gateSchema.optional(),
       handoff: fixHandoffSchema.optional(),
+      routed: z.array(layerRouteSchema).optional(),
+      metadataDrafts: z.array(metadataDraftSchema).optional(),
     }),
   ),
   pending: z
@@ -106,6 +108,18 @@ export const planPanelFix = defineRoute('POST', '/panel/:id/plan', {
 export const proceedPanelFixes = defineRoute('POST', '/panel/:id/proceed', {
   params: idParams,
   request: z.object({ url: pullUrlSchema, revision: z.string().min(1).max(100) }).strict(),
+  response: session,
+})
+/** Start a round on another layer of the stack, carrying the ready findings chosen for it. */
+export const routePanelLayer = defineRoute('POST', '/panel/:id/route-layer', {
+  params: idParams,
+  request: z.object({ url: pullUrlSchema, pull: z.number().int().positive() }).strict(),
+  response: session,
+})
+/** Draft the PR's new title or description from the chosen metadata plans; it is not published. */
+export const draftPanelMetadata = defineRoute('POST', '/panel/:id/metadata', {
+  params: idParams,
+  request: z.object({ url: pullUrlSchema, field: z.enum(['title', 'description']) }).strict(),
   response: session,
 })
 export const cancelPanel = defineRoute('DELETE', '/panel/:id', {

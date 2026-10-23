@@ -7,7 +7,7 @@ import { usePanelProceed } from './usePanelProceed'
 
 /**
  * Proceed: the ready fixes for this PR go to one T3 Code thread in a worktree of the reviewed
- * head. Fixes for another layer or the PR's title or description are counted but not sent yet.
+ * head. Findings for another layer or the PR's title or description go elsewhere.
  */
 export function PanelProceed({
   session,
@@ -37,7 +37,6 @@ export function PanelProceed({
         {proceed.sending && <LoaderCircle size={14} className="animate-spin" aria-hidden="true" />}
         {proceed.sending ? 'Sending…' : proceedLabel(fixes)}
       </Button>
-      <Elsewhere count={gate.ready.length - fixes} />
       {proceed.error && <p role="alert">{proceed.error}</p>}
     </div>
   )
@@ -77,16 +76,6 @@ function HandoffProblem({ handoff, sending }: { handoff?: FixHandoff; sending: b
       </p>
     )
   return null
-}
-
-function Elsewhere({ count }: { count: number }) {
-  if (!count) return null
-  return (
-    <p className="muted">
-      {count} ready {count === 1 ? 'change belongs' : 'changes belong'} on another layer or the PR
-      description and {count === 1 ? 'is' : 'are'} not sent yet.
-    </p>
-  )
 }
 
 function proceedLabel(fixes: number) {

@@ -10,6 +10,7 @@ import {
 } from '../../../shared/domain/grounding'
 import { groundedAdvice, recordTurn, resolveEntries } from '../../../shared/domain/groundingResult'
 import type { JudgeAdvice, PanelReviewer } from '../../../shared/domain/panel'
+import type { CarriedFinding } from '../../../shared/domain/panelFix'
 import type { PanelPending } from '../../../shared/domain/panelSession'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
@@ -35,6 +36,8 @@ export interface GroundingRequest {
   /** The primary model, and the other provider's when it is available. */
   models: { primary: OrganizationPreferences; secondary?: OrganizationPreferences }
   repository?: ReviewCheckout
+  /** Findings another layer's round sent to this PR; always grounded, within the budget. */
+  carried?: readonly CarriedFinding[]
   /** Persist the pending review; called after every valid turn. */
   save: () => void
   /** Run one model pass, so the session can show it. */
@@ -65,13 +68,30 @@ export async function groundPanel(
   return { advice: groundedAdvice(state, { summary, limitations }), grounding: state }
 }
 
-function startGrounding({ pending, reviewers, models }: GroundingRequest): GroundingState {
+function startGrounding({ pending, reviewers, models, carried }: GroundingRequest): GroundingState {
   const reviews = reviewers.flatMap(
     (reviewer) => pending.reviews.find((review) => review.reviewer === reviewer.id) ?? [],
   )
+  const sent = (carried ?? []).filter((item) => item.url === pending.pull.url)
+  const picked = selectCandidates(
+    pending.pull.number,
+    reviews,
+    Math.max(0, MAX_GROUNDING_SOURCES - sent.length),
+  )
   return {
     budget: MAX_GROUNDING_SOURCES,
-    candidates: selectCandidates(pending.pull.number, reviews, MAX_GROUNDING_SOURCES),
+    candidates: [
+      ...picked,
+      ...sent.map((item, index) => ({
+        key: `f${String(picked.length + index + 1)}`,
+        pull: pending.pull.number,
+        seat: item.seat,
+        rank: 0,
+        finding: item.finding,
+        state: 'selected' as const,
+        carriedFrom: item.from,
+      })),
+    ],
     roles: models,
     turns: [],
     entries: [],
@@ -151,6 +171,7 @@ function groundingTurn(
 }
 
 const groundingRubric = `You ground a review panel's findings against the code, taking turns with another model on one shared list. Several reviewers raised the sources below independently. Check each against the PR, its stack and the repository yourself; agreement between reviewers is not evidence, and one reviewer alone can be right.
+A source with carriedFrom was grounded on another layer of the stack, whose author sent it to this PR; ground it again against this PR's code.
 Account for every source key in exactly one entry. An entry with several sources merges findings that make the same point; never invent a source, and do not add entries no source supports.
 Verdicts:
 - legit: the code, a repository rule or the PR shows the problem. plan says the change in one to three lines and names the convention or sibling implementation to follow.
@@ -173,7 +194,13 @@ function turnInstructions(state: GroundingState, role: GroundingRole): string {
 function selectedSources(state: GroundingState) {
   return state.candidates
     .filter((candidate) => candidate.state === 'selected')
-    .map(({ key, seat, rank, finding }) => ({ key, reviewer: seat, rank, finding }))
+    .map(({ key, seat, rank, finding, carriedFrom }) => ({
+      key,
+      reviewer: seat,
+      rank,
+      finding,
+      ...(carriedFrom ? { carriedFrom: `PR #${String(carriedFrom.pull)}` } : {}),
+    }))
 }
 
 function currentList(state: GroundingState, role: GroundingRole): string {

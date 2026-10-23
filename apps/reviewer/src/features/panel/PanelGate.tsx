@@ -10,6 +10,7 @@ import {
 import type { GateItem } from '../../../shared/domain/panelGate'
 import type { PanelResult, PanelSession } from '../../../shared/domain/panelSession'
 import { FindingText } from '../../components/FindingText'
+import { PanelDestinations } from './PanelDestinations'
 import { PanelProceed } from './PanelProceed'
 import { usePanelGate } from './usePanelGate'
 
@@ -64,11 +65,13 @@ export function PanelGate({
   result,
   replace,
   moved,
+  onOpen,
 }: {
   session: PanelSession
   result: PanelResult
   replace: (session: PanelSession) => void
   moved: boolean
+  onOpen: (sessionId: string) => void
 }) {
   const gate = usePanelGate(session, result, replace)
   const selected = gate.items.filter((item) => item.action.selected)
@@ -95,6 +98,13 @@ export function PanelGate({
         )
       })}
       <PanelProceed session={session} result={result} gate={gate} replace={replace} moved={moved} />
+      <PanelDestinations
+        session={session}
+        result={result}
+        ready={gate.ready}
+        replace={replace}
+        onOpen={onOpen}
+      />
       {gate.error && <p role="alert">{gate.error}</p>}
     </section>
   )

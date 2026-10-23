@@ -122,6 +122,7 @@ function PanelBody({
           teammates={teammates}
           context={context}
           replace={job.replace}
+          onOpen={context.onOpen}
         />
       )}
       {session && tour.index === 0 && (

@@ -58,6 +58,8 @@ export const groundingCandidateSchema = z.object({
   finding: panelFindingSchema,
   /** Selected for this round's budget, or deferred to a later round without a verdict. */
   state: z.enum(['selected', 'deferred']),
+  /** Grounded on another layer, whose author sent it to this one. */
+  carriedFrom: z.object({ pull: z.number().int().positive(), entry: z.string() }).optional(),
 })
 export type GroundingCandidate = z.infer<typeof groundingCandidateSchema>
 

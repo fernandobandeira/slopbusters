@@ -321,3 +321,19 @@
 .panel-proceed p {
   margin: 0;
 }
+.panel-destinations {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.panel-destinations p {
+  margin: 0;
+}
+.panel-destinations {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.panel-destinations p {
+  margin: 0;
+}

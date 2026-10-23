@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import type { LayerSnapshot } from '../../../shared/domain/anchors'
 import type { PanelReviewer, PanelSeatRequest } from '../../../shared/domain/panel'
+import type { CarriedFinding } from '../../../shared/domain/panelFix'
 import type {
   PanelPending,
   PanelPreparation,
@@ -71,6 +72,8 @@ export class PanelJobs {
     repository: string,
     urls: string[],
     requests: PanelSeatRequest[],
+    /** Findings another layer's round sent to these PRs. */
+    carried?: CarriedFinding[],
   ): Promise<PanelSession> {
     const models = this.options.models()
     const reviewers = await this.options.members.describe(requests, models)
@@ -94,6 +97,7 @@ export class PanelJobs {
       progress: 'Loading PR snapshots and their stacks…',
       results: [],
       createdAt: new Date().toISOString(),
+      ...(carried?.length ? { carried } : {}),
     }
     this.options.sessions?.start(session.id, 'panel', session)
     this.save(session)
@@ -218,6 +222,7 @@ export class PanelJobs {
       turns: this.options.turns,
       pending,
       reviewers,
+      carried: session.carried,
       skillFolders: await this.options.members.skillFolders(reviewers, session.model.provider),
       models: {
         primary: judges.primary,
