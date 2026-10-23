@@ -71,11 +71,13 @@ describe('a panel review', () => {
       })
     let running = 0
     let most = 0
+    const waiting: (() => void)[] = []
     const turns: StructuredTurns = {
       run: async <T>(request: StructuredTurnRequest<T>) => {
+        if (isGrounding(request)) return request.schema.parse(reply(request))
         running++
         most = Math.max(most, running)
-        await new Promise((resolve) => setTimeout(resolve, 5))
+        await new Promise<void>((resolve) => waiting.push(resolve))
         running--
         return request.schema.parse(reply(request))
       },
@@ -88,6 +90,12 @@ describe('a panel review', () => {
       [...everyone, 'teammate:riley', 'teammate:morgan'],
     )
     await vi.waitFor(() => {
+      expect(running).toBe(3)
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(running).toBe(3)
+    await vi.waitFor(() => {
+      for (const release of waiting.splice(0)) release()
       expect(jobs.get(session.id).status).toBe('complete')
     })
 

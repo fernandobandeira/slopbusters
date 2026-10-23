@@ -28,6 +28,12 @@ vi.mock('../server/features/linus/linusReview', async (original) => ({
 }))
 vi.mock('../server/adapters/reviewWorkspaces', () => ({
   ReviewWorkspaces: class {
+    removeAbandoned() {
+      return Promise.resolve()
+    }
+    unused() {
+      return Promise.resolve([])
+    }
     async acquire() {
       throw new Error('Repository inspection unavailable in this API fixture.')
     }

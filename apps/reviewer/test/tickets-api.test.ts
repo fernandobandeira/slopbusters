@@ -10,6 +10,12 @@ import { fixtureTicket } from './fixtures/tickets'
 
 vi.mock('../server/adapters/reviewWorkspaces', () => ({
   ReviewWorkspaces: class {
+    removeAbandoned() {
+      return Promise.resolve()
+    }
+    unused() {
+      return Promise.resolve([])
+    }
     close() {
       return Promise.resolve()
     }

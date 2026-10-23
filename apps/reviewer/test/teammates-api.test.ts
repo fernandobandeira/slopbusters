@@ -20,6 +20,12 @@ vi.mock('../server/features/pulls/github', async (original) => ({
 }))
 vi.mock('../server/adapters/reviewWorkspaces', () => ({
   ReviewWorkspaces: class {
+    removeAbandoned() {
+      return Promise.resolve()
+    }
+    unused() {
+      return Promise.resolve([])
+    }
     acquire() {
       return Promise.reject(new Error('No source in fixture'))
     }
