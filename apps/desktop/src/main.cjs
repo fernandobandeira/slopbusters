@@ -143,11 +143,15 @@ async function openChatWindow(value) {
   chatWindow.focus()
 }
 
-function createChatWindow() {
-  const chatSession = session.fromPartition('persist:t3-engine')
+/** Copy buttons write to the clipboard; every other permission a page asks for is refused. */
+function allowOnlyClipboardWrites(target) {
   const allowed = (permission) => permission === 'clipboard-sanitized-write'
-  chatSession.setPermissionRequestHandler((_contents, permission, callback) => callback(allowed(permission)))
-  chatSession.setPermissionCheckHandler((_contents, permission) => allowed(permission))
+  target.setPermissionRequestHandler((_contents, permission, callback) => callback(allowed(permission)))
+  target.setPermissionCheckHandler((_contents, permission) => allowed(permission))
+}
+
+function createChatWindow() {
+  allowOnlyClipboardWrites(session.fromPartition('persist:t3-engine'))
   const window = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -386,8 +390,7 @@ async function start() {
   smokeStage('path-ready')
   if (process.platform === 'darwin') app.dock?.setIcon(join(__dirname, 'icon.png'))
   const appSession = session.fromPartition('persist:slopbusters')
-  appSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
-  appSession.setPermissionCheckHandler(() => false)
+  allowOnlyClipboardWrites(appSession)
   appSession.on('will-download', (event) => event.preventDefault())
   server = await startReviewerServer({
     dataDirectory: app.getPath('userData'),
