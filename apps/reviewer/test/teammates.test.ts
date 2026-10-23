@@ -54,6 +54,21 @@ describe('creating teammates from installed skills', () => {
     ).toBe('avery-quinn-lee')
   })
 
+  it('loads a teammate an earlier version saved with a GitHub login, without the login', async () => {
+    installSkill(roots.claude, 'AveryReview')
+    await teammates.create(avery)
+    const record = join(data, 'teammates', 'avery-quinn-lee', 'teammate.json')
+    writeFileSync(
+      record,
+      JSON.stringify({ ...avery, login: 'avery', id: 'avery-quinn-lee', updatedAt: '' }),
+    )
+
+    const [teammate] = await teammates.list()
+
+    expect(teammate).toMatchObject({ id: 'avery-quinn-lee', name: 'Avery Quinn-Lee' })
+    expect(teammate).not.toHaveProperty('login')
+  })
+
   it('keeps a teammate whose skill was uninstalled, showing it as installed nowhere', async () => {
     const folder = installSkill(roots.claude, 'AveryReview')
     await teammates.create(avery)
