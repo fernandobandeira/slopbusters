@@ -89,8 +89,6 @@ export const panelReviewerSchema = z.object({
   description: z.string().optional(),
   /** The installed skill a teammate runs, by folder name. */
   skill: z.string().optional(),
-  /** The teammate's GitHub login, whose earlier comments on the PR the seat reads. */
-  login: z.string().optional(),
   maxFindings: z.number().int().positive(),
   /** The model this seat reviews on; sessions saved before seats used the session's model. */
   model: organizationSchema.optional(),

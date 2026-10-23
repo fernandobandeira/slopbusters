@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { UserError } from '../server/errors'
-import { DiffSide } from '../shared/domain/types'
+import { DiffSide, type PullReviewBody } from '../shared/domain/types'
 import { fixturePanelAdvice, fixturePanelFinding } from './fixtures/panel'
 import {
-  everyone,
   groundingReply,
   isGrounding,
   panelHarness,
@@ -138,19 +137,12 @@ const history = {
   ],
 }
 
-describe('a teammate with a GitHub login', () => {
-  it('reads what that reviewer already said on the PR, threads and review bodies', async () => {
-    await harness.teammates.update('avery', {
-      name: 'Avery',
-      skill: 'AveryReview',
-      maxFindings: 5,
-      login: 'avery',
-    })
+describe('what reviewers already said on the PR', () => {
+  it('reaches every seat, threads and review bodies from every author', async () => {
     const { turns, requests } = recordingTurns(reply)
-    const loadHistory = vi.fn(() => Promise.resolve(history))
     const jobs = panel(turns, {
       loadPull: () => Promise.resolve(fixturePull()),
-      history: loadHistory,
+      history: () => Promise.resolve(history),
     })
 
     const session = await jobs.start(repository, [url], ['teammate:avery', 'unclebob'])
@@ -158,28 +150,41 @@ describe('a teammate with a GitHub login', () => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
 
-    const avery = requests.find((request) => request.purpose?.startsWith('Avery'))
-    expect(avery?.prompt).toContain('What Avery (@avery) already said on this PR')
-    expect(avery?.prompt).toContain('Name the role check.')
-    expect(avery?.prompt).toContain('"resolved":true')
-    expect(avery?.prompt).toContain('Looks close; one naming nit.')
-    expect(avery?.prompt).not.toContain('Someone else entirely.')
-    const bob = requests.find((request) => request.purpose?.startsWith('Uncle Bob'))
-    expect(bob?.prompt).not.toContain('already said on this PR')
+    for (const seat of ['Avery', 'Uncle Bob']) {
+      const prompt = requests.find((request) => request.purpose?.startsWith(seat))?.prompt
+      expect(prompt).toContain('What reviewers already said on this PR')
+      expect(prompt).toContain('Name the role check.')
+      expect(prompt).toContain('"resolved":true')
+      expect(prompt).toContain('Looks close; one naming nit.')
+      expect(prompt).toContain('Someone else entirely.')
+    }
   })
 
-  it('does not load comments when no seat has a login', async () => {
-    const loadHistory = vi.fn(() => Promise.resolve(history))
-    const jobs = panel(recordingTurns(reply).turns, {
+  it('keeps the newest comments when they exceed the budget', async () => {
+    const long = (index: number): PullReviewBody => ({
+      author: 'avery',
+      state: 'COMMENTED',
+      url: `https://github.com/review-room/example/pull/128#pullrequestreview-${String(index)}`,
+      commitId: fixturePull().headSha,
+      id: String(index),
+      body: `Review ${String(index)} ${'x'.repeat(25_000)}`,
+      submittedAt: `2026-10-0${String(index)}T12:00:00Z`,
+    })
+    const { turns, requests } = recordingTurns(reply)
+    const jobs = panel(turns, {
       loadPull: () => Promise.resolve(fixturePull()),
-      history: loadHistory,
+      history: () => Promise.resolve({ threads: [], reviews: [1, 2, 3, 4].map(long) }),
     })
 
-    const session = await jobs.start(repository, [url], everyone)
+    const session = await jobs.start(repository, [url], ['unclebob'])
     await vi.waitFor(() => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
 
-    expect(loadHistory).not.toHaveBeenCalled()
+    const prompt = requests.find((request) => request.purpose?.startsWith('Uncle Bob'))?.prompt
+    expect(prompt).toContain('2 older entries were left out for size.')
+    expect(prompt).not.toContain('Review 1 ')
+    expect(prompt).not.toContain('Review 2 ')
+    expect(prompt?.indexOf('Review 3 ')).toBeLessThan(prompt?.indexOf('Review 4 ') ?? 0)
   })
 })

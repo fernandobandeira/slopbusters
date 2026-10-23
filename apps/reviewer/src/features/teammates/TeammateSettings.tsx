@@ -90,7 +90,6 @@ function TeammateRow({
       <div className="teammate-row-text">
         <strong>{teammate.name}</strong>
         {teammate.title && <span className="muted">{teammate.title}</span>}
-        {teammate.login && <span className="muted">@{teammate.login} on GitHub</span>}
         <span className="muted">
           <code>{teammate.skill}</code> ·{' '}
           <span className={`teammate-availability teammate-availability-${availability}`}>
@@ -129,7 +128,7 @@ function useRowChanges(teammate: Teammate, onChanged: () => void) {
       setError(message(cause))
     }
   }
-  const { name, title, skill, login } = teammate
+  const { name, title, skill } = teammate
   return {
     error,
     remove: () => change(() => call(routes.removeTeammate, { params: { id: teammate.id } })),
@@ -142,7 +141,6 @@ function useRowChanges(teammate: Teammate, onChanged: () => void) {
             skill,
             maxFindings: DEFAULT_TEAMMATE_FINDINGS,
             ...(title ? { title } : {}),
-            ...(login ? { login } : {}),
           },
         }),
       ),

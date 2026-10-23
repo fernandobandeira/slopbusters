@@ -26,11 +26,6 @@ export const teammateIdSchema = z
 export const DEFAULT_TEAMMATE_FINDINGS = 40
 export const MAX_TEAMMATE_FINDINGS = 40
 
-export const githubLoginSchema = z
-  .string()
-  .trim()
-  .regex(/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/, 'Enter a GitHub username.')
-
 /** What the wizard asks for; the id is derived from the name when the teammate is created. */
 export const teammateInputSchema = z
   .object({
@@ -38,8 +33,6 @@ export const teammateInputSchema = z
     title: z.string().trim().max(80).optional(),
     skill: skillNameSchema,
     maxFindings: z.number().int().min(1).max(MAX_TEAMMATE_FINDINGS),
-    /** The reviewer's GitHub login, so a seat sees what they already said on the PR. */
-    login: githubLoginSchema.optional(),
   })
   .strict()
 export type TeammateInput = z.infer<typeof teammateInputSchema>

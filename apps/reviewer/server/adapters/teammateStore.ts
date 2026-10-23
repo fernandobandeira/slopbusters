@@ -50,7 +50,7 @@ export class TeammateStore {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
       throw error
     }
-    const record = teammateRecordSchema.safeParse(safeJson(text))
+    const record = teammateRecordSchema.safeParse(withoutLegacyLogin(safeJson(text)))
     if (!record.success || record.data.id !== id) {
       logError(`Skipping the teammate in ${folder}: its teammate.json is not valid`, record.error)
       return undefined
@@ -136,6 +136,13 @@ async function writeAtomically(path: string, data: string | Uint8Array) {
   const temporary = `${path}.${String(process.pid)}.tmp`
   await writeFile(temporary, data, { mode: 0o600 })
   await rename(temporary, path)
+}
+
+/** Earlier versions saved a GitHub login on a teammate; seats now read every reviewer's comments. */
+function withoutLegacyLogin(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || !('login' in value)) return value
+  const { login: _login, ...record } = value
+  return record
 }
 
 function safeJson(text: string): unknown {

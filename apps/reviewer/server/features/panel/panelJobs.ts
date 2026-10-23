@@ -35,7 +35,7 @@ interface Options {
   /** The stronger models that ground the seats' findings; no companion when only one provider runs. */
   judges: () => Pick<ModelPair, 'primary'> & Partial<Pick<ModelPair, 'companion'>>
   loadPull: (url: string) => Promise<PullRequest>
-  /** What reviewers already said on a PR, for teammates whose GitHub login is known. */
+  /** What reviewers already said on a PR, which every seat reads. */
   history?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewHistory>
   /** The PR's stack, so seats see its other open layers. */
   stack?: (url: string) => Promise<PullStackResult>
@@ -242,7 +242,6 @@ export class PanelJobs {
   private async prepareRound(session: PanelSession, signal: AbortSignal) {
     const preparation = await preparePanelRound(session.urls, {
       ...this.options,
-      withHistory: session.reviewers.some((reviewer) => reviewer.login),
       signal,
       progress: (progress) => {
         this.progress(session, progress)

@@ -102,7 +102,7 @@ export class Teammates {
     const teammate = await this.get(id)
     if (!installedFor(teammate.locations, provider))
       throw new UserError(
-        `${teammate.name} uses the ${teammate.skill} skill, which is not installed for ${provider === Provider.claude ? 'Claude' : 'Codex'}. Install it there or switch your primary model in Settings.`,
+        `${teammate.name} uses the ${teammate.skill} skill, which is not installed for ${provider === Provider.claude ? 'Claude' : 'Codex'}. Install it there or switch your primary provider in Settings.`,
       )
     const [directory, text, digest] = await Promise.all([
       this.skills.directory(teammate.skill, provider),
@@ -121,14 +121,13 @@ export class Teammates {
   }
 
   private async touch(teammate: Teammate) {
-    const { name, title, skill, maxFindings, login, id } = teammate
+    const { name, title, skill, maxFindings, id } = teammate
     await this.store.save({
       id,
       name,
       skill,
       maxFindings,
       ...(title ? { title } : {}),
-      ...(login ? { login } : {}),
       updatedAt: new Date().toISOString(),
     })
   }

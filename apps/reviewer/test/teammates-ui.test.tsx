@@ -104,7 +104,7 @@ describe('the teammate wizard', () => {
   })
 
   it('keeps a saved cap and offers the new default without changing it silently', async () => {
-    teammates = [teammate({ title: 'Backend lead', login: 'avery-gh' })]
+    teammates = [teammate({ title: 'Backend lead' })]
     vi.mocked(call).mockImplementation((route: ApiContract) => {
       if (route === routes.listTeammates) return Promise.resolve({ teammates })
       if (route === routes.updateTeammate) return Promise.resolve(teammate({ maxFindings: 40 }))
@@ -128,7 +128,6 @@ describe('the teammate wizard', () => {
           skill: 'AveryReview',
           maxFindings: 40,
           title: 'Backend lead',
-          login: 'avery-gh',
         },
       })
     })

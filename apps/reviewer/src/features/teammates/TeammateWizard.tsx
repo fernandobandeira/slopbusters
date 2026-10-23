@@ -145,20 +145,6 @@ function DetailsStep({
         <span className="muted">Tells the judge what this reviewer is good at.</span>
       </label>
       <label>
-        <span>GitHub username</span>
-        <Input
-          maxLength={40}
-          value={draft.login}
-          placeholder="avery"
-          onChange={(event) => {
-            update({ login: event.target.value })
-          }}
-        />
-        <span className="muted">
-          Optional. Lets this reviewer see the comments they already left on a PR.
-        </span>
-      </label>
-      <label>
         <span>Most findings per PR</span>
         <Input
           type="number"

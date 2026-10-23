@@ -13,7 +13,7 @@ import { settleEach } from '../flows/panel'
 
 interface Sources {
   loadPull: (url: string) => Promise<PullRequest>
-  /** What reviewers already said on a PR, for teammates whose GitHub login is known. */
+  /** What reviewers already said on a PR, which every seat reads. */
   history?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewHistory>
   stack?: (url: string) => Promise<PullStackResult>
   context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
@@ -28,7 +28,7 @@ interface Sources {
  */
 export async function preparePanelRound(
   urls: readonly string[],
-  sources: Sources & { withHistory: boolean },
+  sources: Sources,
 ): Promise<PanelPreparation> {
   sources.progress(`Loading ${pullCount(urls.length)}…`)
   const snapshots = (await loadSnapshots(urls, sources, true)).map((outcome) => {
@@ -36,7 +36,7 @@ export async function preparePanelRound(
     return outcome.advice
   })
   const stacks = await stackLayers(urls, sources)
-  if (sources.withHistory) await addHistory(snapshots, stacks.missing, sources)
+  await addHistory(snapshots, stacks.missing, sources)
   const wanted = [...new Set(Object.values(stacks.layers).flat())].filter(
     (url) => !urls.includes(url),
   )
