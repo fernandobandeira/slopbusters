@@ -119,3 +119,35 @@ describe('the bundled engine', () => {
     await expect(bundled.ensureRunning()).rejects.toThrow('does not include the T3 Code engine')
   })
 })
+
+describe('an engine that stops after it was found', () => {
+  it('replaces an adopted engine once it has stopped, instead of calling its old port', async () => {
+    const alive = new Set([99])
+    const locate = vi.fn(() =>
+      alive.has(99)
+        ? Promise.resolve(engineAt(99))
+        : alive.has(52)
+          ? Promise.resolve(engineAt(52))
+          : Promise.reject(new UserError('T3 Code is not running.')),
+    )
+    const spawnEngine = vi.fn(() => {
+      alive.add(52)
+      return fakeChild(52).child
+    })
+    const bundled = new BundledEngine({
+      executable,
+      home,
+      locate,
+      spawnEngine,
+      freePort: () => Promise.resolve(1),
+      isAlive: (pid) => alive.has(pid),
+    })
+    expect((await bundled.ensureRunning()).pid).toBe(99)
+
+    alive.delete(99)
+    const replaced = await bundled.ensureRunning()
+
+    expect(replaced.pid).toBe(52)
+    expect(spawnEngine).toHaveBeenCalledTimes(1)
+  })
+})

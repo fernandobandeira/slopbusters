@@ -20,6 +20,7 @@ export interface BundledEngineOptions {
   readonly locate?: (home: string) => Promise<RunningEngine>
   readonly spawnEngine?: (executable: string, args: string[]) => ChildProcess
   readonly freePort?: () => Promise<number>
+  readonly isAlive?: (pid: number) => boolean
 }
 
 /**
@@ -29,6 +30,8 @@ export interface BundledEngineOptions {
  */
 export class BundledEngine {
   private starting: Promise<RunningEngine> | undefined
+  /** The engine the last start found or launched. */
+  private running: RunningEngine | undefined
   private child: ChildProcess | undefined
   private adopted: number | undefined
   private closed = false
@@ -42,11 +45,25 @@ export class BundledEngine {
 
   ensureRunning(): Promise<RunningEngine> {
     if (this.closed) return Promise.reject(new UserError('Slopbusters is shutting down.'))
-    this.starting ??= this.start().catch((error: unknown) => {
-      this.starting = undefined
-      throw error
-    })
+    // An adopted engine, left by an earlier run, sends no exit event; check it is still there.
+    if (this.running && !(this.options.isAlive ?? isProcessAlive)(this.running.pid)) this.forget()
+    this.starting ??= this.start()
+      .then((engine) => {
+        this.running = engine
+        return engine
+      })
+      .catch((error: unknown) => {
+        this.starting = undefined
+        throw error
+      })
     return this.starting
+  }
+
+  /** Drop an engine that has stopped, so the next use starts or adopts another. */
+  private forget() {
+    this.starting = undefined
+    this.running = undefined
+    this.adopted = undefined
   }
 
   async close(): Promise<void> {
@@ -87,7 +104,7 @@ export class BundledEngine {
     child.once('exit', () => {
       if (this.child === child) {
         this.child = undefined
-        this.starting = undefined
+        this.forget()
       }
     })
     return this.waitUntilReady(child, locate, output)
