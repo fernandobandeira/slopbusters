@@ -1,0 +1,105 @@
+import { describe, expect, it, vi } from 'vitest'
+import type { ChatHosts } from '../server/adapters/t3Engine/chatHosts'
+import type { EngineThreadOperations } from '../server/adapters/t3Engine/engineThreads'
+import { UserError } from '../server/errors'
+import { PanelFixes } from '../server/features/panel/panelFixes'
+import { gateRevision } from '../shared/domain/panelGate'
+import { everyone, panelHarness, primary, reply, repository, url } from './fixtures/panelJobs'
+import { fixturePull } from './fixtures/pull'
+import { recordingTurns } from './fixtures/turns'
+
+const harness = panelHarness()
+const worktree = { path: '/fixes/example/12-a7f239d', branch: 'slopbusters/fix-12-a7f239d' }
+
+async function reviewed(options: { current?: ReturnType<typeof fixturePull> } = {}) {
+  const { turns } = recordingTurns(reply)
+  const jobs = harness.panel(turns)
+  const session = await jobs.start(repository, [url], everyone)
+  await vi.waitFor(() => {
+    expect(jobs.get(session.id).status).toBe('complete')
+  })
+  const startThread = vi.fn().mockResolvedValue(undefined)
+  const open = vi.fn().mockResolvedValue(undefined)
+  const hosts: ChatHosts = {
+    workspaceFor: vi.fn().mockResolvedValue({
+      location: 'slopbusters',
+      threads: { startThread } as unknown as EngineThreadOperations,
+      project: { id: 'project-1', title: 'example', workspaceRoot: '/engine/example' },
+      open,
+    }),
+  }
+  const prepareWorktree = vi.fn().mockResolvedValue(worktree)
+  const fixes = new PanelFixes({
+    store: harness.store.panel,
+    hosts,
+    loadPull: () => Promise.resolve(options.current ?? fixturePull()),
+    model: () => primary,
+    prepareWorktree,
+  })
+  const result = () => harness.store.panel.get(session.id)?.results[0]
+  const revision = () => gateRevision(result()?.fingerprint ?? '', result()?.gate)
+  return { id: session.id, fixes, startThread, open, prepareWorktree, result, revision }
+}
+
+describe('sending the chosen fixes to a fix thread', () => {
+  it('starts one thread in a worktree of the reviewed head, seeded with every plan in full', async () => {
+    const { id, fixes, startThread, prepareWorktree, result, revision } = await reviewed()
+
+    await fixes.proceed(id, url, revision())
+
+    const pull = fixturePull()
+    expect(prepareWorktree).toHaveBeenCalledWith('/engine/example', pull, pull.headSha)
+    const thread = startThread.mock.calls[0]?.[0] as Record<string, unknown> & { message: string }
+    expect(thread).toMatchObject({
+      branch: worktree.branch,
+      worktreePath: worktree.path,
+      model: { instanceId: 'claudeAgent', model: primary.model },
+      pullRequest: { number: pull.number, url: pull.url },
+    })
+    expect(thread.message).toContain(`HEAD must be \`${pull.headSha}\``)
+    expect(thread.message).toContain('Plan: Reuse the audit helper.')
+    expect(thread.message).toContain('Never push')
+    expect(result()?.handoff).toMatchObject({
+      state: 'sent',
+      entries: ['g1'],
+      threadId: thread.threadId,
+      launch: { branch: worktree.branch, reviewedSha: pull.headSha },
+    })
+  })
+
+  it('launches once however often Proceed is pressed for the same choices', async () => {
+    const { id, fixes, startThread, revision } = await reviewed()
+
+    await Promise.all([fixes.proceed(id, url, revision()), fixes.proceed(id, url, revision())])
+    await fixes.proceed(id, url, revision())
+
+    expect(startThread).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses choices the author did not see, and a PR that moved since the review', async () => {
+    const moved = { ...fixturePull(), headSha: 'b'.repeat(40) }
+    const stale = await reviewed()
+    const pushed = await reviewed({ current: moved })
+
+    await expect(stale.fixes.proceed(stale.id, url, 'gate:old')).rejects.toThrow(/choices changed/)
+    await expect(pushed.fixes.proceed(pushed.id, url, pushed.revision())).rejects.toThrow(
+      /new commits since the panel reviewed it/,
+    )
+    expect(pushed.prepareWorktree).not.toHaveBeenCalled()
+    expect(pushed.result()?.handoff).toBeUndefined()
+  })
+
+  it('records a failed launch and retries it on the same thread id', async () => {
+    const { id, fixes, startThread, prepareWorktree, result, revision } = await reviewed()
+    prepareWorktree.mockRejectedValueOnce(new UserError('The fix worktree has changes.'))
+
+    await expect(fixes.proceed(id, url, revision())).rejects.toThrow(/has changes/)
+    const failed = result()?.handoff
+    await fixes.proceed(id, url, revision())
+
+    expect(failed).toMatchObject({ state: 'failed', error: 'The fix worktree has changes.' })
+    expect(startThread).toHaveBeenCalledTimes(1)
+    expect((startThread.mock.calls[0]?.[0] as { threadId: string }).threadId).toBe(failed?.threadId)
+    expect(result()?.handoff?.state).toBe('sent')
+  })
+})

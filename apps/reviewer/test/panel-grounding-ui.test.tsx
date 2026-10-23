@@ -10,6 +10,7 @@ import {
   type GroundingState,
 } from '../shared/domain/grounding'
 import { groundedAdvice, recordTurn, resolveEntries } from '../shared/domain/groundingResult'
+import { gateRevision } from '../shared/domain/panelGate'
 import type { PanelSession } from '../shared/domain/panelSession'
 import { PanelCompanion } from '../src/features/panel/PanelCompanion'
 import { call } from '../src/lib/api'
@@ -243,5 +244,61 @@ describe('choosing fixes', () => {
         { entry: 'g2', selected: true, plan: 'Delete the guard.', planBy: 'author' },
       ],
     })
+  })
+})
+
+describe('proceeding with the chosen fixes', () => {
+  it('saves the choices, sends them from that saved revision, and says where they went', async () => {
+    const proceeded: unknown[] = []
+    vi.mocked(call).mockImplementation((route: ApiContract, options?: unknown) => {
+      if (route === routes.getPanel) return Promise.resolve(session())
+      if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
+      if (route === routes.savePanelGate) return Promise.resolve(session())
+      if (route === routes.proceedPanelFixes) {
+        proceeded.push((options as { body: unknown }).body)
+        const sent = session()
+        if (sent.results[0])
+          sent.results[0].handoff = {
+            revision: 'gate:1',
+            threadId: 'thread-1',
+            state: 'sent',
+            createdAt: '',
+            entries: ['g1'],
+            launch: {
+              title: 'Fix PR #12: 1 panel fix',
+              project: 'example',
+              location: 't3code',
+              branch: 'slopbusters/fix-12-a7f239d',
+              worktreePath: '/fixes/12',
+              reviewedSha: pull.headSha,
+              baseSha: pull.baseSha,
+            },
+          }
+        return Promise.resolve(sent)
+      }
+      return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
+    })
+    render(
+      <MemoryRouter>
+        <PanelCompanion
+          sessionId="panel-1"
+          pull={pull}
+          draft={{ comments: [], summary: '', viewedFileIds: [] }}
+          setDraft={vi.fn()}
+          ready
+          openReview={vi.fn()}
+          focusLine={vi.fn()}
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose fixes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send 1 fix to a fix thread' }))
+
+    expect(await screen.findByText(/Sent 1 fix to “Fix PR #12: 1 panel fix”/)).toBeTruthy()
+    expect(screen.getByText('slopbusters/fix-12-a7f239d')).toBeTruthy()
+    expect(proceeded).toEqual([{ url: pull.url, revision: gateRevision('f', undefined) }])
   })
 })

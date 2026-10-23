@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { AgentSessionStore } from './adapters/agentSessionStore'
 import { AgentSessions } from './features/agent-sessions/agentSessions'
 import { ReviewerStore } from './adapters/store'
@@ -11,6 +12,7 @@ import {
   createSourceProjectLoader,
 } from './features/navigation/fileContent'
 import { LocalSourceRepository } from './adapters/sourceRepository'
+import { prepareFixWorktree } from './adapters/fixWorktrees'
 import { ReviewWorkspaces, type ReviewCheckout } from './adapters/reviewWorkspaces'
 import { LanguageServers } from './adapters/languageServers'
 import { LanguageServerNavigation } from './adapters/lspNavigation'
@@ -51,6 +53,7 @@ import { TeammateStore } from './adapters/teammateStore'
 import { Teammates } from './features/teammates/teammates'
 import { PanelMembers } from './features/panel/panelMembers'
 import { PanelJobs } from './features/panel/panelJobs'
+import { PanelFixes } from './features/panel/panelFixes'
 import { PanelGates } from './features/panel/panelGates'
 import { loadBuiltInSkill } from './features/panel/builtInSkills'
 
@@ -204,6 +207,18 @@ export function createServices(options: ReviewerServerOptions) {
     openRepository,
   })
   const chatModel = () => savedModels(store.getPreferences()).primary
+  const panelFixes = new PanelFixes({
+    store: store.panel,
+    hosts: chatHosts,
+    loadPull: pulls.fetchPull,
+    model: chatModel,
+    prepareWorktree: (checkout, pull, sha) =>
+      prepareFixWorktree(checkout, pull, sha, {
+        root: join(options.dataDirectory, 'fix-worktrees'),
+        remoteUrl: options.sourceRemoteUrl,
+      }),
+    sessions: agentSessions,
+  })
   const removeWorkspace = async (identity: { owner: string; repo: string; sha: string }) => {
     await typeScriptNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
     await languageNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
@@ -233,6 +248,7 @@ export function createServices(options: ReviewerServerOptions) {
     teammates,
     panelJobs,
     panelGates,
+    panelFixes,
     chats: {
       continueInT3Code: async (request: ContinueChatRequest) => {
         const model = chatModel()

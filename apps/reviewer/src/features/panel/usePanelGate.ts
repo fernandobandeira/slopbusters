@@ -67,6 +67,8 @@ export function usePanelGate(
     }
   }
   return {
+    /** The gate as the author sees it, including text not saved yet. */
+    gate,
     items,
     ready: readyItems(items),
     planning,

@@ -39,7 +39,15 @@ export function PanelResultView({
         </Button>
       )}
       {gated && choosing ? (
-        <PanelGate session={session} result={result} replace={replace} />
+        <PanelGate
+          session={session}
+          result={result}
+          replace={replace}
+          moved={
+            context.pull.headSha !== result.pull.headSha ||
+            context.pull.baseSha !== result.pull.baseSha
+          }
+        />
       ) : (
         <PanelTour
           result={result}

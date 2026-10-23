@@ -96,7 +96,7 @@ function chatTitle(title: string): string {
 }
 
 /** T3 Code's default provider instances for the two providers the reviewer supports. */
-function engineModel(model: OrganizationPreferences) {
+export function engineModel(model: OrganizationPreferences) {
   return {
     instanceId: model.provider === Provider.claude ? 'claudeAgent' : 'codex',
     model: model.model,

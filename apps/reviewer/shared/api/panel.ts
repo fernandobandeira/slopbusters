@@ -10,6 +10,7 @@ import {
 } from '../domain/panel'
 import { groundingStateSchema } from '../domain/grounding'
 import { gateSchema } from '../domain/panelGate'
+import { fixHandoffSchema } from '../domain/panelFix'
 import type { PanelSession } from '../domain/panelSession'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, pullUrlSchema, repositoryQuery } from './contract'
@@ -46,6 +47,7 @@ const session = z.object({
       reviews: z.array(review),
       grounding: groundingStateSchema.optional(),
       gate: gateSchema.optional(),
+      handoff: fixHandoffSchema.optional(),
     }),
   ),
   pending: z
@@ -95,6 +97,15 @@ export const savePanelGate = defineRoute('PUT', '/panel/:id/gate', {
 export const planPanelFix = defineRoute('POST', '/panel/:id/plan', {
   params: idParams,
   request: z.object({ url: pullUrlSchema, entry: z.string().min(1).max(40) }).strict(),
+  response: session,
+})
+/**
+ * Send the ready fixes for one reviewed PR to a T3 Code thread, from the gate revision the author
+ * saw. Repeating it for the same revision returns the launch already made.
+ */
+export const proceedPanelFixes = defineRoute('POST', '/panel/:id/proceed', {
+  params: idParams,
+  request: z.object({ url: pullUrlSchema, revision: z.string().min(1).max(100) }).strict(),
   response: session,
 })
 export const cancelPanel = defineRoute('DELETE', '/panel/:id', {

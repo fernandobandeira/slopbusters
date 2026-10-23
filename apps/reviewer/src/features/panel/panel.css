@@ -313,3 +313,11 @@
 .panel-outdated p {
   margin: 0 0 8px;
 }
+.panel-proceed {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+.panel-proceed p {
+  margin: 0;
+}
