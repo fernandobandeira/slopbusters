@@ -146,3 +146,57 @@ describe('a grounded panel result', () => {
     expect(screen.getByText('src/audit.ts:4')).toBeTruthy()
   })
 })
+
+describe('choosing fixes', () => {
+  it('starts with the agreed fix ticked and needs a plan before a rejection can be sent', async () => {
+    const saved: unknown[] = []
+    vi.mocked(call).mockImplementation((route: ApiContract, options?: unknown) => {
+      if (route === routes.getPanel) return Promise.resolve(session())
+      if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
+      if (route === routes.savePanelGate) {
+        const { body } = options as { body: { gate: PanelSession['results'][number]['gate'] } }
+        saved.push(body.gate)
+        const next = session()
+        if (next.results[0]) next.results[0].gate = body.gate
+        return Promise.resolve(next)
+      }
+      return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
+    })
+    render(
+      <MemoryRouter>
+        <PanelCompanion
+          sessionId="panel-1"
+          pull={pull}
+          draft={{ comments: [], summary: '', viewedFileIds: [] }}
+          setDraft={vi.fn()}
+          ready
+          openReview={vi.fn()}
+          focusLine={vi.fn()}
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose fixes' }))
+    expect(screen.getByText('1 ready to fix')).toBeTruthy()
+    expect(
+      screen.getByRole<HTMLInputElement>('checkbox', { name: 'Reuse the audit helper' }).checked,
+    ).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Guard is unused' }))
+
+    expect(await screen.findByText('1 ready to fix · 1 blocked')).toBeTruthy()
+    expect(screen.getByText(/rejected this finding; write the plan/)).toBeTruthy()
+    const plans = screen.getAllByPlaceholderText('What the fix should change')
+    fireEvent.change(plans[1] as HTMLElement, { target: { value: 'Delete the guard.' } })
+    fireEvent.blur(plans[1] as HTMLElement)
+
+    expect(await screen.findByText('2 ready to fix')).toBeTruthy()
+    expect(saved.at(-1)).toEqual({
+      actions: [
+        { entry: 'g1', selected: true },
+        { entry: 'g2', selected: true, plan: 'Delete the guard.', planBy: 'author' },
+      ],
+    })
+  })
+})

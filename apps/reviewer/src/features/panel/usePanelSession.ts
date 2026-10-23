@@ -55,6 +55,8 @@ export function usePanelSession(sessionId: string) {
     busy,
     error,
     act,
+    /** Show a session the server returned after another change. */
+    replace: setSession,
     reload: () => {
       setRefresh((value) => value + 1)
     },

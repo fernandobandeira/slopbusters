@@ -276,3 +276,34 @@
     animation: none;
   }
 }
+.panel-gate {
+  margin-top: 10px;
+}
+.panel-gate-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 12px;
+}
+.panel-gate-item {
+  padding: 8px 10px;
+  border-left: 3px solid var(--border);
+  font-size: 12px;
+}
+.panel-gate-choice {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.panel-gate-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  border: 0;
+  padding: 0;
+}
+.panel-gate-problem {
+  margin-top: 6px;
+  color: var(--warning, var(--muted-foreground));
+}

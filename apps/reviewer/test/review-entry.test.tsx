@@ -114,7 +114,7 @@ beforeEach(() => {
   }))
   vi.mocked(useBobSession).mockReturnValue(job)
   vi.mocked(useLinusSession).mockReturnValue(job)
-  vi.mocked(usePanelSession).mockReturnValue(job)
+  vi.mocked(usePanelSession).mockReturnValue({ ...job, replace: vi.fn() })
   vi.mocked(call).mockImplementation((route) => {
     if (route === routes.startPanel || route === routes.startLinus)
       return Promise.resolve({ id: 'new-review' })

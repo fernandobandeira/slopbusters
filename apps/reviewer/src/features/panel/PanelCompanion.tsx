@@ -14,7 +14,8 @@ import { ProviderMark } from './ProviderMark'
 import { call, message } from '../../lib/api'
 import { reviewerFaceSrc } from '../../lib/reviewerFaces'
 import { useApiQuery } from '../../lib/useApiQuery'
-import { PanelTour, type PanelDraftContext } from './PanelTour'
+import { type PanelDraftContext } from './PanelTour'
+import { PanelResultView } from './PanelResultView'
 import { usePanelSession } from './usePanelSession'
 import { usePanelTour } from './usePanelTour'
 import '../../linus.css'
@@ -106,13 +107,13 @@ function PanelBody({
         />
       )}
       {session && tour.result && (
-        <PanelTour
+        <PanelResultView
+          session={session}
           result={tour.result}
-          reviewers={session.reviewers}
+          tour={tour}
           teammates={teammates}
-          index={tour.index}
-          advance={tour.advance}
           context={context}
+          replace={job.replace}
         />
       )}
       {session && tour.index === 0 && (
