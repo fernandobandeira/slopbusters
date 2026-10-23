@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runCommand } from '../server/adapters/process'
 import { LocalSourceRepository } from '../server/adapters/sourceRepository'
 import { ReviewWorkspaces } from '../server/adapters/reviewWorkspaces'
@@ -156,6 +156,52 @@ describe('independent local review checkouts', () => {
     first.release()
     second.release()
     old.release()
+  })
+
+  it('removes checkouts unused for a week at startup, keeping one with changes', async () => {
+    const { pull, data, origin, repository, workspaces } = await fixture()
+    const stale = await workspaces.acquire(pull, pull.headSha)
+    stale.release()
+    const kept = await workspaces.acquire(pull, pull.baseSha)
+    kept.release()
+    await writeFile(join(kept.workspace.directory, 'notes.md'), 'Keep this investigation\n')
+    const parent = join(stale.workspace.directory, '..')
+    await mkdir(join(parent, '.preparing-abandoned'))
+    await workspaces.close()
+    await repository.close()
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+    for (const checkout of [stale, kept])
+      await utimes(checkout.workspace.directory, eightDaysAgo, eightDaysAgo)
+
+    const app = await startReviewerServer({
+      dataDirectory: data,
+      staticDirectory: data,
+      port: 0,
+      sourceRemoteUrl: () => pathToFileURL(origin).href,
+    })
+    cleanup.push(() => app.close())
+
+    await vi.waitFor(async () => {
+      expect(await readdir(parent)).toEqual([pull.baseSha])
+    })
+    expect(await readFile(join(kept.workspace.directory, 'notes.md'), 'utf8')).toContain('Keep')
+  })
+
+  it('counts a checkout as used when it is leased again', async () => {
+    const { pull, workspaces } = await fixture()
+    const lease = await workspaces.acquire(pull, pull.headSha)
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    await utimes(lease.workspace.directory, eightDaysAgo, eightDaysAgo)
+    expect(await workspaces.unused(weekAgo)).toEqual([])
+    lease.release()
+    expect(await workspaces.unused(weekAgo)).toEqual([
+      { owner: pull.owner, repo: pull.repo, sha: pull.headSha },
+    ])
+
+    ;(await workspaces.acquire(pull, pull.headSha)).release()
+
+    expect(await workspaces.unused(weekAgo)).toEqual([])
   })
 
   it('reuses committed source offline after restart without the cache or original clone', async () => {

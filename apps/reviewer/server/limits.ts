@@ -26,6 +26,9 @@ export const MAX_SYMBOL_SOURCE_CHARS = 500_000
 export const SYNTAX_TIMEOUT_MICROS = 100_000
 export const MAX_SYNTAX_DEPTH = 100
 export const SOURCE_WORKSPACE_TIMEOUT_MS = 60_000
+/** Review checkouts unused this long are removed; they can be downloaded again. */
+export const REVIEW_CHECKOUT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+export const REVIEW_CHECKOUT_PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000
 export const PROVIDER_TIMEOUT_MS = 300_000
 export const LSP_INITIALIZE_TIMEOUT_MS = 45_000
 export const LSP_INDEX_TIMEOUT_MS = 25_000

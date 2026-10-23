@@ -36,8 +36,9 @@ export function ReviewWorkspaceSettings() {
     <section className="settings-section" aria-labelledby="review-checkouts-title">
       <h2 id="review-checkouts-title">Local review checkouts</h2>
       <p className="muted">
-        Source navigation and agents use separate local copies of the saved PR commit. Remove a copy
-        to reclaim space; it can be downloaded again.
+        Source navigation and agents use separate local copies of the saved PR commit. Copies unused
+        for a week are removed automatically, unless they have changes. Remove a copy to reclaim
+        space sooner; it can be downloaded again.
       </p>
       {error && <p role="alert">{error}</p>}
       {!checkouts.length && !error && <p className="muted">No local review checkouts.</p>}

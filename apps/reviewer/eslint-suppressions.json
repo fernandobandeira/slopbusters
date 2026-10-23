@@ -26,11 +26,6 @@
       "count": 2
     }
   },
-  "server/adapters/reviewWorkspaces.ts": {
-    "max-depth": {
-      "count": 1
-    }
-  },
   "server/adapters/sourceRepository.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 4

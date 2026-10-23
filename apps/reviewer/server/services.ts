@@ -30,6 +30,7 @@ import { openConflictWorkspace } from './adapters/conflictWorkspace'
 import { loadCiFailures } from './adapters/ciFailures'
 import { createGitIdentity } from './adapters/gitIdentity'
 import { logError, UserError } from './errors'
+import { REVIEW_CHECKOUT_PRUNE_INTERVAL_MS, REVIEW_CHECKOUT_RETENTION_MS } from './limits'
 import { fetchDiscussions, fetchReviewBodies } from './features/pulls/discussions'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
 import type { PullRequest } from '../shared/domain/types'
@@ -195,6 +196,13 @@ export function createServices(options: ReviewerServerOptions) {
     context: tickets.contextForPull,
   })
   const chatModel = () => savedModels(store.getPreferences()).primary
+  const removeWorkspace = async (identity: { owner: string; repo: string; sha: string }) => {
+    await typeScriptNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
+    await languageNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
+    await workspaces.remove(identity, identity.sha)
+    navigator.clearCache()
+  }
+  const pruning = pruneUnusedCheckouts(workspaces, removeWorkspace)
   return {
     store,
     github,
@@ -243,12 +251,7 @@ export function createServices(options: ReviewerServerOptions) {
     warmSource: (pull: PullRequest) => {
       warmSource(repository, pull)
     },
-    async removeWorkspace(identity: { owner: string; repo: string; sha: string }) {
-      await typeScriptNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
-      await languageNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
-      await workspaces.remove(identity, identity.sha)
-      navigator.clearCache()
-    },
+    removeWorkspace,
     async saveLanguageServers(configuration: Parameters<LanguageServers['save']>[0]) {
       await languageServers.save(configuration)
       await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])
@@ -268,6 +271,7 @@ export function createServices(options: ReviewerServerOptions) {
         jobs.close(),
         panelJobs.close(),
       ])
+      await pruning.stop()
       await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])
       navigator.close()
       await workspaces.close()
@@ -288,6 +292,44 @@ const withoutEngine: StructuredTurns = {
         'This build of Slopbusters does not include the T3 Code engine, so it cannot run agents.',
       ),
     ),
+}
+
+/**
+ * Remove review checkouts unused for a week, at startup and every few hours. A checkout in use
+ * or with changes is kept.
+ */
+function pruneUnusedCheckouts(
+  workspaces: ReviewWorkspaces,
+  remove: (checkout: { owner: string; repo: string; sha: string }) => Promise<void>,
+) {
+  let running: Promise<void> = Promise.resolve()
+  let stopped = false
+  const prune = async () => {
+    await workspaces.removeAbandoned()
+    for (const checkout of await workspaces.unused(Date.now() - REVIEW_CHECKOUT_RETENTION_MS)) {
+      if (stopped) return
+      // A checkout in use or with changes stays; anything else unexpected is logged.
+      await remove(checkout).catch((error: unknown) => {
+        if (!(error instanceof UserError))
+          logError('Could not remove an unused review checkout.', error)
+      })
+    }
+  }
+  const run = () => {
+    running = running.then(prune).catch((error: unknown) => {
+      logError('Could not remove unused review checkouts.', error)
+    })
+  }
+  run()
+  const timer = setInterval(run, REVIEW_CHECKOUT_PRUNE_INTERVAL_MS)
+  timer.unref()
+  return {
+    stop: async () => {
+      stopped = true
+      clearInterval(timer)
+      await running
+    },
+  }
 }
 
 /** Lease the review checkout of a PR's head; agents read it until the lease is released. */

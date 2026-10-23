@@ -1,11 +1,11 @@
 import { MAX_WORKSPACE_STATUS_OUTPUT_BYTES } from '../limits'
-import { mkdir, mkdtemp, readdir, realpath, rename, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, mkdtemp, readdir, realpath, rename, rm, stat, utimes } from 'node:fs/promises'
+import { join, relative, sep } from 'node:path'
 import type { PullRequest } from '../../shared/domain/types'
 import type { LocalReviewCheckout, ReviewWorkspaceInfo } from '../../shared/domain/workspace'
 import { hardenedGit } from './git'
 import { validateSourceIdentity, type LocalSourceRepository } from './sourceRepository'
-import { UserError, publicError } from '../errors'
+import { UserError, logError, publicError } from '../errors'
 import { workspacePath } from './workspacePath'
 
 export interface ReviewWorkspace {
@@ -47,40 +47,32 @@ export class ReviewWorkspaces {
     return JSON.stringify([pull.owner, pull.repo, sha])
   }
 
+  private get root() {
+    return join(this.dataDirectory, 'review-workspaces')
+  }
+
   async list(): Promise<LocalReviewCheckout[]> {
-    const root = join(this.dataDirectory, 'review-workspaces')
-    const directories = async (path: string) => {
-      try {
-        return (await readdir(path, { withFileTypes: true }))
-          .filter((entry) => entry.isDirectory())
-          .map((entry) => entry.name)
-      } catch (error) {
-        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return []
-        throw error
+    const result: LocalReviewCheckout[] = []
+    for (const parent of await this.repositoryDirectories()) {
+      const [owner = '', repo = ''] = relative(this.root, parent).split(sep)
+      for (const sha of await subdirectories(parent)) {
+        try {
+          validateSourceIdentity(owner, repo, sha)
+        } catch {
+          continue
+        }
+        const state = this.states.get(this.key({ owner, repo }, sha))
+        result.push({
+          owner,
+          repo,
+          sha,
+          directory: join(parent, sha),
+          status: state?.status ?? 'ready',
+          warnings: state?.warnings ?? [],
+          error: state?.error,
+        })
       }
     }
-    const result: LocalReviewCheckout[] = []
-    for (const owner of await directories(root))
-      for (const repo of await directories(join(root, owner))) {
-        for (const sha of await directories(join(root, owner, repo))) {
-          try {
-            validateSourceIdentity(owner, repo, sha)
-          } catch {
-            continue
-          }
-          const directory = join(root, owner, repo, sha)
-          const state = this.states.get(this.key({ owner, repo }, sha))
-          result.push({
-            owner,
-            repo,
-            sha,
-            directory,
-            status: state?.status ?? 'ready',
-            warnings: state?.warnings ?? [],
-            error: state?.error,
-          })
-        }
-      }
     return result
   }
 
@@ -203,6 +195,11 @@ export class ReviewWorkspaces {
     const workspace = await pending
     this.controller.signal.throwIfAborted()
     this.users.set(key, (this.users.get(key) ?? 0) + 1)
+    // The checkout's modification time records its last use, so unused copies can be removed.
+    const now = new Date()
+    await utimes(workspace.directory, now, now).catch((error: unknown) => {
+      logError('Could not record when a review checkout was used.', error)
+    })
     let released = false
     return {
       workspace,
@@ -236,8 +233,54 @@ export class ReviewWorkspaces {
     return removing
   }
 
+  /**
+   * Checkouts unused since `before`, which nothing holds now, and the leftovers of preparations
+   * an earlier run never finished. A checkout with changes is still listed; removing it fails.
+   */
+  async unused(before: number): Promise<{ owner: string; repo: string; sha: string }[]> {
+    const stale: { owner: string; repo: string; sha: string }[] = []
+    for (const checkout of await this.list()) {
+      const key = this.key(checkout, checkout.sha)
+      if (this.pending.has(key) || this.users.has(key)) continue
+      const { mtimeMs } = await stat(join(this.root, checkout.owner, checkout.repo, checkout.sha))
+      if (mtimeMs < before)
+        stale.push({ owner: checkout.owner, repo: checkout.repo, sha: checkout.sha })
+    }
+    return stale
+  }
+
+  /** Remove preparations an earlier run left half-finished; this run's are still pending. */
+  async removeAbandoned() {
+    if (this.pending.size) return
+    for (const parent of await this.repositoryDirectories())
+      for (const entry of await subdirectories(parent))
+        if (entry.startsWith('.preparing-'))
+          await rm(join(parent, entry), { recursive: true, force: true })
+  }
+
+  private async repositoryDirectories() {
+    const owners = await subdirectories(this.root)
+    const repositories = await Promise.all(
+      owners.map(async (owner) =>
+        (await subdirectories(join(this.root, owner))).map((repo) => join(this.root, owner, repo)),
+      ),
+    )
+    return repositories.flat()
+  }
+
   async close() {
     this.controller.abort()
     await Promise.allSettled([...this.pending.values(), ...this.removals.values()])
+  }
+}
+
+async function subdirectories(path: string) {
+  try {
+    return (await readdir(path, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return []
+    throw error
   }
 }
