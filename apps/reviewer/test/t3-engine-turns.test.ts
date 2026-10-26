@@ -49,21 +49,20 @@ const lifecycle = (...turns: string[]) => [
   'project.create',
   'thread.create',
   ...turns,
-  'thread.session.stop',
   'thread.archive',
   'project.delete',
 ]
 
 it('runs one read-only turn in a per-run project and returns the validated JSON', async () => {
   const fake = fakeEngine((command, thread) => {
-    if (command.type === 'thread.turn.start') thread.reply(command, fenced({ files: ['a.ts'] }))
+    if (command.type === 'message.dispatch') thread.reply(command, fenced({ files: ['a.ts'] }))
   })
   const events: ProviderEvent[] = []
 
   const result = await fake.turns.run(request({ observer: (event) => events.push(event) }))
 
   expect(result).toEqual({ files: ['a.ts'] })
-  expect(fake.types()).toEqual(lifecycle('thread.turn.start'))
+  expect(fake.types()).toEqual(lifecycle('message.dispatch'))
   const [project, create, start] = fake.commands
   expect(create).toMatchObject({
     projectId: project?.projectId,
@@ -74,8 +73,13 @@ it('runs one read-only turn in a per-run project and returns the validated JSON'
     branch: null,
     worktreePath: null,
   })
-  expect(start).toMatchObject({ runtimeMode: 'approval-required', interactionMode: 'default' })
-  const text = (start?.message as { text: string }).text
+  expect(start).toMatchObject({
+    createdBy: 'user',
+    modelSelection: { instanceId: 'claudeAgent', model: 'claude-haiku-5-5' },
+    dispatchMode: { type: 'start_immediately' },
+    attachments: [],
+  })
+  const text = String(start?.text)
   expect(text).toMatch(/^List the top-level files\.\n/)
   expect(text).toContain('"files"')
   expect(text).toContain('Do not create, edit or delete files')
@@ -86,24 +90,22 @@ it('runs one read-only turn in a per-run project and returns the validated JSON'
 
 it('starts Codex in the workspace-write sandbox of its throwaway copy', async () => {
   const fake = fakeEngine((command, thread) => {
-    if (command.type === 'thread.turn.start') thread.reply(command, '{"files":[]}')
+    if (command.type === 'message.dispatch') thread.reply(command, '{"files":[]}')
   })
 
   await fake.turns.run(request({ model: { provider: Provider.codex, model: 'gpt-6.1-sol' } }))
 
   const create = fake.commands.find((command) => command.type === 'thread.create')
-  const start = fake.commands.find((command) => command.type === 'thread.turn.start')
   expect(create).toMatchObject({
     modelSelection: { instanceId: 'codex', model: 'gpt-6.1-sol' },
     runtimeMode: 'auto-accept-edits',
   })
-  expect(start).toMatchObject({ runtimeMode: 'auto-accept-edits' })
 })
 
 it('runs the agent in a scrubbed copy of the directory that it deletes afterwards', async () => {
   let copied: string[] = []
   const fake = fakeEngine((command, thread) => {
-    if (command.type !== 'thread.turn.start') return
+    if (command.type !== 'message.dispatch') return
     const root = fake.workspaceRoots()[0] ?? ''
     copied = ['README.md', 'CLAUDE.md', 'src/index.ts', '.claude', '.git', '.mcp.json'].filter(
       (path) => existsSync(join(root, path)),
@@ -127,7 +129,7 @@ it('moves a prompt longer than the engine accepts into a file the agent reads fr
   const prompt = `Find the marker.\n${'x'.repeat(130_000)}MARKER`
   let instructions = ''
   const fake = fakeEngine((command, thread) => {
-    if (command.type !== 'thread.turn.start') return
+    if (command.type !== 'message.dispatch') return
     const root = fake.workspaceRoots()[0] ?? ''
     instructions = readFileSync(join(root, '.slopbusters', 'instructions.md'), 'utf8')
     thread.reply(command, '{"files":[]}')
@@ -135,8 +137,8 @@ it('moves a prompt longer than the engine accepts into a file the agent reads fr
 
   await fake.turns.run(request({ prompt }))
 
-  const start = fake.commands.find((command) => command.type === 'thread.turn.start')
-  const text = (start?.message as { text: string }).text
+  const start = fake.commands.find((command) => command.type === 'message.dispatch')
+  const text = String(start?.text)
   expect(text.length).toBeLessThan(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)
   expect(text).toContain('in the file .slopbusters/instructions.md')
   expect(text).toContain('Read it with the Read tool, 150 lines at a time')
@@ -147,7 +149,7 @@ it('moves a prompt longer than the engine accepts into a file the agent reads fr
 
 it('gives overlapping runs on one directory their own copies and projects', async () => {
   const fake = fakeEngine((command, thread) => {
-    if (command.type === 'thread.turn.start') thread.reply(command, '{"files":[]}')
+    if (command.type === 'message.dispatch') thread.reply(command, '{"files":[]}')
   })
 
   await Promise.all([fake.turns.run(request()), fake.turns.run(request())])
@@ -159,10 +161,13 @@ it('gives overlapping runs on one directory their own copies and projects', asyn
 
 it('declines every approval and answers questions so the turn never waits on a person', async () => {
   const fake = fakeEngine((command, thread) => {
-    if (command.type === 'thread.turn.start') {
+    if (command.type === 'message.dispatch') {
       thread.startTurn(command)
-      thread.activity('approval.requested', { requestId: 'write-1', requestKind: 'file-change' })
-      thread.activity('user-input.requested', {
+      thread.request('write-1', 'file-change')
+      thread.item('approval_request', { requestId: 'write-1', requestKind: 'file-change' })
+      // The question's request arrives before the turn item that holds the questions.
+      thread.request('question-1', 'user_input')
+      thread.item('user_input_request', {
         requestId: 'question-1',
         questions: [
           { id: 'scope', header: 'Scope', question: 'Which files?', options: [] },
@@ -170,24 +175,28 @@ it('declines every approval and answers questions so the turn never waits on a p
             id: 'pick',
             header: 'Pick',
             question: 'Pick one',
-            options: [{ label: 'First', description: '' }],
+            options: [{ label: 'First', description: 'The first one' }],
             allowCustomAnswer: false,
           },
         ],
       })
     }
-    if (command.type === 'thread.user-input.respond') {
+    if (command.type === 'runtime-request.respond' && command.answers) {
       thread.assistant('{"files":["README.md"]}')
-      thread.session('ready')
+      thread.run('completed')
     }
   })
+  const events: ProviderEvent[] = []
 
-  await expect(fake.turns.run(request())).resolves.toEqual({ files: ['README.md'] })
+  await expect(
+    fake.turns.run(request({ observer: (event) => events.push(event) })),
+  ).resolves.toEqual({ files: ['README.md'] })
 
-  const approval = fake.commands.find((command) => command.type === 'thread.approval.respond')
-  expect(approval).toMatchObject({ requestId: 'write-1', decision: 'decline' })
-  const answer = fake.commands.find((command) => command.type === 'thread.user-input.respond')
-  expect(answer).toMatchObject({
+  const responses = fake.commands.filter((command) => command.type === 'runtime-request.respond')
+  expect(responses).toHaveLength(2)
+  expect(responses[0]).toMatchObject({ requestId: 'write-1', decision: 'decline' })
+  expect(events).toContainEqual(expect.objectContaining({ kind: 'activity', title: 'Declined' }))
+  expect(responses[1]).toMatchObject({
     requestId: 'question-1',
     answers: { scope: UNATTENDED_ANSWER, pick: 'First' },
   })
@@ -196,47 +205,51 @@ it('declines every approval and answers questions so the turn never waits on a p
 it('quotes the validation error in one corrective turn and returns the corrected reply', async () => {
   let turns = 0
   const fake = fakeEngine((command, thread) => {
-    if (command.type !== 'thread.turn.start') return
+    if (command.type !== 'message.dispatch') return
     turns += 1
     thread.reply(command, turns === 1 ? fenced({ files: 'a.ts' }) : fenced({ files: ['a.ts'] }))
   })
 
   await expect(fake.turns.run(request())).resolves.toEqual({ files: ['a.ts'] })
 
-  const starts = fake.commands.filter((command) => command.type === 'thread.turn.start')
+  const starts = fake.commands.filter((command) => command.type === 'message.dispatch')
   expect(starts).toHaveLength(2)
-  const correction = (starts[1]?.message as { text: string }).text
+  const correction = String(starts[1]?.text)
   expect(correction).toContain('did not match the output contract')
   expect(correction).toContain('files')
 })
 
 it('fails after the corrective turn also misses the schema, and still archives', async () => {
   const fake = fakeEngine((command, thread) => {
-    if (command.type === 'thread.turn.start') thread.reply(command, 'I could not find any files.')
+    if (command.type === 'message.dispatch') thread.reply(command, 'I could not find any files.')
   })
 
   await expect(fake.turns.run(request())).rejects.toThrow(
     'Claude did not reply with the requested JSON: The reply did not contain valid JSON.',
   )
 
-  expect(fake.types()).toEqual(lifecycle('thread.turn.start', 'thread.turn.start'))
+  expect(fake.types()).toEqual(lifecycle('message.dispatch', 'message.dispatch'))
 })
 
 it('reports a turn the provider fails', async () => {
   const fake = fakeEngine((command, thread) => {
-    if (command.type !== 'thread.turn.start') return
+    if (command.type !== 'message.dispatch') return
     thread.startTurn(command)
-    thread.session('error', { lastError: 'Model not available.' })
+    thread.item('error', {
+      status: 'failed',
+      failure: { class: 'provider_error', message: 'Model not available.' },
+    })
+    thread.run('failed')
   })
 
   await expect(fake.turns.run(request())).rejects.toThrow('Claude failed: Model not available.')
-  expect(fake.types().slice(-3)).toEqual(lifecycle().slice(-3))
+  expect(fake.types().slice(-2)).toEqual(lifecycle().slice(-2))
 })
 
 it('interrupts the turn when the caller cancels', async () => {
   const controller = new AbortController()
   const fake = fakeEngine((command, thread) => {
-    if (command.type === 'thread.turn.start') {
+    if (command.type === 'message.dispatch') {
       thread.startTurn(command)
       setTimeout(() => {
         controller.abort()
@@ -248,37 +261,39 @@ it('interrupts the turn when the caller cancels', async () => {
     'The operation was cancelled.',
   )
 
-  expect(fake.types()).toEqual(lifecycle('thread.turn.start', 'thread.turn.interrupt'))
+  expect(fake.types()).toEqual(lifecycle('message.dispatch', 'run.interrupt'))
 })
 
 it('interrupts the turn and reports a timeout when the agent runs too long', async () => {
   const fake = fakeEngine((command, thread) => {
-    if (command.type === 'thread.turn.start') thread.startTurn(command)
+    if (command.type === 'message.dispatch') thread.startTurn(command)
   })
 
   const run = fake.turns.run(request({ timeoutMs: 20 }))
 
   await expect(run).rejects.toBeInstanceOf(CommandTimeoutError)
-  expect(fake.types()).toContain('thread.turn.interrupt')
-  expect(fake.types().slice(-3)).toEqual(lifecycle().slice(-3))
+  expect(fake.types()).toContain('run.interrupt')
+  expect(fake.types().slice(-2)).toEqual(lifecycle().slice(-2))
 })
 
 it('fails fast when the engine accepts a turn but never starts it', async () => {
-  const fake = fakeEngine(() => undefined, 20)
+  const fake = fakeEngine((command, thread) => {
+    if (command.type === 'message.dispatch') thread.accept(command)
+  }, 20)
 
   const run = fake.turns.run(request({ timeoutMs: 60_000 }))
 
   await expect(run).rejects.toThrow(/Claude never started this turn/)
-  expect(fake.types()).toEqual(lifecycle('thread.turn.start', 'thread.turn.interrupt'))
+  expect(fake.types()).toEqual(lifecycle('message.dispatch', 'run.interrupt'))
 })
 
 it('keeps waiting on a turn that started, past the start check', async () => {
   const fake = fakeEngine((command, thread) => {
-    if (command.type !== 'thread.turn.start') return
+    if (command.type !== 'message.dispatch') return
     thread.startTurn(command)
     setTimeout(() => {
       thread.assistant(fenced({ files: ['README.md'] }))
-      thread.session('ready')
+      thread.run('completed')
     }, 60)
   }, 10)
 
@@ -287,7 +302,7 @@ it('keeps waiting on a turn that started, past the start check', async () => {
 
 it('runs without a directory in a scratch project that it deletes afterwards', async () => {
   const fake = fakeEngine((command, thread) => {
-    if (command.type === 'thread.turn.start') thread.reply(command, '{"files":[]}')
+    if (command.type === 'message.dispatch') thread.reply(command, '{"files":[]}')
   })
 
   await fake.turns.run(request({ directory: undefined }))
@@ -305,25 +320,15 @@ it('runs without a directory in a scratch project that it deletes afterwards', a
 
 it('ignores replayed events the snapshot already holds', async () => {
   const fake = fakeEngine((command, thread) => {
-    if (command.type !== 'thread.turn.start') return
+    if (command.type !== 'message.dispatch') return
     thread.startTurn(command)
-    thread.emit('thread.message-sent', {
-      messageId: 'reply',
-      role: 'assistant',
-      text: '{"files":["a"]}',
-      streaming: true,
-    })
-    // A live event the server buffered while reading the snapshot arrives again.
+    thread.message({ id: 'reply', role: 'assistant', text: '{"files":["a"]}', streaming: false })
+    // A live event the server buffered while reading the snapshot arrives again, stale.
     const replayed = thread.sequence
     thread.sequence -= 1
-    thread.emit('thread.message-sent', {
-      messageId: 'reply',
-      role: 'assistant',
-      text: '{"files":["a"]}',
-      streaming: true,
-    })
+    thread.emit('message.updated', { id: 'reply', role: 'assistant', text: '', streaming: true })
     thread.sequence = replayed
-    thread.session('ready')
+    thread.run('completed')
   })
 
   await expect(fake.turns.run(request())).resolves.toEqual({ files: ['a'] })
@@ -336,7 +341,7 @@ it('copies included folders, such as a skill, into the copy, scrubbed, and never
   const paths = ['README.md', 'skill/patterns.md', 'skill/.claude']
   let copied: string[] = []
   const fake = fakeEngine((command, thread) => {
-    if (command.type !== 'thread.turn.start') return
+    if (command.type !== 'message.dispatch') return
     copied = paths.filter((path) => existsSync(join(fake.workspaceRoots()[0] ?? '', path)))
     thread.reply(command, '{"files":[]}')
   })

@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/pingdotgg/t3code",
-  "ref": "v0.0.45",
-  "commit": "6c8fed35dded9ff71c5b46807125457acbb76be6",
+  "ref": "v0.1.0",
+  "commit": "81493efb71e8e8244f95d3e9f71d8369654ab151",
   "files": [
     {
       "path": "LICENSE"

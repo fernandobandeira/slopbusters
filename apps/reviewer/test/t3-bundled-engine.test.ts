@@ -14,7 +14,7 @@ function engineAt(pid: number): RunningEngine {
     pid,
     origin: 'http://127.0.0.1:50123',
     environmentId: 'e',
-    serverVersion: '0.0.45',
+    serverVersion: '0.1.0',
   }
 }
 

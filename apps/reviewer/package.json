@@ -34,7 +34,7 @@
     "@vscode/tree-sitter-wasm": "0.3.1",
     "class-variance-authority": "^0.7.1",
     "diff": "^9.0.0",
-    "effect": "4.0.0-rc.115",
+    "effect": "4.0.4",
     "express": "^5.3.0",
     "lucide-react": "^1.61.0",
     "react": "^19.3.1",
@@ -73,6 +73,6 @@
     "vitest": "^5.0.5"
   },
   "optionalDependencies": {
-    "@t3code/t3-darwin-arm64": "0.0.45"
+    "@t3code/t3-darwin-arm64": "0.1.0"
   }
 }

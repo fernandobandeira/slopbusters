@@ -14,7 +14,7 @@ const engine: RunningEngine = {
   pid: 4242,
   origin: 'http://127.0.0.1:3773',
   environmentId: 'environment-1',
-  serverVersion: '0.0.45',
+  serverVersion: '0.1.0',
 }
 const pairOutput = `█▀▀▀▀▀█ ▄▄ █▀▀▀▀▀█
 █ ███ █ ▀▄ █ ███ █

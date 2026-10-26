@@ -19,7 +19,7 @@ const engine: RunningEngine = {
   pid: 7,
   origin: 'http://127.0.0.1:50123',
   environmentId: 'environment-1',
-  serverVersion: '0.0.45',
+  serverVersion: '0.1.0',
 }
 
 function threadsWith(projects: () => Promise<EngineProject[]>) {

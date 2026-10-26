@@ -5,9 +5,9 @@ import * as Layer from 'effect/Layer'
 import * as RcMap from 'effect/RcMap'
 import * as Schedule from 'effect/Schedule'
 import * as Scope from 'effect/Scope'
-import * as RpcClient from 'effect/unstable/rpc/RpcClient'
-import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
-import * as Socket from 'effect/unstable/socket/Socket'
+import * as RpcClient from 'effect/rpc/RpcClient'
+import * as RpcSerialization from 'effect/rpc/RpcSerialization'
+import * as Socket from 'effect/socket/Socket'
 import { z } from 'zod'
 import {
   ORCHESTRATION_PROTOCOL_QUERY_PARAM,
@@ -18,6 +18,7 @@ import { logError, UserError } from '../../errors'
 import {
   T3_ENGINE_CALL_TIMEOUT_MS,
   T3_ENGINE_IDLE_SOCKET_MS,
+  T3_ENGINE_PING_TIMEOUT_MS,
   T3_ENGINE_REQUEST_TIMEOUT_MS,
   T3_ENGINE_TOKEN_REFRESH_MARGIN_MS,
 } from '../../limits'
@@ -208,7 +209,10 @@ export function socketUrl(origin: string, ticket: string): string {
 
 function webSocketProtocol(url: string): Layer.Layer<RpcClient.Protocol> {
   // The ticket in the URL is single-use, so a dropped socket is replaced rather than retried.
-  const protocol = RpcClient.makeProtocolSocket({ retryPolicy: Schedule.recurs(0) })
+  const protocol = RpcClient.makeProtocolSocket({
+    retryPolicy: Schedule.recurs(0),
+    pingTimeout: T3_ENGINE_PING_TIMEOUT_MS,
+  })
   return Layer.effect(RpcClient.Protocol, protocol).pipe(
     Layer.provide(
       Layer.mergeAll(

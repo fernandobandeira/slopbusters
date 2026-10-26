@@ -3,10 +3,10 @@ import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  ClientOrchestrationCommand,
   GitPreparePullRequestThreadInput,
+  OrchestrationV2Command,
   ProjectCloneStartInput,
-  type OrchestrationShellStreamItem,
+  type OrchestrationV2ShellStreamItem,
 } from '@t3tools/contracts'
 import type { EngineClient } from '../server/adapters/t3Engine/engineConnection'
 import type { RunningEngine } from '../server/adapters/t3Engine/engineLocation'
@@ -18,7 +18,7 @@ const engine: RunningEngine = {
   pid: 4242,
   origin: 'http://127.0.0.1:3773',
   environmentId: 'environment-1',
-  serverVersion: '0.0.45',
+  serverVersion: '0.1.0',
 }
 const url = 'https://github.com/Example/Project/pull/42'
 
@@ -45,8 +45,8 @@ it('lists projects from the first shell snapshot with lowercase repository keys'
         { id: 'scratch', title: 'Scratch', workspaceRoot: '/scratch', repositoryIdentity: null },
       ],
     },
-  } as unknown as OrchestrationShellStreamItem
-  const synchronized = { kind: 'synchronized' } as OrchestrationShellStreamItem
+  } as unknown as OrchestrationV2ShellStreamItem
+  const synchronized = { kind: 'synchronized' } as OrchestrationV2ShellStreamItem
   const threads = new EngineThreads(
     connectionTo({ 'orchestration.subscribeShell': () => Stream.make(synchronized, snapshot) }),
   )
@@ -118,7 +118,7 @@ function engineWithSettings(settings: {
   )
   const encoded = () =>
     dispatched.map((command): Record<string, unknown> =>
-      Schema.encodeUnknownSync(ClientOrchestrationCommand)(command),
+      Schema.encodeUnknownSync(OrchestrationV2Command)(command),
     )
   return { threads, encoded }
 }
@@ -135,7 +135,7 @@ it('creates, links, then starts the thread with commands the engine contract acc
   expect(commands.map((command) => command.type)).toEqual([
     'thread.create',
     'thread.pull-request.link',
-    'thread.turn.start',
+    'message.dispatch',
   ])
   expect(commands[0]).toMatchObject({
     threadId: 'thread-1',
@@ -143,11 +143,14 @@ it('creates, links, then starts the thread with commands the engine contract acc
     modelSelection: { instanceId: 'claudeAgent', model: 'claude-opus-5-5' },
     runtimeMode: 'full-access',
     worktreePath: '/worktree',
+    createdBy: 'user',
   })
   expect(commands[1]).toMatchObject({ number: 42, repository: 'Example/Project', source: 'manual' })
   expect(commands[2]).toMatchObject({
-    runtimeMode: 'full-access',
-    message: { role: 'user', text: '/slopbusters:linus Review PR #42', attachments: [] },
+    text: '/slopbusters:linus Review PR #42',
+    attachments: [],
+    modelSelection: { instanceId: 'claudeAgent', model: 'claude-opus-5-5' },
+    dispatchMode: { type: 'start_immediately' },
   })
 })
 
@@ -162,7 +165,7 @@ it('starts the thread in the runtime mode the project overrides in T3 Code', asy
   expect(encoded().map((command) => command.runtimeMode)).toEqual([
     'approval-required',
     undefined,
-    'approval-required',
+    undefined,
   ])
 })
 
@@ -180,7 +183,7 @@ it('starts a thread in the project checkout without linking a PR when none is gi
   })
 
   const commands = encoded()
-  expect(commands.map((command) => command.type)).toEqual(['thread.create', 'thread.turn.start'])
+  expect(commands.map((command) => command.type)).toEqual(['thread.create', 'message.dispatch'])
   expect(commands[0]).toMatchObject({ branch: null, worktreePath: null })
 })
 

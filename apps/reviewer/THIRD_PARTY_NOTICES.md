@@ -13,7 +13,7 @@ Tracked files, under `apps/web/src/` unless noted:
 - `lib/diffRendering.ts`: patched to import Pierre helpers from its main entry and to pass bundled Shiki theme names through the theme resolver.
 - `lib/syntaxHighlighting.ts` and `packages/shared/src/gitPatchPath.ts`: unchanged.
 
-The server's T3 Code engine client uses the engine's API contracts, copied verbatim from upstream `packages/contracts` into `vendor/t3-engine` with test files excluded. The engine contracts are pinned to `v0.0.45` (commit `6c8fed35dded9ff71c5b46807125457acbb76be6`), the T3 Code release the client speaks to, and the same MIT license is kept in `vendor/t3-engine/LICENSE`. They have no local changes.
+The server's T3 Code engine client uses the engine's API contracts, copied verbatim from upstream `packages/contracts` into `vendor/t3-engine` with test files excluded. The engine contracts are pinned to `v0.1.0` (commit `81493efb71e8e8244f95d3e9f71d8369654ab151`), the T3 Code release the client speaks to, and the same MIT license is kept in `vendor/t3-engine/LICENSE`. They have no local changes.
 
 The desktop app also bundles that release of the T3 Code engine itself: the unmodified `@t3code/t3-<platform>` build T3 publishes to npm, at the same version as the contracts (`pnpm t3:check` enforces this). It ships under `t3-engine` in the app's resources, outside the application archive and with T3's own code signature, and Slopbusters runs it as a separate process. T3 Code is MIT licensed, and the build carries the license inventory of its web client in `t3-engine/client/third-party-licenses.json`.
 

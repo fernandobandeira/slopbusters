@@ -48,8 +48,8 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0
       effect:
-        specifier: 4.0.0-rc.115
-        version: 4.0.0-rc.115
+        specifier: 4.0.4
+        version: 4.0.4
       express:
         specifier: ^5.3.0
         version: 5.3.0
@@ -155,8 +155,8 @@ importers:
         version: 5.0.5(@types/node@26.6.5)(happy-dom@21.0.4)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
     optionalDependencies:
       '@t3code/t3-darwin-arm64':
-        specifier: 0.0.45
-        version: 0.0.45
+        specifier: 0.1.0
+        version: 0.1.0
 
 packages:
 
@@ -1018,19 +1018,29 @@ packages:
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
     engines: {node: '>=10'}
 
-  '@t3code/t3-darwin-arm64@0.0.45':
-    resolution: {integrity: sha512-Q7Y3dYLKygpuIQd+6uPM83+EzSBcHOFOLa/EcVkynVgdToklVsnjZbbctgtkiZHyV7zJ4jJ/RUQalZABivfQsA==}
+  '@t3code/t3-darwin-arm64@0.1.0':
+    resolution: {integrity: sha512-Lh9Z8t6j0djYvl/u8aaQIFhVkJfccDg5payjo6q2ZWqV6+GpMVgk2lHz8/QC7rjaTWoZ+jiSCp/Fys91zPR2/A==}
     cpu: [arm64]
     os: [darwin]
     bundledDependencies:
+      - '@bufbuild/protobuf'
+      - '@connectrpc/connect'
+      - '@connectrpc/connect-web'
+      - '@cursor/sdk'
+      - '@cursor/sdk-darwin-arm64'
       - '@ff-labs/fff-bin-darwin-arm64'
       - '@ff-labs/fff-node'
       - '@napi-rs/keyring'
       - '@napi-rs/keyring-darwin-arm64'
+      - '@statsig/client-core'
+      - '@statsig/js-client'
       - '@yuuang/ffi-rs-darwin-arm64'
       - ffi-rs
       - node-addon-api
       - node-pty
+      - playwright-core
+      - undici
+      - zod
 
   '@tailwindcss/node@4.3.3':
     resolution: {integrity: sha512-/T8IKEsf9VTU6tLjgC7+sv2mOPtQxzE2jMw7u4Tt40Tx+QSZxpzh95/H6cMKoja9XuW7iMdLJYBB0o9G1CaAgg==}
@@ -1756,8 +1766,8 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  effect@4.0.0-rc.115:
-    resolution: {integrity: sha512-ogYulZ5ffeOzrJqQrG0XOkDO5lKn2s9KNHhoxJy/6wKUkF0i12dlVXWA9TgsgQ+zV/JzizyG0+XMPepZEQX6vw==}
+  effect@4.0.4:
+    resolution: {integrity: sha512-Sr50OeVSC3M5UkoUYUhFf3EULryhGaZZUf6OzDHTvaznOw7HRlxOKdF3/4nvQXHL22StOyMG3Cvo8Bt7xUp+Ng==}
 
   ejs@3.1.10:
     resolution: {integrity: sha512-UeJmFfOrAQS8OJWPZ4qtgHyWExa088/MtK5UEyoJGFH67cDEXkZSviOiKRCZ4Xij0zxI3JECgYs3oKx+AizQBA==}
@@ -4430,7 +4440,7 @@ snapshots:
     dependencies:
       defer-to-connect: 2.0.1
 
-  '@t3code/t3-darwin-arm64@0.0.45':
+  '@t3code/t3-darwin-arm64@0.1.0':
     optional: true
 
   '@tailwindcss/node@4.3.3':
@@ -5207,7 +5217,7 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  effect@4.0.0-rc.115: {}
+  effect@4.0.4: {}
 
   ejs@3.1.10:
     dependencies:

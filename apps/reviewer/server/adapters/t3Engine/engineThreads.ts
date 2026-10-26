@@ -6,8 +6,9 @@ import {
   MessageId,
   ProjectId,
   ProviderInstanceId,
+  SourceControlProviderKind,
   ThreadId,
-  type ClientOrchestrationCommand,
+  type OrchestrationV2Command,
   type ProjectCloneSnapshot,
 } from '@t3tools/contracts'
 import { UserError } from '../../errors'
@@ -110,7 +111,7 @@ export class EngineThreads implements EngineThreadOperations {
         projectId,
         title: input.title,
         createdAt: new Date().toISOString(),
-        provider: 'github',
+        provider: SourceControlProviderKind.make('github'),
         repository: input.repository,
         destinationPath: input.destinationPath,
       }),
@@ -219,10 +220,11 @@ export class EngineThreads implements EngineThreadOperations {
         const runtimeMode =
           settings.projectSettingsOverrides[projectId]?.defaultRuntimeMode ??
           settings.defaultRuntimeMode
-        const dispatch = (command: ClientOrchestrationCommand) =>
+        const dispatch = (command: OrchestrationV2Command) =>
           client['orchestration.dispatchCommand'](command)
         yield* dispatch({
           type: 'thread.create',
+          ...CREATED_BY_USER,
           commandId: newCommandId(),
           threadId,
           projectId,
@@ -232,7 +234,6 @@ export class EngineThreads implements EngineThreadOperations {
           interactionMode,
           branch: input.branch,
           worktreePath: input.worktreePath,
-          createdAt: new Date().toISOString(),
         })
         if (input.pullRequest)
           yield* dispatch({
@@ -243,24 +244,23 @@ export class EngineThreads implements EngineThreadOperations {
             source: 'manual',
           })
         yield* dispatch({
-          type: 'thread.turn.start',
+          type: 'message.dispatch',
+          ...CREATED_BY_USER,
           commandId: newCommandId(),
           threadId,
-          message: {
-            messageId: MessageId.make(randomUUID()),
-            role: 'user',
-            text: input.message,
-            attachments: [],
-          },
+          messageId: MessageId.make(randomUUID()),
+          text: input.message,
+          attachments: [],
           modelSelection,
-          runtimeMode,
-          interactionMode,
-          createdAt: new Date().toISOString(),
+          dispatchMode: { type: 'start_immediately' },
         })
       }),
     )
   }
 }
+
+/** Threads and messages Slopbusters creates are the user's, sent from a T3 Code client. */
+const CREATED_BY_USER = { createdBy: 'user', creationSource: 'web' } as const
 
 function newCommandId() {
   return CommandId.make(randomUUID())

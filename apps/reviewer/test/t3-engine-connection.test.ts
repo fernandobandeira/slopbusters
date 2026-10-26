@@ -3,8 +3,8 @@ import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
-import * as RpcClient from 'effect/unstable/rpc/RpcClient'
-import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
+import * as RpcClient from 'effect/rpc/RpcClient'
+import * as RpcSerialization from 'effect/rpc/RpcSerialization'
 import { expect, it, vi } from 'vitest'
 import { EngineConnection, type EngineClient } from '../server/adapters/t3Engine/engineConnection'
 import type { RunningEngine } from '../server/adapters/t3Engine/engineLocation'
@@ -15,7 +15,7 @@ const engine: RunningEngine = {
   pid: 4242,
   origin: 'http://127.0.0.1:3773',
   environmentId: 'environment-1',
-  serverVersion: '0.0.45',
+  serverVersion: '0.1.0',
 }
 
 interface FakeSocket {

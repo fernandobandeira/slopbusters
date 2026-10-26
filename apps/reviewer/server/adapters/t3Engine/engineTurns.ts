@@ -12,8 +12,10 @@ import {
   ProjectId,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   ProviderInstanceId,
+  RunId,
   ThreadId,
-  type ClientOrchestrationCommand,
+  type OrchestrationV2Command,
+  type ProjectMutation,
   type RuntimeMode,
 } from '@t3tools/contracts'
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
@@ -162,14 +164,15 @@ export class EngineTurns implements StructuredTurns {
     const remaining = Math.max(0, deadline - Date.now())
     const messageId = randomUUID()
     const follower = new TurnFollower(thread.id, messageId, thread.answered, request.observer)
-    const start: ClientOrchestrationCommand = {
-      type: 'thread.turn.start',
+    const start: TurnStart = {
+      type: 'message.dispatch',
       ...commandBase(thread.id),
-      message: { messageId: MessageId.make(messageId), role: 'user', text, attachments: [] },
+      ...CREATED_BY_USER,
+      messageId: MessageId.make(messageId),
+      text,
+      attachments: [],
       modelSelection: thread.modelSelection,
-      runtimeMode: thread.runtimeMode,
-      interactionMode: 'default',
-      createdAt: now(),
+      dispatchMode: { type: 'start_immediately' },
     }
     const outcome = await this.connection.run(
       (client) =>
@@ -219,6 +222,7 @@ export class EngineTurns implements StructuredTurns {
     await this.dispatch({
       type: 'thread.create',
       ...commandBase(thread.id),
+      ...CREATED_BY_USER,
       projectId: ProjectId.make(projectId),
       title: `Slopbusters · ${request.purpose?.trim() || 'structured turn'}`,
       modelSelection: thread.modelSelection,
@@ -226,19 +230,13 @@ export class EngineTurns implements StructuredTurns {
       interactionMode: 'default',
       branch: null,
       worktreePath: null,
-      createdAt: now(),
     })
     return thread
   }
 
-  /** Stop the thread's agent session and archive it; a failure here only logs. */
+  /** Archive the thread, which also stops its agent session; a failure here only logs. */
   private async archive(threadId: string) {
     try {
-      await this.dispatch({
-        type: 'thread.session.stop',
-        ...commandBase(threadId),
-        createdAt: now(),
-      })
       await this.dispatch({ type: 'thread.archive', ...commandBase(threadId) })
     } catch (error) {
       logError('T3 Code could not archive a structured turn thread', error)
@@ -276,7 +274,7 @@ export class EngineTurns implements StructuredTurns {
       files,
       release: async () => {
         try {
-          await this.dispatch({
+          await this.mutateProject({
             type: 'project.delete',
             commandId: CommandId.make(randomUUID()),
             projectId: ProjectId.make(projectId),
@@ -292,19 +290,22 @@ export class EngineTurns implements StructuredTurns {
 
   private async createProject(workspaceRoot: string, title: string): Promise<string> {
     const projectId = ProjectId.make(randomUUID())
-    await this.dispatch({
+    await this.mutateProject({
       type: 'project.create',
       commandId: CommandId.make(randomUUID()),
       projectId,
       title,
       workspaceRoot,
-      createdAt: now(),
     })
     return projectId
   }
 
-  private dispatch(command: ClientOrchestrationCommand) {
+  private dispatch(command: OrchestrationV2Command) {
     return this.connection.run((client) => client['orchestration.dispatchCommand'](command))
+  }
+
+  private mutateProject(mutation: ProjectMutation) {
+    return this.connection.run((client) => client['projects.mutate'](mutation))
   }
 }
 
@@ -316,7 +317,7 @@ export class EngineTurns implements StructuredTurns {
 function followTurn(
   client: EngineClient,
   input: {
-    start: Extract<ClientOrchestrationCommand, { type: 'thread.turn.start' }>
+    start: TurnStart
     follower: TurnFollower
     signal: AbortSignal
     timeoutMs: number
@@ -324,12 +325,9 @@ function followTurn(
   },
 ): Effect.Effect<FollowedTurn, unknown> {
   const { start, follower } = input
-  const dispatch = (command: ClientOrchestrationCommand) =>
+  const dispatch = (command: OrchestrationV2Command) =>
     client['orchestration.dispatchCommand'](command)
-  const followed = client['orchestration.subscribeThread']({
-    threadId: start.threadId,
-    reasoningMessages: true,
-  }).pipe(
+  const followed = client['orchestration.subscribeThread']({ threadId: start.threadId }).pipe(
     Stream.mapEffect((item) => {
       const step = follower.receive(item)
       const commands = [...(step.start ? [start] : []), ...step.responses]
@@ -352,13 +350,18 @@ function followTurn(
     Effect.sleep(input.timeoutMs).pipe(Effect.as('timeout' as const)),
     unstarted,
   ]).pipe(
-    Effect.flatMap((status) =>
-      dispatch({
-        type: 'thread.turn.interrupt',
-        ...commandBase(start.threadId),
-        createdAt: now(),
-      }).pipe(Effect.ignore, Effect.as<FollowedTurn>({ status })),
-    ),
+    Effect.flatMap((status) => {
+      // A turn the engine has not made a run for yet has nothing to interrupt.
+      const runId = follower.run
+      const interrupt = runId
+        ? dispatch({
+            type: 'run.interrupt',
+            ...commandBase(start.threadId),
+            runId: RunId.make(runId),
+          }).pipe(Effect.ignore)
+        : Effect.void
+      return interrupt.pipe(Effect.as<FollowedTurn>({ status }))
+    }),
   )
   return Effect.raceFirst(followed, stopped)
 }
@@ -388,12 +391,13 @@ async function copyIncluded(folder: IncludedFolder, workspaceRoot: string, signa
   await copyForInspection(folder.directory, destination, signal)
 }
 
+type TurnStart = Extract<OrchestrationV2Command, { type: 'message.dispatch' }>
+
+/** Threads and messages Slopbusters creates are the user's, sent from a T3 Code client. */
+const CREATED_BY_USER = { createdBy: 'user', creationSource: 'web' } as const
+
 function commandBase(threadId: string) {
   return { commandId: CommandId.make(randomUUID()), threadId: ThreadId.make(threadId) }
-}
-
-function now() {
-  return new Date().toISOString()
 }
 
 /**
