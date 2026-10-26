@@ -17,7 +17,7 @@ import { clickedSymbol, type CodeSymbol } from '../review/diff/codeSymbols'
 import { SymbolContextMenu, type SymbolMenuSelection } from './SymbolContextMenu'
 import { SourceNavigationResults } from './SourceNavigationResults'
 import { destinationStyles, highlightDestination } from './sourceDestination'
-import { pullFileFor, sourceItem } from './sourceItem'
+import { additionLine, pullFileFor, scrollToLine, sourceItem } from './sourceItem'
 import {
   emptySourceHistory,
   isCurrentDefinition,
@@ -98,17 +98,19 @@ export function SourceContextDialog({
     [revision, revisionSide, changedContent],
   )
   const showsDiff = items[0]?.type === 'diff'
+  // Per viewer instance: going back remounts the viewer with nothing expanded.
+  const revealed = useRef(new WeakMap<object, string>())
+  const scrollTarget = {
+    id: sourceId,
+    line: targetLine,
+    side: showsDiff ? revisionSide : undefined,
+  } as const
   useEffect(() => {
     if (!revision) return
-    const frame = requestAnimationFrame(() =>
-      viewer.current?.scrollTo({
-        type: 'line',
-        id: sourceId,
-        lineNumber: targetLine,
-        ...(showsDiff ? { side: revisionSide === 'old' ? 'deletions' : 'additions' } : {}),
-        align: 'center',
-      }),
-    )
+    const side = showsDiff ? revisionSide : undefined
+    const frame = requestAnimationFrame(() => {
+      scrollToLine(viewer.current, { id: sourceId, line: targetLine, side })
+    })
     return () => {
       cancelAnimationFrame(frame)
     }
@@ -335,9 +337,22 @@ export function SourceContextDialog({
                   setSymbolMenu({ ...selected, x: event.clientX, y: event.clientY })
                 }}
                 options={{
-                  onPostRender: (node) => {
+                  onPostRender: (node, _instance, _phase, context) => {
                     if (node.shadowRoot)
                       highlightDestination(node.shadowRoot, visit?.target, revisionSide)
+                    // A target in unchanged code starts collapsed; open it once, then scroll again.
+                    const key = `${sourceId}:${String(targetLine)}`
+                    if (context.type !== 'diff' || revealed.current.get(context.instance) === key)
+                      return
+                    revealed.current.set(context.instance, key)
+                    const line =
+                      revisionSide === 'old'
+                        ? additionLine(context.item.fileDiff, targetLine)
+                        : targetLine
+                    if (context.instance.revealLine(line))
+                      requestAnimationFrame(() => {
+                        scrollToLine(viewer.current, scrollTarget)
+                      })
                   },
                   theme: themeId,
                   themeType: resolvedTheme,

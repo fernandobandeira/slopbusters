@@ -1,4 +1,10 @@
-import { parseDiffFromFile, type CodeViewItem, type FileContents } from '@pierre/diffs'
+import {
+  parseDiffFromFile,
+  type CodeViewItem,
+  type FileContents,
+  type FileDiffMetadata,
+} from '@pierre/diffs'
+import type { CodeViewHandle } from '@pierre/diffs/react'
 import type { PullFileContent, RevisionFileContent } from '../../../shared/domain/fileContent'
 import type { ChangedFile, PullRequest } from '../../../shared/domain/types'
 
@@ -42,4 +48,32 @@ function fileContents(revision: RevisionFileContent | null, path: string): FileC
     contents: revision?.content ?? '',
     cacheKey: `${revision?.sha ?? 'none'}:${revision?.path ?? path}`,
   }
+}
+
+/**
+ * The new-side line an old-side line sits beside, for revealing it in a collapsed diff. Unchanged
+ * code shifts by the lines earlier hunks added or removed; a deleted line maps to its hunk.
+ */
+export function additionLine(diff: FileDiffMetadata, oldLine: number) {
+  let shift = 0
+  for (const hunk of diff.hunks) {
+    if (oldLine < hunk.deletionStart) break
+    if (oldLine < hunk.deletionStart + hunk.deletionCount) return hunk.additionStart
+    shift += hunk.additionCount - hunk.deletionCount
+  }
+  return oldLine + shift
+}
+
+/** Center a line; in a diff, on the side the navigated revision belongs to. */
+export function scrollToLine(
+  viewer: Pick<CodeViewHandle<undefined, undefined>, 'scrollTo'> | null,
+  target: { id: string; line: number; side?: 'old' | 'new' },
+) {
+  viewer?.scrollTo({
+    type: 'line',
+    id: target.id,
+    lineNumber: target.line,
+    ...(target.side ? { side: target.side === 'old' ? 'deletions' : 'additions' } : {}),
+    align: 'center',
+  })
 }

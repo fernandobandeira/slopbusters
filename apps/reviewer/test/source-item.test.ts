@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { sourceItem } from '../src/features/source-navigation/sourceItem'
+import { parseDiffFromFile } from '@pierre/diffs'
+import { additionLine, sourceItem } from '../src/features/source-navigation/sourceItem'
 import type { PullFileContent } from '../shared/domain/fileContent'
 
 const revision = (sha: string, content: string) => ({ path: 'src/a.ts', sha, content, symbols: [] })
@@ -20,5 +21,16 @@ describe('source opened from a review', () => {
   it('shows plain source for other files and for revisions with other edits', () => {
     expect(sourceItem(revision('head', 'const a = 2\n'), 'new').type).toBe('file')
     expect(sourceItem(revision('local', 'const a = 3\n'), 'new', content).type).toBe('file')
+  })
+
+  it('maps an old line to the new line beside it so a collapsed target can be revealed', () => {
+    const old = Array.from({ length: 30 }, (_, index) => `line ${String(index + 1)}`)
+    const next = [...old.slice(0, 9), 'added a', 'added b', ...old.slice(9)]
+    const diff = parseDiffFromFile(
+      { name: 'a.ts', contents: `${old.join('\n')}\n` },
+      { name: 'a.ts', contents: `${next.join('\n')}\n` },
+    )
+    expect(additionLine(diff, 5)).toBe(5)
+    expect(additionLine(diff, 25)).toBe(27)
   })
 })
