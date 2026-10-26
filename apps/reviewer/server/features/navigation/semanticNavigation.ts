@@ -43,11 +43,9 @@ export function createTypeScriptNavigator(
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     jsx: ts.JsxEmit.Preserve,
     ...options,
-    baseUrl: options.baseUrl
-      ? posix.resolve(root, options.baseUrl) === root
-        ? root
-        : virtualName(options.baseUrl)
-      : undefined,
+    // Reviewed repositories still set baseUrl for import aliases, and TypeScript 6 honors it.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    baseUrl: repositoryBaseUrl(options, root),
     // Repository compiler configuration may affect aliases, but cannot load host libraries/plugins.
     noLib: true,
     noEmit: true,
@@ -92,10 +90,9 @@ export function createTypeScriptNavigator(
     directoryExists,
     getDirectories: resolutionHost.getDirectories,
     realpath: resolutionHost.realpath,
-    resolveModuleNames: (names, containingFile) =>
-      names.map(
-        (name) =>
-          ts.resolveModuleName(name, containingFile, settings, resolutionHost).resolvedModule,
+    resolveModuleNameLiterals: (literals, containingFile) =>
+      literals.map((literal) =>
+        ts.resolveModuleName(literal.text, containingFile, settings, resolutionHost),
       ),
   }
   const service = ts.createLanguageService(host)
@@ -169,4 +166,12 @@ export function navigateTypeScript(
   } finally {
     navigator.close()
   }
+}
+
+/** The repository's baseUrl, mapped into the virtual tree the language service reads. */
+function repositoryBaseUrl(options: ts.CompilerOptions, root: string) {
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
+  const { baseUrl } = options
+  if (!baseUrl) return undefined
+  return posix.resolve(root, baseUrl) === root ? root : virtualName(baseUrl)
 }

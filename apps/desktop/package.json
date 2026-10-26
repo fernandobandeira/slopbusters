@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "electron": "44.9.3",
-    "electron-builder": "26.15.6",
+    "electron-builder": "26.18.0",
     "esbuild": "0.28.2"
   },
   "build": {
@@ -57,6 +57,6 @@
     "artifactName": "Slopbusters-${version}-${arch}.${ext}"
   },
   "dependencies": {
-    "electron-updater": "6.8.9"
+    "electron-updater": "6.8.11"
   }
 }

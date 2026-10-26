@@ -112,9 +112,6 @@
     }
   },
   "server/features/navigation/semanticNavigation.ts": {
-    "@typescript-eslint/no-deprecated": {
-      "count": 3
-    },
     "@typescript-eslint/unbound-method": {
       "count": 2
     },
