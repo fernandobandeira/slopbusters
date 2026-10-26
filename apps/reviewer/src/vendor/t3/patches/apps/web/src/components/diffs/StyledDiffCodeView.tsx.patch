@@ -16,10 +16,10 @@
 +  line-height: ${DIFF_LINE_HEIGHT}px !important;
 +}
 +
- :is(
-   [data-line],
-   [data-line-annotation],
-@@ -252,8 +262,11 @@
+ /* A 1fr track's automatic minimum grows with the currently mounted lines. In split
+    wrap mode that shifts width between columns, rewraps rows and makes the virtualizer
+    repeatedly correct the scroll position. Keep both code columns at the same width. */
+@@ -259,8 +269,11 @@
              // rendered height, and the end of the list sat past the reachable scroll range —
              // one clipped file row per expanded file above it.
              paddingBottom: 8,

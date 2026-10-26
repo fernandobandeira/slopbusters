@@ -1,6 +1,6 @@
 # T3 Code
 
-This project includes code from [pingdotgg/t3code](https://github.com/pingdotgg/t3code), pinned to commit `5753207d53362608f281738eda3a9faf4e13b6be`, under the MIT License. The original license is preserved in [src/vendor/t3/LICENSE](src/vendor/t3/LICENSE).
+This project includes code from [pingdotgg/t3code](https://github.com/pingdotgg/t3code), pinned to commit `81493efb71e8e8244f95d3e9f71d8369654ab151`, under the MIT License. The original license is preserved in [src/vendor/t3/LICENSE](src/vendor/t3/LICENSE).
 
 The vendored files live under `src/vendor/t3` at their upstream paths and are verbatim copies of that commit. [The manifest](src/vendor/t3/manifest.json) lists every tracked file. The only local changes are recorded as unified diffs under `src/vendor/t3/patches`, and `pnpm t3:check` fails when the tree differs from upstream plus those patches. Three shims listed in the manifest stand in for upstream modules the reviewer cannot import: its theme store, its id helpers, and its Electron title-bar measurement. `pnpm t3:sync` pulls a newer upstream commit and three-way merges the patches.
 

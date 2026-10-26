@@ -24,6 +24,13 @@ export const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
   line-height: ${DIFF_LINE_HEIGHT}px !important;
 }
 
+/* A 1fr track's automatic minimum grows with the currently mounted lines. In split
+   wrap mode that shifts width between columns, rewraps rows and makes the virtualizer
+   repeatedly correct the scroll position. Keep both code columns at the same width. */
+[data-diff-type="split"][data-overflow="wrap"] {
+  --diffs-code-grid: var(--diffs-grid-number-column-width) minmax(0, 1fr);
+}
+
 :is(
   [data-line],
   [data-line-annotation],
