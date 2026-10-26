@@ -19,7 +19,7 @@
     "test:release": "node --test scripts/notarization.test.mjs"
   },
   "devDependencies": {
-    "electron": "44.4.2",
+    "electron": "44.9.3",
     "electron-builder": "26.15.6",
     "esbuild": "0.28.2"
   },
