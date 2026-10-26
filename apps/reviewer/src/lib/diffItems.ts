@@ -1,4 +1,9 @@
-import { parsePatchFiles, type CodeViewItem } from '@pierre/diffs'
+import {
+  hydratePartialDiff,
+  parsePatchFiles,
+  type CodeViewItem,
+  type FileDiffMetadata,
+} from '@pierre/diffs'
 import { LineKind, type ChangeGroup, type PullRequest } from '../../shared/domain/types'
 import { mergeSelectedSections } from './selectedSections'
 import type { PullFileContent } from '../../shared/domain/fileContent'
@@ -62,20 +67,82 @@ export function patchItems(source: PatchSource): CodeViewItem<undefined>[] {
         unified += hunk.unifiedLineCount
         return next
       })
+      const fileDiff = {
+        ...parsed,
+        name: path,
+        ...(previousPath ? { prevName: previousPath } : {}),
+        hunks: compact,
+        splitLineCount: split,
+        unifiedLineCount: unified,
+        ...(context ? { syntaxContext: { old: context.old, new: context.new } } : {}),
+      }
       return {
         id,
         type: 'diff' as const,
-        fileDiff: {
-          ...parsed,
-          name: path,
-          ...(previousPath ? { prevName: previousPath } : {}),
-          hunks: compact,
-          splitLineCount: split,
-          unifiedLineCount: unified,
-          ...(context ? { syntaxContext: { old: context.old, new: context.new } } : {}),
-        },
+        fileDiff: (context && expandableDiff(fileDiff, context)) ?? fileDiff,
       }
     })
+}
+
+/**
+ * Give Pierre both full revisions so "N unmodified lines" expands in place. Only when every
+ * collapsed gap is really unchanged: a group hides other groups' edits, and those must never
+ * show up as context. Anything that disagrees with the displayed patch stays a partial diff.
+ */
+function expandableDiff<T extends FileDiffMetadata>(diff: T, context: PullFileContent) {
+  if (!context.old || !context.new) return undefined
+  if (diff.type !== 'change' && diff.type !== 'rename-changed') return undefined
+  const full = hydratePartialDiff('clone', diff, {
+    oldFile: { name: diff.prevName ?? diff.name, contents: context.old.content },
+    newFile: { name: diff.name, contents: context.new.content },
+  }) as T
+  return showsSamePatch(diff, full) && gapsUnchanged(full) ? full : undefined
+}
+
+function showsSamePatch(partial: FileDiffMetadata, full: FileDiffMetadata) {
+  return partial.hunks.every((hunk, index) => {
+    const hydrated = full.hunks[index]
+    if (!hydrated) return false
+    const slice = (lines: string[], at: number, count: number) => lines.slice(at, at + count)
+    return (
+      sameLines(
+        slice(partial.deletionLines, hunk.deletionLineIndex, hunk.deletionCount),
+        slice(full.deletionLines, hydrated.deletionLineIndex, hunk.deletionCount),
+      ) &&
+      sameLines(
+        slice(partial.additionLines, hunk.additionLineIndex, hunk.additionCount),
+        slice(full.additionLines, hydrated.additionLineIndex, hunk.additionCount),
+      )
+    )
+  })
+}
+
+function gapsUnchanged(full: FileDiffMetadata) {
+  let oldEnd = 0
+  let newEnd = 0
+  for (const hunk of full.hunks) {
+    // An empty side's start names the line before the edit, so the gap runs through it.
+    const oldStart = hunk.deletionCount ? hunk.deletionStart - 1 : hunk.deletionStart
+    const newStart = hunk.additionCount ? hunk.additionStart - 1 : hunk.additionStart
+    if (
+      !sameLines(
+        full.deletionLines.slice(oldEnd, oldStart),
+        full.additionLines.slice(newEnd, newStart),
+      )
+    )
+      return false
+    oldEnd = oldStart + hunk.deletionCount
+    newEnd = newStart + hunk.additionCount
+  }
+  return sameLines(full.deletionLines.slice(oldEnd), full.additionLines.slice(newEnd))
+}
+
+function sameLines(left: string[], right: string[]) {
+  const text = (line: string) => line.replace(/\r?\n$/, '')
+  return (
+    left.length === right.length &&
+    left.every((line, index) => text(line) === text(right[index] ?? ''))
+  )
 }
 
 function patchLine(line: PatchLine): string {

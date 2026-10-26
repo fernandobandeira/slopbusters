@@ -1,4 +1,4 @@
-import type { RefObject, Dispatch, SetStateAction, ReactNode } from 'react'
+import { useState, type RefObject, type Dispatch, type SetStateAction, type ReactNode } from 'react'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { ReviewDiffCodeView } from '../../components/ReviewDiffCodeView'
@@ -21,7 +21,8 @@ import {
   type annotateDiscussions,
   type LineDiscussion,
 } from './discussions/discussions'
-import { CONTEXT_STEP, MAX_CONTEXT } from './diff/displayContext'
+import { FileContextActions } from './FileContextActions'
+import { collapseExpandedLines, isExpansionClick } from './diff/hunkExpansion'
 
 type Selection = SymbolMenuSelection & { fileId: string; side: DiffSide; path: string }
 interface Props {
@@ -77,6 +78,15 @@ export function ReviewDiffViewer({
   navigateSymbol,
 }: Props) {
   const { themeId, resolvedTheme } = useReviewerTheme()
+  const [expandedFiles, setExpandedFiles] = useState(() => new Set<string>())
+  function collapseLines(fileId: string) {
+    collapseExpandedLines(viewerRef.current, fileId)
+    setExpandedFiles((values) => {
+      const next = new Set(values)
+      next.delete(fileId)
+      return next
+    })
+  }
   return (
     <ReviewDiffCodeView
       className="viewer"
@@ -130,58 +140,20 @@ export function ReviewDiffViewer({
           )
         const file = pull.files.find((file) => file.id === item.id)
         return file ? (
-          <div className="file-context-actions">
+          <FileContextActions
+            path={file.path}
+            canExpand={file.coverage === 'complete'}
+            fileId={file.id}
+            expanded={expandedFiles.has(file.id)}
+            onCollapseLines={collapseLines}
+            fileContext={fileContext}
+            contextLines={contextLines}
+            setContextLines={setContextLines}
+            viewed={fileSectionsViewed(file.id)}
+            toggleFile={toggleFile}
+          >
             {viewedSections}
-            <button
-              type="button"
-              disabled={
-                fileContext.isLoading(file.id) ||
-                file.coverage !== 'complete' ||
-                (contextLines.get(file.id) ?? 0) >= MAX_CONTEXT
-              }
-              title={fileContext.error(file.id) ?? 'Expand unchanged lines around these sections'}
-              onClick={() =>
-                void fileContext
-                  .load(file.id)
-                  .then(() => {
-                    setContextLines((values) =>
-                      new Map(values).set(
-                        file.id,
-                        Math.min(MAX_CONTEXT, (values.get(file.id) ?? 0) + CONTEXT_STEP),
-                      ),
-                    )
-                  })
-                  .catch(() => {})
-              }
-            >
-              {fileContext.isLoading(file.id) ? 'Loading…' : `+${CONTEXT_STEP} context`}
-            </button>
-            {(contextLines.get(file.id) ?? 0) > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setContextLines((values) => {
-                    const next = new Map(values)
-                    next.delete(file.id)
-                    return next
-                  })
-                }}
-              >
-                Reset
-              </button>
-            )}
-            <label className="file-viewed">
-              <input
-                type="checkbox"
-                aria-label={`Viewed ${file.path}`}
-                checked={fileSectionsViewed(file.id)}
-                onChange={() => {
-                  toggleFile(file.id)
-                }}
-              />
-              Viewed
-            </label>
-          </div>
+          </FileContextActions>
         ) : null
       }}
       renderAnnotation={(annotation) =>
@@ -244,6 +216,12 @@ export function ReviewDiffViewer({
         // Pierre owns filenames inside its shadow root; its render callback keeps
         // their controls aligned with the current virtualized item and collapse state.
         onPostRender: (node, _instance, _phase, context) => {
+          node.onclick = (event) => {
+            if (!isExpansionClick(event)) return
+            setExpandedFiles((values) =>
+              values.has(context.item.id) ? values : new Set(values).add(context.item.id),
+            )
+          }
           const filename = node.shadowRoot?.querySelector<HTMLElement>('[data-title]')
           if (!filename) return
           filename.setAttribute('role', 'button')
