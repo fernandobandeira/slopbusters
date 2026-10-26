@@ -29,11 +29,8 @@ export function useReviewDiff(
   const progress = groupProgress(pull, draft, { groupId, updates })
   const { selected } = progress
   const { collapseOverrides, setFileCollapsed } = useCollapseOverrides(selected?.id)
-  const { shownViewed, toggleViewedShown, showViewedSections } = useShownViewedSections(
-    selected?.id,
-  )
-  const filters = useVisibleGroup({ pull, selected, viewedHunks, shownViewed })
-  const { visibleGroup } = filters
+  // Every group shows all of its sections; the updates group is where only new edits appear.
+  const visibleGroup = selected
   function changeView(changes: Partial<ReviewView>) {
     const next = updateReviewView(searchParams, changes)
     if (next.toString() !== searchParams.toString()) setSearchParams(next)
@@ -45,7 +42,7 @@ export function useReviewDiff(
   useEffect(() => {
     for (const fileId of visibleGroup?.fileIds ?? []) void loadFileContext(fileId).catch(() => {})
   }, [visibleGroup, loadFileContext])
-  const { display, items } = useReviewItems({
+  const { display, items, setFileRevealed } = useReviewItems({
     pull,
     displayPull,
     visibleGroup,
@@ -66,14 +63,10 @@ export function useReviewDiff(
     changeView,
     setFileCollapsed,
   })
-  const viewedToggles = useMemo(
-    () => viewedSectionToggles(display, filters.partlyViewed, shownViewed, selected?.id),
-    [display, filters.partlyViewed, shownViewed, selected?.id],
-  )
   return {
     ...progress,
-    ...filters,
     ...actions,
+    visibleGroup,
     updates,
     grouped: pull.groupingSource !== 'files',
     split,
@@ -87,97 +80,24 @@ export function useReviewDiff(
     items,
     syntheticItems: display?.synthetic ?? new Map<string, never>(),
     setFileCollapsed,
-    viewedToggles,
-    toggleViewedShown,
-    showViewedSections,
+    setFileRevealed,
   }
 }
 
-function useVisibleGroup(options: {
-  pull: PullRequest
-  selected?: ChangeGroup
-  viewedHunks: Set<string>
-  shownViewed: Set<string>
-}) {
-  const { pull, selected, viewedHunks, shownViewed } = options
-  const visible = useMemo(
-    () =>
-      selected &&
-      visibleSections(pull, selected, viewedHunks, (fileId) =>
-        shownViewed.has(`${selected.id}/${fileId}`),
-      ),
-    [pull, selected, viewedHunks, shownViewed],
-  )
-  return {
-    visibleGroup: visible?.group,
-    partlyViewed: visible?.partlyViewed ?? new Map<string, number>(),
-  }
-}
-
-/** Viewed sections stay out of the way while a file has new ones to read. A fully viewed file keeps
- * every section so it can be reopened as a whole. */
-function visibleSections(
-  pull: PullRequest,
-  group: ChangeGroup,
-  viewed: Set<string>,
-  viewedShown: (fileId: string) => boolean,
-) {
-  const partlyViewed = new Map<string, number>()
-  const hidden = new Set<string>()
-  for (const file of pull.files.filter((file) => group.fileIds.includes(file.id))) {
-    const ids = file.hunks.filter((hunk) => group.hunkIds.includes(hunk.id)).map((hunk) => hunk.id)
-    const seen = ids.filter((id) => viewed.has(id))
-    if (!seen.length || seen.length === ids.length) continue
-    partlyViewed.set(file.id, seen.length)
-    if (!viewedShown(file.id)) seen.forEach((id) => hidden.add(id))
-  }
-  return {
-    group: { ...group, hunkIds: group.hunkIds.filter((id) => !hidden.has(id)) },
-    partlyViewed,
-  }
-}
-
-function useShownViewedSections(selectedId?: string) {
-  const [shownViewed, setShownViewed] = useState(() => new Set<string>())
-  function showViewedSections(fileId: string, shown: boolean, groupId = selectedId) {
-    setShownViewed((previous) => {
+/** A revealed file also shows the edits other groups own, so every gap in it can expand. */
+function useRevealedFiles(selectedId?: string) {
+  const [revealedFiles, setRevealedFiles] = useState(() => new Set<string>())
+  function setFileRevealed(fileId: string, revealed: boolean) {
+    const key = `${selectedId}/${fileId}`
+    setRevealedFiles((previous) => {
+      if (previous.has(key) === revealed) return previous
       const next = new Set(previous)
-      if (shown) next.add(`${groupId}/${fileId}`)
-      else next.delete(`${groupId}/${fileId}`)
+      if (revealed) next.add(key)
+      else next.delete(key)
       return next
     })
   }
-  function toggleViewedShown(fileId: string) {
-    showViewedSections(fileId, !shownViewed.has(`${selectedId}/${fileId}`))
-  }
-  return { shownViewed, toggleViewedShown, showViewedSections }
-}
-
-export interface ViewedToggle {
-  fileId: string
-  count: number
-  shown: boolean
-}
-
-/** The show/hide control for a file's viewed sections sits on the first item drawn for that file. */
-function viewedSectionToggles(
-  display: ReviewItems | undefined,
-  partlyViewed: Map<string, number>,
-  shownViewed: Set<string>,
-  groupId?: string,
-) {
-  const toggles = new Map<string, ViewedToggle>()
-  const placed = new Set<string>()
-  for (const item of display?.items ?? []) {
-    const fileId = [...partlyViewed.keys()].find(
-      (id) => item.id === id || item.id.startsWith(`${id}:`),
-    )
-    if (!fileId || placed.has(fileId)) continue
-    placed.add(fileId)
-    const count = partlyViewed.get(fileId) ?? 0
-    toggles.set(item.id, { fileId, count, shown: shownViewed.has(`${groupId}/${fileId}`) })
-  }
-  return toggles
+  return { revealedFiles, setFileRevealed }
 }
 
 function useCollapseOverrides(selectedId?: string) {
@@ -254,6 +174,7 @@ function useReviewItems(options: {
 }) {
   const { pull, displayPull, visibleGroup, contents, changes, fullSections } = options
   const { viewedHunks, collapseOverrides, selectedId } = options
+  const { revealedFiles, setFileRevealed } = useRevealedFiles(selectedId)
   const display = useMemo(
     () =>
       visibleGroup
@@ -264,15 +185,16 @@ function useReviewItems(options: {
             contents,
             changes,
             full: fullSections,
+            revealed: (fileId) => revealedFiles.has(`${selectedId}/${fileId}`),
           })
         : undefined,
-    [pull, displayPull, visibleGroup, contents, changes, fullSections],
+    [pull, displayPull, visibleGroup, contents, changes, fullSections, revealedFiles, selectedId],
   )
   const items = useMemo(
     () => collapsedItems(display, viewedHunks, collapseOverrides, selectedId),
     [display, viewedHunks, collapseOverrides, selectedId],
   )
-  return { display, items }
+  return { display, items, setFileRevealed }
 }
 
 function collapsedItems(

@@ -60,14 +60,6 @@ function Harness({
       <p data-testid="items">{diff.items.map((item) => item.id).join(',')}</p>
       <p data-testid="collapsed">{diff.items.map((item) => String(item.collapsed)).join(',')}</p>
       <p data-testid="sections">{diff.visibleGroup?.hunkIds.join(',')}</p>
-      <p data-testid="viewed-toggles">{JSON.stringify([...diff.viewedToggles])}</p>
-      <button
-        onClick={() => {
-          diff.toggleViewedShown(fileId)
-        }}
-      >
-        Toggle viewed sections
-      </button>
       <button
         onClick={() => {
           diff.toggleFile(required(diff.items[0]).id)
@@ -238,19 +230,11 @@ describe('viewed sections within a file', () => {
     )
   }
 
-  it('hides sections viewed before new ones appeared until the reviewer asks for them', () => {
+  it('keeps sections viewed before new ones appeared in view', () => {
     renderFile()
     expect(screen.getByTestId('selected').textContent).toBe('one')
-    expect(screen.getByTestId('sections').textContent).toBe(required(secondHunk).id)
-    expect(screen.getByTestId('viewed-toggles').textContent).toBe(
-      JSON.stringify([[fileId, { fileId, count: 1, shown: false }]]),
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle viewed sections' }))
     expect(screen.getByTestId('sections').textContent).toBe(
       `${required(firstHunk).id},${required(secondHunk).id}`,
-    )
-    expect(screen.getByTestId('viewed-toggles').textContent).toBe(
-      JSON.stringify([[fileId, { fileId, count: 1, shown: true }]]),
     )
   })
 
@@ -264,7 +248,6 @@ describe('viewed sections within a file', () => {
       `${required(firstHunk).id},${required(secondHunk).id}`,
     )
     expect(screen.getByTestId('collapsed').textContent).toBe('true')
-    expect(screen.getByTestId('viewed-toggles').textContent).toBe('[]')
     fireEvent.click(screen.getByRole('button', { name: 'Mark first item' }))
     expect(screen.getByRole('status').textContent).toBe('[]')
     expect(screen.getByTestId('collapsed').textContent).toBe('false')

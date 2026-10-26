@@ -7,13 +7,17 @@ interface ExpandableInstance {
   expandHunk?: (hunkIndex: number, direction: ExpansionDirections, lines?: number) => void
 }
 
-/** Whether a click inside a diff landed on one of Pierre's "N unmodified lines" expanders. */
-export function isExpansionClick(event: Event) {
+/**
+ * What a click on a "N unmodified lines" separator does: Pierre expands it when the file has full
+ * revisions; otherwise the gap hides another group's edit and the file must reveal it first.
+ */
+export function separatorClick(event: Event): 'expand' | 'reveal' | undefined {
   const target = event.composedPath()[0]
-  return (
-    target instanceof Element &&
-    target.closest('[data-expand-button], [data-unmodified-lines]') !== null
-  )
+  if (!(target instanceof Element)) return undefined
+  if (!target.closest('[data-expand-button], [data-unmodified-lines]')) return undefined
+  return target.closest('[data-separator]')?.querySelector('[data-expand-button]')
+    ? 'expand'
+    : 'reveal'
 }
 
 /**

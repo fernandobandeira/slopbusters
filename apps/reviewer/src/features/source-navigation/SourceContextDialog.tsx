@@ -9,7 +9,7 @@ import type {
 } from '../../../shared/domain/navigation'
 import type { PullFileContent } from '../../../shared/domain/fileContent'
 import { DiffSide, type PullRequest } from '../../../shared/domain/types'
-import { Dialog, DialogPopup, DialogHeader, DialogTitle } from '~/components/ui/dialog'
+import { Dialog, DialogPopup, DialogTitle } from '~/components/ui/dialog'
 import { ReviewDiffCodeView } from '../../components/ReviewDiffCodeView'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { call, message } from '../../lib/api'
@@ -17,6 +17,7 @@ import { clickedSymbol, type CodeSymbol } from '../review/diff/codeSymbols'
 import { SymbolContextMenu, type SymbolMenuSelection } from './SymbolContextMenu'
 import { SourceNavigationResults } from './SourceNavigationResults'
 import { destinationStyles, highlightDestination } from './sourceDestination'
+import { pullFileFor, sourceItem } from './sourceItem'
 import {
   emptySourceHistory,
   isCurrentDefinition,
@@ -30,6 +31,11 @@ interface Props {
   pull: PullRequest
   fileId?: string
   content?: PullFileContent
+  /** Full revisions of PR files, so source opened in one of them reads as its diff. */
+  contents: ReadonlyMap<string, PullFileContent>
+  loadContent: (fileId: string) => Promise<PullFileContent>
+  /** The review's diff layout, which the dialog starts from. */
+  split: boolean
   error?: string
   initialRequest?: NavigationRequest
   onRetry: () => void
@@ -40,6 +46,9 @@ export function SourceContextDialog({
   pull,
   fileId,
   content,
+  contents,
+  loadContent,
+  split: initialSplit,
   error,
   initialRequest,
   onRetry,
@@ -49,6 +58,7 @@ export function SourceContextDialog({
   const viewer = useRef<CodeViewHandle<undefined, undefined>>(null)
   const side = initialRequest?.side === DiffSide.left ? 'old' : 'new'
   const [history, setHistory] = useState(emptySourceHistory)
+  const [split, setSplit] = useState(initialSplit)
   const visit = history.visits[history.index]
   const [notice, setNotice] = useState('')
   const [workspace, setWorkspace] = useState<ReviewWorkspaceInfo>()
@@ -77,20 +87,17 @@ export function SourceContextDialog({
     (actualSide === DiffSide.right ? initialLine?.newLine : initialLine?.oldLine) ??
     1
   const sourceId = revision ? `${revision.sha}:${revision.path}` : ''
+  const revisionSide = actualSide === DiffSide.left ? 'old' : 'new'
+  const changedFile = revision && pullFileFor(pull, revision.path)
+  const changedContent = changedFile ? contents.get(changedFile.id) : undefined
+  useEffect(() => {
+    if (changedFile) void loadContent(changedFile.id).catch(() => {})
+  }, [changedFile, loadContent])
   const items = useMemo(
-    () =>
-      revision
-        ? [
-            {
-              id: sourceId,
-              type: 'file' as const,
-              file: { name: revision.path, contents: revision.content, cacheKey: sourceId },
-            },
-          ]
-        : [],
-    [revision, sourceId],
+    () => (revision ? [sourceItem(revision, revisionSide, changedContent)] : []),
+    [revision, revisionSide, changedContent],
   )
-  const warnings = [...new Set([...(navigation?.warnings ?? []), ...(workspace?.warnings ?? [])])]
+  const showsDiff = items[0]?.type === 'diff'
   useEffect(() => {
     if (!revision) return
     const frame = requestAnimationFrame(() =>
@@ -98,13 +105,14 @@ export function SourceContextDialog({
         type: 'line',
         id: sourceId,
         lineNumber: targetLine,
+        ...(showsDiff ? { side: revisionSide === 'old' ? 'deletions' : 'additions' } : {}),
         align: 'center',
       }),
     )
     return () => {
       cancelAnimationFrame(frame)
     }
-  }, [revision, sourceId, targetLine])
+  }, [revision, sourceId, targetLine, showsDiff, revisionSide])
   useEffect(
     () => () => {
       requestVersion.current++
@@ -242,9 +250,8 @@ export function SourceContextDialog({
       }}
     >
       <DialogPopup className="source-context-dialog" aria-busy={busy}>
-        <DialogHeader>
-          <DialogTitle>{revision?.path ?? file?.path ?? 'Source'}</DialogTitle>
-        </DialogHeader>
+        {/* The viewer's file header already shows the path. */}
+        <DialogTitle className="sr-only">{revision?.path ?? file?.path ?? 'Source'}</DialogTitle>
         {(error || sourceError) && (
           <div className="source-context-error" role="alert">
             {sourceError || error}{' '}
@@ -264,36 +271,45 @@ export function SourceContextDialog({
         {revision && (
           <>
             <nav className="source-context-toolbar" aria-label="Source navigation">
-              <button
-                type="button"
-                aria-label="Back in source"
-                disabled={busy || history.index < 0}
-                onClick={() => {
-                  setHistory((current) => ({ ...current, index: current.index - 1 }))
-                  setNavigation(undefined)
-                  setNotice('')
-                }}
-              >
-                ← Back
-              </button>
-              <button
-                type="button"
-                aria-label="Forward in source"
-                disabled={busy || history.index + 1 >= history.visits.length}
-                onClick={() => {
-                  setHistory((current) => ({ ...current, index: current.index + 1 }))
-                  setNavigation(undefined)
-                  setNotice('')
-                }}
-              >
-                Forward →
-              </button>
-              <span className="muted" title={workspace?.directory}>
-                {navigation?.source?.kind === 'local' || workspace?.status === 'ready'
-                  ? 'Local checkout'
-                  : 'Saved source'}{' '}
-                · {revision.sha.slice(0, 8)}
-              </span>
+              {history.visits.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Back in source"
+                    disabled={busy || history.index < 0}
+                    onClick={() => {
+                      setHistory((current) => ({ ...current, index: current.index - 1 }))
+                      setNavigation(undefined)
+                      setNotice('')
+                    }}
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Forward in source"
+                    disabled={busy || history.index + 1 >= history.visits.length}
+                    onClick={() => {
+                      setHistory((current) => ({ ...current, index: current.index + 1 }))
+                      setNavigation(undefined)
+                      setNotice('')
+                    }}
+                  >
+                    Forward →
+                  </button>
+                </>
+              )}
+              {showsDiff && (
+                <button
+                  type="button"
+                  aria-pressed={split}
+                  onClick={() => {
+                    setSplit((value) => !value)
+                  }}
+                >
+                  {split ? 'Unified' : 'Split'}
+                </button>
+              )}
               {navigation?.source?.kind !== 'local' && workspace?.status !== 'ready' && (
                 <button type="button" disabled={busy} onClick={() => void prepareLocalSource()}>
                   Prepare local source
@@ -304,13 +320,6 @@ export function SourceContextDialog({
               <p className="source-context-notice" role="status">
                 {notice}
               </p>
-            )}
-            {warnings.length > 0 && (
-              <div className="source-context-warnings">
-                {warnings.map((warning) => (
-                  <p key={warning}>{warning}</p>
-                ))}
-              </div>
             )}
             <div className="source-context-body">
               <ReviewDiffCodeView
@@ -327,10 +336,12 @@ export function SourceContextDialog({
                 }}
                 options={{
                   onPostRender: (node) => {
-                    if (node.shadowRoot) highlightDestination(node.shadowRoot, visit?.target)
+                    if (node.shadowRoot)
+                      highlightDestination(node.shadowRoot, visit?.target, revisionSide)
                   },
                   theme: themeId,
                   themeType: resolvedTheme,
+                  diffStyle: split ? 'split' : 'unified',
                   overflow: 'wrap',
                   enableLineSelection: true,
                   onTokenClick: (props, event) => {

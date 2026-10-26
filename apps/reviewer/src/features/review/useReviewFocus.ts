@@ -16,7 +16,6 @@ interface FocusOptions {
   searchParams: URLSearchParams
   setSearchParams: SetURLSearchParams
   setFileCollapsed: (fileId: string, collapsed: boolean, groupId?: string) => void
-  showViewedSections: (fileId: string, shown: boolean, groupId?: string) => void
   selected?: ChangeGroup
   items: CodeViewItem<undefined>[]
   viewerRef: RefObject<Pick<
@@ -38,7 +37,6 @@ export function useReviewFocus(pull: PullRequest, options: FocusOptions) {
   const reveal = useEffectEvent(() => {
     if (!file || !group) return
     options.setFileCollapsed(file.id, false, group.id)
-    options.showViewedSections(file.id, true, group.id)
     const next = updateReviewView(options.searchParams, { groupId: group.id })
     if (next.toString() !== options.searchParams.toString()) options.setSearchParams(next)
   })

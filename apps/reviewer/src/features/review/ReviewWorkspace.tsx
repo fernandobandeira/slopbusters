@@ -107,12 +107,10 @@ export function ReviewWorkspace({
     setContextLines,
     items,
     setFileCollapsed,
+    setFileRevealed,
     toggleFile,
     fileSectionsViewed,
     syntheticItems,
-    viewedToggles,
-    toggleViewedShown,
-    showViewedSections,
   } = useReviewDiff(pull, draft, setDraft, changes)
   const updates = usePullUpdates(pull)
   const { stack, summary: stackSummary } = usePullStack(pull)
@@ -149,7 +147,6 @@ export function ReviewWorkspace({
     searchParams,
     setSearchParams,
     setFileCollapsed,
-    showViewedSections,
     selected,
     items,
     viewerRef,
@@ -193,7 +190,6 @@ export function ReviewWorkspace({
     selected,
     changeView,
     setFileCollapsed,
-    showViewedSections,
     setDraft,
     setNotice,
     setSubmitted,
@@ -499,7 +495,12 @@ export function ReviewWorkspace({
             >
               {selected ? (
                 <>
-                  <CodeTransfers transfers={transfers} />
+                  <CodeTransfers
+                    pull={pull}
+                    transfers={transfers}
+                    contents={fileContext.contents}
+                    load={fileContext.load}
+                  />
                   {items.length ? (
                     <ReviewDiffViewer
                       key={selected.id}
@@ -512,11 +513,10 @@ export function ReviewWorkspace({
                       setContextLines={setContextLines}
                       setSymbolMenu={setSymbolMenu}
                       setFileCollapsed={setFileCollapsed}
+                      setFileRevealed={setFileRevealed}
                       fileSectionsViewed={fileSectionsViewed}
                       toggleFile={toggleFile}
                       syntheticItems={syntheticItems}
-                      viewedToggles={viewedToggles}
-                      toggleViewedShown={toggleViewedShown}
                       body={body}
                       setBody={setBody}
                       saveComment={saveComment}
@@ -636,6 +636,9 @@ export function ReviewWorkspace({
         fileId={sourceFileId}
         initialRequest={sourceSelection?.request}
         content={sourceFileId ? fileContext.contents.get(sourceFileId) : undefined}
+        contents={fileContext.contents}
+        loadContent={fileContext.load}
+        split={split}
         error={sourceFileId ? fileContext.error(sourceFileId) : undefined}
         onRetry={() => {
           if (sourceFileId) void fileContext.load(sourceFileId).catch(() => {})

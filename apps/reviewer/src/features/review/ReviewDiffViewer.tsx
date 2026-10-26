@@ -1,4 +1,4 @@
-import { useState, type RefObject, type Dispatch, type SetStateAction, type ReactNode } from 'react'
+import { useState, type RefObject, type Dispatch, type SetStateAction } from 'react'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { ReviewDiffCodeView } from '../../components/ReviewDiffCodeView'
@@ -12,7 +12,6 @@ import type { NavigationRequest } from '../../../shared/domain/navigation'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { InlineDiscussion, ThreadDiscussion } from './discussions/InlineDiscussion'
 import type { SyntheticItemKind } from './reviewUpdates'
-import type { ViewedToggle } from './useReviewDiff'
 import { clickedSymbol } from './diff/codeSymbols'
 import type { SymbolMenuSelection } from '../source-navigation/SymbolContextMenu'
 import type { useFileContext } from './diff/useFileContext'
@@ -22,7 +21,8 @@ import {
   type LineDiscussion,
 } from './discussions/discussions'
 import { FileContextActions } from './FileContextActions'
-import { collapseExpandedLines, isExpansionClick } from './diff/hunkExpansion'
+import { collapseExpandedLines, separatorClick } from './diff/hunkExpansion'
+import { labelSeparators } from './diff/separatorSymbols'
 
 type Selection = SymbolMenuSelection & { fileId: string; side: DiffSide; path: string }
 interface Props {
@@ -35,11 +35,10 @@ interface Props {
   setContextLines: Dispatch<SetStateAction<Map<string, number>>>
   setSymbolMenu: Dispatch<SetStateAction<Selection | undefined>>
   setFileCollapsed: (fileId: string, collapsed: boolean) => void
+  setFileRevealed: (fileId: string, revealed: boolean) => void
   fileSectionsViewed: (fileId: string) => boolean
   toggleFile: (fileId: string) => void
   syntheticItems: ReadonlyMap<string, SyntheticItemKind>
-  viewedToggles: ReadonlyMap<string, ViewedToggle>
-  toggleViewedShown: (fileId: string) => void
   body: string
   setBody: (body: string) => void
   saveComment: () => void
@@ -61,11 +60,10 @@ export function ReviewDiffViewer({
   setContextLines,
   setSymbolMenu,
   setFileCollapsed,
+  setFileRevealed,
   fileSectionsViewed,
   toggleFile,
   syntheticItems,
-  viewedToggles,
-  toggleViewedShown,
   body,
   setBody,
   saveComment,
@@ -81,6 +79,7 @@ export function ReviewDiffViewer({
   const [expandedFiles, setExpandedFiles] = useState(() => new Set<string>())
   function collapseLines(fileId: string) {
     collapseExpandedLines(viewerRef.current, fileId)
+    setFileRevealed(fileId, false)
     setExpandedFiles((values) => {
       const next = new Set(values)
       next.delete(fileId)
@@ -122,10 +121,6 @@ export function ReviewDiffViewer({
       )}
       renderHeaderMetadata={(item) => {
         const synthetic = syntheticItems.get(item.id)
-        const viewedToggle = viewedToggles.get(item.id)
-        const viewedSections = viewedToggle && (
-          <ViewedSectionsButton toggle={viewedToggle} onToggle={toggleViewedShown} />
-        )
         if (synthetic)
           return (
             <SyntheticItemHeader
@@ -134,9 +129,7 @@ export function ReviewDiffViewer({
               onToggle={() => {
                 toggleFile(item.id)
               }}
-            >
-              {viewedSections}
-            </SyntheticItemHeader>
+            />
           )
         const file = pull.files.find((file) => file.id === item.id)
         return file ? (
@@ -151,9 +144,7 @@ export function ReviewDiffViewer({
             setContextLines={setContextLines}
             viewed={fileSectionsViewed(file.id)}
             toggleFile={toggleFile}
-          >
-            {viewedSections}
-          </FileContextActions>
+          />
         ) : null
       }}
       renderAnnotation={(annotation) =>
@@ -216,8 +207,12 @@ export function ReviewDiffViewer({
         // Pierre owns filenames inside its shadow root; its render callback keeps
         // their controls aligned with the current virtualized item and collapse state.
         onPostRender: (node, _instance, _phase, context) => {
+          const content = fileContext.contents.get(context.item.id)
+          if (content && node.shadowRoot) labelSeparators(node.shadowRoot, content)
           node.onclick = (event) => {
-            if (!isExpansionClick(event)) return
+            const action = separatorClick(event)
+            if (!action || syntheticItems.has(context.item.id)) return
+            if (action === 'reveal') setFileRevealed(context.item.id, true)
             setExpandedFiles((values) =>
               values.has(context.item.id) ? values : new Set(values).add(context.item.id),
             )
@@ -294,17 +289,14 @@ function SyntheticItemHeader({
   kind,
   viewed,
   onToggle,
-  children,
 }: {
   kind: SyntheticItemKind
   viewed: boolean
   onToggle: () => void
-  children?: ReactNode
 }) {
   const { label, title } = syntheticLabels[kind]
   return (
     <div className="file-context-actions">
-      {children}
       <span className="section-update" title={title}>
         {label}
       </span>
@@ -320,32 +312,5 @@ function SyntheticItemHeader({
         </label>
       )}
     </div>
-  )
-}
-
-/** Sections viewed before new ones appeared in this file stay hidden until asked for. */
-function ViewedSectionsButton({
-  toggle,
-  onToggle,
-}: {
-  toggle: ViewedToggle
-  onToggle: (fileId: string) => void
-}) {
-  const sections = toggle.count === 1 ? 'section' : 'sections'
-  return (
-    <button
-      type="button"
-      aria-pressed={toggle.shown}
-      title={
-        toggle.shown
-          ? 'Hide the sections of this file you already viewed'
-          : 'Show the sections of this file you already viewed'
-      }
-      onClick={() => {
-        onToggle(toggle.fileId)
-      }}
-    >
-      {toggle.shown ? 'Hide' : 'Show'} {toggle.count} viewed {sections}
-    </button>
   )
 }

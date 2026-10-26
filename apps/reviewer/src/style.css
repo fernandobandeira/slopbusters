@@ -1016,6 +1016,37 @@ pre {
   padding: 12px 4px;
   color: var(--success);
 }
+.transfer-symbol {
+  color: var(--foreground);
+}
+.transfer-ends {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+.transfer-end {
+  min-width: 0;
+  margin: 0;
+}
+.transfer-end figcaption {
+  font-size: 10px;
+}
+.transfer-end pre {
+  padding: 6px 4px;
+  color: var(--muted-foreground);
+}
+.transfer-end pre > [data-transferred] {
+  color: var(--success);
+}
+.transfer-line-number {
+  display: inline-block;
+  min-width: 4ch;
+  margin-right: 1.5ch;
+  text-align: right;
+  color: var(--muted-foreground);
+  user-select: none;
+}
 .viewer {
   flex: 1;
   min-height: 0;

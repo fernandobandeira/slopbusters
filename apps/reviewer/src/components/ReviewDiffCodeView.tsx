@@ -46,6 +46,21 @@ const REVIEW_DIFF_CSS = `
   border-radius: 2px;
 }
 
+[data-unmodified-lines] {
+  cursor: pointer;
+}
+
+[data-enclosing-symbol] {
+  color: var(--code-foreground);
+  font-family: var(--diffs-font-family, ui-monospace, monospace);
+}
+
+[data-enclosing-symbol]::before {
+  content: '·';
+  margin-inline: 0.75ch;
+  color: var(--muted-foreground, currentColor);
+}
+
 [data-diff-span][data-whitespace-only] {
   background-color: transparent !important;
 }

@@ -21,10 +21,14 @@ export const destinationStyles = `
 }
 `
 
-export function highlightDestination(root: ShadowRoot, target?: NavigationTarget) {
+export function highlightDestination(
+  root: ShadowRoot,
+  target?: NavigationTarget,
+  side: 'old' | 'new' = 'new',
+) {
   for (const row of root.querySelectorAll<HTMLElement>('[data-line]')) {
-    const line = Number(row.dataset.line)
-    const focused = Boolean(target && line >= target.line && line <= target.endLine)
+    const line = rowLine(row, side)
+    const focused = Boolean(target && line && line >= target.line && line <= target.endLine)
     row.toggleAttribute('data-source-destination', focused)
     for (const token of row.querySelectorAll<HTMLElement>('[data-char]')) {
       const start = Number(token.dataset.char)
@@ -40,4 +44,23 @@ export function highlightDestination(root: ShadowRoot, target?: NavigationTarget
       )
     }
   }
+}
+
+/**
+ * A row's line number on one side of the source. Plain files have one numbering; in a diff,
+ * deletions and the split deletions column count old lines, and context rows carry the old
+ * number as their alternate.
+ */
+function rowLine(row: HTMLElement, side: 'old' | 'new') {
+  const type = row.dataset.lineType
+  if (!type) return Number(row.dataset.line)
+  const column = row.closest('[data-code]')
+  const old = column?.hasAttribute('data-deletions')
+    ? true
+    : column?.hasAttribute('data-additions')
+      ? false
+      : type.includes('deletion')
+  if (type === 'context' && !column?.hasAttribute('data-deletions'))
+    return Number(side === 'old' ? row.dataset.altLine : row.dataset.line)
+  return old === (side === 'old') ? Number(row.dataset.line) : undefined
 }

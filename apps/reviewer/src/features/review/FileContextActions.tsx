@@ -1,4 +1,4 @@
-import type { Dispatch, ReactNode, SetStateAction } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import type { useFileContext } from './diff/useFileContext'
 import { CONTEXT_STEP, MAX_CONTEXT } from './diff/displayContext'
 
@@ -20,7 +20,6 @@ export function FileContextActions({
   setContextLines,
   viewed,
   toggleFile,
-  children,
 }: ContextProps & {
   fileId: string
   path: string
@@ -29,11 +28,9 @@ export function FileContextActions({
   onCollapseLines: (fileId: string) => void
   viewed: boolean
   toggleFile: (fileId: string) => void
-  children?: ReactNode
 }) {
   return (
     <div className="file-context-actions">
-      {children}
       {expanded && (
         <button
           type="button"

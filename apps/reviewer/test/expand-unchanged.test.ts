@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { required } from './fixtures/bob'
 import { sectionPull } from './fixtures/sections'
 import { diffItems } from '../src/lib/diffItems'
+import { reviewItems } from '../src/features/review/reviewUpdates'
+import { enclosingSymbol } from '../src/features/review/diff/separatorSymbols'
 import type { PullFileContent } from '../shared/domain/fileContent'
 import type { PullRequest } from '../shared/domain/types'
 
@@ -50,5 +52,40 @@ describe('expanding unchanged lines in place', () => {
     const all = required(pull.files[0]).hunks.map((hunk) => hunk.id)
     const stale = after.replace('line6 = 6', 'line6 = 60')
     expect(fileDiff(pull, all, contents(pull, before, stale)).isPartial).toBe(true)
+  })
+
+  it('reveals other groups’ edits so every gap expands, without counting them as this group’s', () => {
+    const pull = sectionPull(before, after)
+    const file = required(pull.files[0])
+    const first = required(file.hunks[0]).id
+    const group = { ...required(pull.groups[0]), hunkIds: [first] }
+    const display = reviewItems({
+      pull,
+      displayPull: pull,
+      group,
+      contents: contents(pull, before, after),
+      full: false,
+      revealed: () => true,
+    })
+    const item = required(display.items[0])
+    if (item.type !== 'diff') throw new Error('Expected a diff')
+    expect(item.fileDiff.isPartial).toBe(false)
+    expect(item.fileDiff.hunks).toHaveLength(2)
+    expect(display.sections.get(item.id)).toEqual([first])
+  })
+})
+
+describe('enclosing symbol labels', () => {
+  const symbols = [
+    { name: 'BalanceCardService', kind: 'class' as const, line: 10, endLine: 400 },
+    { name: 'BalanceCardService.topUp', kind: 'method' as const, line: 300, endLine: 350 },
+    { name: 'helper', kind: 'function' as const, line: 500, endLine: 510 },
+  ]
+
+  it('names the innermost symbol without repeating a qualified parent', () => {
+    expect(enclosingSymbol(symbols, 329)).toBe('BalanceCardService.topUp')
+    expect(enclosingSymbol(symbols, 20)).toBe('BalanceCardService')
+    expect(enclosingSymbol(symbols, 505)).toBe('helper')
+    expect(enclosingSymbol(symbols, 450)).toBeUndefined()
   })
 })
