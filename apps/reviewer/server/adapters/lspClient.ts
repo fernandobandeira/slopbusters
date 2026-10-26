@@ -9,7 +9,7 @@ import {
   createMessageConnection,
   ResponseError,
   type MessageConnection,
-} from 'vscode-jsonrpc/node.js'
+} from 'vscode-jsonrpc/node'
 import type { LanguageServerConfig } from '../../shared/domain/languageServers'
 import type {
   NavigationRequest,

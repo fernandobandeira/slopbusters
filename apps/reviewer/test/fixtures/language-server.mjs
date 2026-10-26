@@ -1,5 +1,5 @@
 /* global process */
-import { createMessageConnection } from 'vscode-jsonrpc/node.js'
+import { createMessageConnection } from 'vscode-jsonrpc/node'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { join } from 'node:path'
