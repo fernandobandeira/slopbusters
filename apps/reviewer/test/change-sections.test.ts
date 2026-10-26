@@ -19,15 +19,15 @@ describe('canonical change sections', () => {
     const file = required(pull.files[0])
     expect(parsePatch(`--- a/shared.ts\n+++ b/shared.ts\n${file.patch}`)[0]?.hunks).toHaveLength(1)
     expect(file.hunks).toHaveLength(2)
-    const groups = validateGrouping(pull, {
-      groups: file.hunks.map((hunk, index) => ({
-        title: `Behavior ${index}`,
-        priority: Priority.normal,
-        reason: '',
-        hunkIds: [hunk.id],
-      })),
-    })
-    expect(groups.map((group) => group.fileIds)).toEqual([[file.id], [file.id]])
+    // Grouping keeps one Git hunk together; review updates can still show its sections apart.
+    const groups = file.hunks.map((hunk, index) => ({
+      id: `group-${index}`,
+      title: `Behavior ${index}`,
+      priority: Priority.normal,
+      reason: '',
+      hunkIds: [hunk.id],
+      fileIds: [file.id],
+    }))
     for (const [index, group] of groups.entries()) {
       expect(diffItems(pull, group)).toHaveLength(1)
       const text = file.hunks
@@ -45,6 +45,22 @@ describe('canonical change sections', () => {
     expect(combined.fileDiff.hunks).toHaveLength(1)
     expect(combined.fileDiff.hunks[0]?.additionCount).toBe(7)
     expect(combined.fileDiff.hunks[0]?.deletionCount).toBe(7)
+  })
+
+  it('keeps the sections of one Git hunk in the same group', () => {
+    const pull = sectionPull(base, both)
+    const file = required(pull.files[0])
+    const groups = validateGrouping(pull, {
+      groups: file.hunks.map((hunk, index) => ({
+        title: `Behavior ${index}`,
+        priority: Priority.normal,
+        reason: '',
+        hunkIds: [hunk.id],
+      })),
+    })
+    expect(groups.map((group) => [group.title, group.hunkIds])).toEqual([
+      ['Behavior 0', file.hunks.map((hunk) => hunk.id)],
+    ])
   })
 
   it('splits added paragraphs with correct source coordinates and keeps every edit once', () => {
