@@ -9,6 +9,7 @@ import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
 import { PLANNING_TIMEOUT_MS } from '../../limits'
 import { reviewEvidence } from '../../reviewSnapshot'
+import { transferInstructions } from '../transferPrompt'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { pullName } from '../reviewPrompts'
 import type { PanelJobs } from './panelJobs'
@@ -157,5 +158,5 @@ function metadataPrompt(result: PanelResult, field: MetadataField, items: readon
       ? { question: entry.question, authorAnswer: action.answer }
       : {}),
   }))
-  return `The author of a PR chose changes to its ${field} after a review panel. Write the complete new ${field}: the current text with exactly these changes applied, keeping everything else, its language, structure and formatting. Do not add claims the PR snapshot does not support. Return only the new text.\n\n${untrusted}\n\nPR snapshot:\n${reviewEvidence(result.pull)}\n\nThe current ${field}:\n${JSON.stringify(result.pull[field])}\n\nThe changes to apply:\n${JSON.stringify(plans)}`
+  return `The author of a PR chose changes to its ${field} after a review panel. Write the complete new ${field}: the current text with exactly these changes applied, keeping everything else, its language, structure and formatting. Do not add claims the PR snapshot does not support. Return only the new text.\n\n${untrusted}${transferInstructions(result.pull)}\n\nPR snapshot:\n${reviewEvidence(result.pull)}\n\nThe current ${field}:\n${JSON.stringify(result.pull[field])}\n\nThe changes to apply:\n${JSON.stringify(plans)}`
 }

@@ -1,4 +1,5 @@
 import { reviewEvidence } from '../../reviewSnapshot'
+import { transferInstructions } from '../transferPrompt'
 import { loadReviewSkill } from '../../adapters/reviewSkill'
 import { ownProcedureOnly } from '../reviewPrompts'
 import {
@@ -72,7 +73,7 @@ function repositoryInstructions(repository?: ReviewCheckout): string {
 
 export async function reviewWithLinus(request: ReviewRequest): Promise<LinusAdvice> {
   const { pull, companion, repository } = request
-  const prompt = `${request.skill}\n\n${contract}\n\n${repositoryInstructions(repository)}\n\n${ticketInstructions(request.context)}\n\n${companion ? 'You are the independent companion reviewer. Challenge weak reasoning and inspect possible review boundaries. You need not find a problem or disagree.' : 'You are the independent primary reviewer.'}\n\nPR snapshot:\n${reviewEvidence(pull)}`
+  const prompt = `${request.skill}\n\n${contract}\n\n${repositoryInstructions(repository)}\n\n${ticketInstructions(request.context)}\n\n${companion ? 'You are the independent companion reviewer. Challenge weak reasoning and inspect possible review boundaries. You need not find a problem or disagree.' : 'You are the independent primary reviewer.'}${transferInstructions(pull)}\n\nPR snapshot:\n${reviewEvidence(pull)}`
   return validateAdvice(
     pull,
     await request.turns.run({
@@ -89,7 +90,7 @@ export async function reviewWithLinus(request: ReviewRequest): Promise<LinusAdvi
 
 export async function reconcileWithLinus(request: ReconcileRequest): Promise<LinusAdvice> {
   const { pending, repository } = request
-  const prompt = `${request.skill}\n\n${contract}\n\n${repositoryInstructions(repository)}\n\n${ticketInstructions(pending.context)}\n\nReconcile the independent reviews below against the original snapshot. Choose the recommendation best supported by evidence, not by counting votes. Discard unsupported assertions. Preserve material unresolved disagreements in disagreements. If a reviewer failed, disclose the single-model review in limitations. Reconcile only findings within the title, description, and PR-boundary scope; discard code-review advice even if both reviewers agree. Rank the useful findings and compose at most three guided turns, without concatenating the two reviewers’ lists. Keep full wording and split plans in the structured fields. Be dry and precise, never insulting.\n\nPR snapshot:\n${reviewEvidence(pending.pull)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
+  const prompt = `${request.skill}\n\n${contract}\n\n${repositoryInstructions(repository)}\n\n${ticketInstructions(pending.context)}\n\nReconcile the independent reviews below against the original snapshot. Choose the recommendation best supported by evidence, not by counting votes. Discard unsupported assertions. Preserve material unresolved disagreements in disagreements. If a reviewer failed, disclose the single-model review in limitations. Reconcile only findings within the title, description, and PR-boundary scope; discard code-review advice even if both reviewers agree. Rank the useful findings and compose at most three guided turns, without concatenating the two reviewers’ lists. Keep full wording and split plans in the structured fields. Be dry and precise, never insulting.${transferInstructions(pending.pull)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
   const advice = validateAdvice(
     pending.pull,
     await request.turns.run({

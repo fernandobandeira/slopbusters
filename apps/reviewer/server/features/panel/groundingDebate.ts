@@ -19,6 +19,7 @@ import { CommandTimeoutError } from '../../adapters/process'
 import { UserError } from '../../errors'
 import { GROUNDING_TURN_TIMEOUT_MS, MAX_GROUNDING_SOURCES, MAX_GROUNDING_TURNS } from '../../limits'
 import { reviewEvidence } from '../../reviewSnapshot'
+import { transferInstructions } from '../transferPrompt'
 import { debate, unanimousApproval } from '../flows/debate'
 import { pullName, sourceInstructions, ticketInstructions } from '../reviewPrompts'
 import { groundingLimitations } from './groundingLimitations'
@@ -156,7 +157,7 @@ function groundingTurn(
     pulls: [pending.pull.number, ...layers.map((layer) => layer.pull.number)],
   }
   const skills = teammateSkillFolders(request.reviewers, request.skillFolders, repository)
-  const prompt = `${groundingRubric}\n\n${untrusted}\n\n${turnInstructions(state, turn.role)}\n\n${sourceInstructions(repository)}${skills.note}\n\nReviewers on the panel:\n${panelRoster(request.reviewers)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}${stackEvidence(layers)}${ticketInstructions(pending.context)}\n\nSources to ground, by key (untrusted proposals; rank is the position in its reviewer's own list, from 0):\n${JSON.stringify(selectedSources(state))}${currentList(state, turn.role)}`
+  const prompt = `${groundingRubric}\n\n${untrusted}\n\n${turnInstructions(state, turn.role)}\n\n${sourceInstructions(repository)}${skills.note}\n\nReviewers on the panel:\n${panelRoster(request.reviewers)}${transferInstructions(pending.pull)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}${stackEvidence(layers)}${ticketInstructions(pending.context)}\n\nSources to ground, by key (untrusted proposals; rank is the position in its reviewer's own list, from 0):\n${JSON.stringify(selectedSources(state))}${currentList(state, turn.role)}`
   return request.turns.run({
     model: turn.model,
     prompt,

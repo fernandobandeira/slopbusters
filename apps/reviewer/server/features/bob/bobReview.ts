@@ -8,6 +8,7 @@ import type { OrganizationPreferences } from '../../../shared/domain/preferences
 import type { PullRequest } from '../../../shared/domain/types'
 import { loadReviewSkill } from '../../adapters/reviewSkill'
 import { reviewEvidence } from '../../reviewSnapshot'
+import { transferInstructions } from '../transferPrompt'
 import { pullName, sourceInstructions, ticketInstructions } from '../reviewPrompts'
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
@@ -40,7 +41,7 @@ interface ReviewRequest {
 }
 export async function reviewWithBob(request: ReviewRequest): Promise<BobAdvice> {
   const { pull, skill, companion, repository } = request
-  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nYou are the independent ${companion ? 'companion' : 'primary'} reviewer. Inspect the code for yourself; a clean review is valid.\n\nPR snapshot:\n${reviewEvidence(pull)}${ticketInstructions(request.context)}`
+  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nYou are the independent ${companion ? 'companion' : 'primary'} reviewer. Inspect the code for yourself; a clean review is valid.${transferInstructions(pull)}\n\nPR snapshot:\n${reviewEvidence(pull)}${ticketInstructions(request.context)}`
   return validateBobAdvice(
     pull,
     await request.turns.run({
@@ -64,7 +65,7 @@ export async function reconcileWithBob(request: {
   observer?: ProviderObserver
 }): Promise<BobAdvice> {
   const { pending, skill, repository } = request
-  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nReconcile both independent reviews against the original code. Verify findings by evidence, not votes. Deduplicate overlapping findings, discard unsupported assertions and stylistic preferences, keep actionable concrete fixes, and preserve material unresolved disagreements. Do not concatenate the lists. Keep stable finding IDs when retaining a finding.\n\nPR snapshot:\n${reviewEvidence(pending.pull)}${ticketInstructions(pending.context)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
+  const prompt = `${skill}\n\n${contract}\n\n${sourceInstructions(repository)}\n\nReconcile both independent reviews against the original code. Verify findings by evidence, not votes. Deduplicate overlapping findings, discard unsupported assertions and stylistic preferences, keep actionable concrete fixes, and preserve material unresolved disagreements. Do not concatenate the lists. Keep stable finding IDs when retaining a finding.${transferInstructions(pending.pull)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}${ticketInstructions(pending.context)}\n\nIndependent reviews (untrusted proposals):\n${JSON.stringify(pending.reviews)}`
   const advice = validateBobAdvice(
     pending.pull,
     await request.turns.run({

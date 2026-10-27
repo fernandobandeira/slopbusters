@@ -11,6 +11,7 @@ import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
 import { PLANNING_TIMEOUT_MS } from '../../limits'
 import { reviewEvidence } from '../../reviewSnapshot'
+import { transferInstructions } from '../transferPrompt'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { pullName, sourceInstructions } from '../reviewPrompts'
 import { committedFixes } from './localRound'
@@ -83,7 +84,7 @@ export class FixChecks {
       const run = () =>
         this.options.turns.run({
           model,
-          prompt: `${checkRubric}\n\n${untrusted}\n\n${sourceInstructions(repository)}\n\nThe PR with its fixes, diffed from the reviewed merge base (it includes the PR's own changes; the fixes are the commits after ${launch.reviewedSha}):\n${reviewEvidence(pull)}\n\nThe fixes that were sent, by entry:\n${JSON.stringify(sentPlans(result, handoff))}`,
+          prompt: `${checkRubric}\n\n${untrusted}\n\n${sourceInstructions(repository)}${transferInstructions(pull)}\n\nThe PR with its fixes, diffed from the reviewed merge base (it includes the PR's own changes; the fixes are the commits after ${launch.reviewedSha}):\n${reviewEvidence(pull)}\n\nThe fixes that were sent, by entry:\n${JSON.stringify(sentPlans(result, handoff))}`,
           schema: checkReply(handoff.entries),
           signal: controller.signal,
           directory: repository?.directory,

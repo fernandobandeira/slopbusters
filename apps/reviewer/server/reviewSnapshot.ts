@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { PullRequest } from '../shared/domain/types'
+import { transferEvidence, transferLines } from './features/transferPrompt'
 
 export function pullFingerprint(pull: PullRequest): string {
   return createHash('sha256')
@@ -16,7 +17,9 @@ export function pullFingerprint(pull: PullRequest): string {
     .digest('hex')
 }
 
+/** The PR as a model pass reads it; moved and copied blocks are marked as `transferInstructions` explains. */
 export function reviewEvidence(pull: PullRequest): string {
+  const lines = transferLines(pull)
   return JSON.stringify({
     url: pull.url,
     title: pull.title,
@@ -33,14 +36,10 @@ export function reviewEvidence(pull: PullRequest): string {
       hunks: file.hunks.map((hunk) => ({
         id: hunk.id,
         header: hunk.header,
-        lines: hunk.lines.map(({ kind, text, oldLine, newLine }) => ({
-          kind,
-          text,
-          oldLine,
-          newLine,
-        })),
+        lines: lines(hunk),
       })),
     })),
+    ...(pull.transfers.length ? { transfers: transferEvidence(pull) } : {}),
     warnings: pull.warnings,
   })
 }

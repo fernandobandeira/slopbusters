@@ -21,6 +21,7 @@ import {
   PANEL_REVIEW_TIMEOUT_MS,
 } from '../../limits'
 import { reviewEvidence } from '../../reviewSnapshot'
+import { transferInstructions } from '../transferPrompt'
 import { pullName, sourceInstructions, ticketInstructions } from '../reviewPrompts'
 
 /** Where a teammate's skill folder is copied in the reviewer's working directory. */
@@ -196,7 +197,7 @@ export async function reviewAsPanelist(
 ): Promise<SeatReview> {
   const { member, pull, repository } = request
   const layers = request.layers ?? []
-  const prompt = `${member.instructions}\n\n${reviewerContract(member, layers)}\n\n${sourceInstructions(repository)}${skillFolder(member, repository)}\n\nPR snapshot:\n${reviewEvidence(pull)}${stackEvidence(layers)}${earlierComments(request.history)}${ticketInstructions(request.context)}`
+  const prompt = `${member.instructions}\n\n${reviewerContract(member, layers)}\n\n${sourceInstructions(repository)}${skillFolder(member, repository)}${transferInstructions(pull)}\n\nPR snapshot:\n${reviewEvidence(pull)}${stackEvidence(layers)}${earlierComments(request.history)}${ticketInstructions(request.context)}`
   const include: IncludedFolder[] = member.directory
     ? [{ directory: member.directory, as: SKILL_FOLDER }]
     : []

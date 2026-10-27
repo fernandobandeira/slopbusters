@@ -11,6 +11,7 @@ import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
 import { PLANNING_TIMEOUT_MS } from '../../limits'
 import { reviewEvidence } from '../../reviewSnapshot'
+import { transferInstructions } from '../transferPrompt'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { pullName, sourceInstructions } from '../reviewPrompts'
 import { untrusted } from './panelReview'
@@ -86,7 +87,7 @@ export class PanelGates {
       const sources = (result.grounding?.candidates ?? [])
         .filter((candidate) => entry.sources.includes(candidate.key))
         .map(({ key, seat, finding }) => ({ key, reviewer: seat, finding }))
-      const prompt = `${planningRubric}\n\n${untrusted}\n\n${sourceInstructions(repository)}\n\nPR snapshot:\n${reviewEvidence(result.pull)}\n\nThe grounded finding:\n${JSON.stringify(entry)}\n\nIts sources (untrusted proposals):\n${JSON.stringify(sources)}${answer ? `\n\nThe author's answer to "${entry.question ?? ''}":\n${JSON.stringify(answer)}` : ''}`
+      const prompt = `${planningRubric}\n\n${untrusted}\n\n${sourceInstructions(repository)}${transferInstructions(result.pull)}\n\nPR snapshot:\n${reviewEvidence(result.pull)}\n\nThe grounded finding:\n${JSON.stringify(entry)}\n\nIts sources (untrusted proposals):\n${JSON.stringify(sources)}${answer ? `\n\nThe author's answer to "${entry.question ?? ''}":\n${JSON.stringify(answer)}` : ''}`
       const run = (observer?: ProviderObserver) =>
         this.options.turns.run({
           model,
