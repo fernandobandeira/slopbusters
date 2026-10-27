@@ -2,17 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve, sep } from 'node:path'
-import * as Effect from 'effect/Effect'
-import * as Option from 'effect/Option'
-import * as Stream from 'effect/Stream'
 import type { z } from 'zod'
 import {
   CommandId,
   MessageId,
   ProjectId,
   ProviderInstanceId,
-  RunId,
-  ThreadId,
   type OrchestrationV2Command,
   type ProjectMutation,
   type RuntimeMode,
@@ -23,13 +18,14 @@ import { Provider } from '../../../shared/domain/types'
 import { logError, UserError } from '../../errors'
 import {
   MAX_STRUCTURED_FOLLOW_UPS,
+  MAX_T3_ENGINE_TURN_REATTACHES,
   PROVIDER_TIMEOUT_MS,
   T3_ENGINE_TURN_MARGIN_MS,
   T3_ENGINE_TURN_START_TIMEOUT_MS,
 } from '../../limits'
 import { copyForInspection, listInspectionFiles } from '../inspectionCopy'
 import { CommandTimeoutError } from '../process'
-import type { EngineClient, EngineConnection } from './engineConnection'
+import { EngineDisconnectedError, type EngineConnection } from './engineConnection'
 import {
   correctionPrompt,
   followUpPrompt,
@@ -38,7 +34,8 @@ import {
   type InspectionFiles,
 } from './structuredOutput'
 import { firstMessage } from './firstMessage'
-import { TurnFollower, type TurnOutcome } from './turnFollower'
+import { commandBase, followTurn, type FollowedTurn, type TurnStart } from './followTurn'
+import { TurnFollower } from './turnFollower'
 
 export interface StructuredTurnRequest<T> {
   readonly model: OrganizationPreferences
@@ -109,8 +106,6 @@ interface Workspace {
   readonly files?: InspectionFiles
   release(): Promise<void>
 }
-
-type FollowedTurn = TurnOutcome | { readonly status: 'cancelled' | 'timeout' | 'unstarted' }
 
 /**
  * Structured turns on a T3 Code engine. Each run gets its own project in a disposable copy of the
@@ -206,7 +201,6 @@ export class EngineTurns implements StructuredTurns {
     text: string,
     { request, deadline }: { request: StructuredTurnRequest<T>; deadline: number },
   ): Promise<readonly string[]> {
-    const remaining = Math.max(0, deadline - Date.now())
     const messageId = randomUUID()
     const follower = new TurnFollower(thread.id, messageId, thread.answered, request.observer)
     const start: TurnStart = {
@@ -219,17 +213,7 @@ export class EngineTurns implements StructuredTurns {
       modelSelection: thread.modelSelection,
       dispatchMode: { type: 'start_immediately' },
     }
-    const outcome = await this.connection.run(
-      (client) =>
-        followTurn(client, {
-          start,
-          follower,
-          signal: request.signal,
-          timeoutMs: remaining,
-          startTimeoutMs: Math.min(this.startTimeoutMs, remaining),
-        }),
-      remaining + T3_ENGINE_TURN_MARGIN_MS,
-    )
+    const outcome = await this.follow({ start, follower, signal: request.signal, deadline })
     const agent = agentName(request.model)
     switch (outcome.status) {
       case 'completed':
@@ -246,6 +230,44 @@ export class EngineTurns implements StructuredTurns {
         throw new TurnNotStartedError(
           `${agent} never started this turn: T3 Code accepted it but opened no session within ${String(Math.round(this.startTimeoutMs / 60_000))} minutes. Restart Slopbusters, then retry.`,
         )
+    }
+  }
+
+  /**
+   * Follow the turn until it settles. A dropped socket, as when the computer sleeps, does not stop
+   * the turn in the engine, so it is followed again on a new socket from a fresh snapshot. The
+   * prompt goes out again, with the same command id, only if that snapshot does not hold it.
+   */
+  private async follow({
+    start,
+    follower,
+    signal,
+    deadline,
+  }: {
+    start: TurnStart
+    follower: TurnFollower
+    signal: AbortSignal
+    deadline: number
+  }): Promise<FollowedTurn> {
+    for (let attempt = 0; ; attempt++) {
+      const remaining = Math.max(0, deadline - Date.now())
+      try {
+        return await this.connection.run(
+          (client) =>
+            followTurn(client, {
+              start,
+              follower,
+              signal,
+              timeoutMs: remaining,
+              startTimeoutMs: Math.min(this.startTimeoutMs, remaining),
+            }),
+          remaining + T3_ENGINE_TURN_MARGIN_MS,
+        )
+      } catch (error) {
+        if (!(error instanceof EngineDisconnectedError) || attempt >= MAX_T3_ENGINE_TURN_REATTACHES)
+          throw error
+        logError('Following a structured turn again after T3 Code lost the connection', error)
+      }
     }
   }
 
@@ -353,79 +375,6 @@ export class EngineTurns implements StructuredTurns {
   }
 }
 
-/**
- * Subscribe to the thread, send the prompt once the snapshot arrives, and answer what the agent
- * asks until the turn ends. Cancelling, running out of time, or a turn the provider never picks
- * up within `startTimeoutMs` interrupts the turn first.
- */
-function followTurn(
-  client: EngineClient,
-  input: {
-    start: TurnStart
-    follower: TurnFollower
-    signal: AbortSignal
-    timeoutMs: number
-    startTimeoutMs: number
-  },
-): Effect.Effect<FollowedTurn, unknown> {
-  const { start, follower } = input
-  const dispatch = (command: OrchestrationV2Command) =>
-    client['orchestration.dispatchCommand'](command)
-  const followed = client['orchestration.subscribeThread']({ threadId: start.threadId }).pipe(
-    Stream.mapEffect((item) => {
-      const step = follower.receive(item)
-      const commands = [...(step.start ? [start] : []), ...step.responses]
-      return Effect.forEach(commands, dispatch, { discard: true }).pipe(Effect.as(step.outcome))
-    }),
-    Stream.filter((outcome): outcome is TurnOutcome => outcome !== undefined),
-    Stream.runHead,
-    Effect.map(
-      Option.getOrElse((): FollowedTurn => ({
-        status: 'failed',
-        error: 'T3 Code closed the thread.',
-      })),
-    ),
-  )
-  const unstarted = Effect.sleep(input.startTimeoutMs).pipe(
-    Effect.flatMap(() => (follower.began ? Effect.never : Effect.succeed('unstarted' as const))),
-  )
-  const stopped = Effect.raceAll([
-    whenAborted(input.signal),
-    Effect.sleep(input.timeoutMs).pipe(Effect.as('timeout' as const)),
-    unstarted,
-  ]).pipe(
-    Effect.flatMap((status) => {
-      // A turn the engine has not made a run for yet has nothing to interrupt.
-      const runId = follower.run
-      const interrupt = runId
-        ? dispatch({
-            type: 'run.interrupt',
-            ...commandBase(start.threadId),
-            runId: RunId.make(runId),
-          }).pipe(Effect.ignore)
-        : Effect.void
-      return interrupt.pipe(Effect.as<FollowedTurn>({ status }))
-    }),
-  )
-  return Effect.raceFirst(followed, stopped)
-}
-
-function whenAborted(signal: AbortSignal): Effect.Effect<'cancelled'> {
-  return Effect.callback<'cancelled'>((resume) => {
-    const abort = () => {
-      resume(Effect.succeed('cancelled'))
-    }
-    if (signal.aborted) {
-      abort()
-      return
-    }
-    signal.addEventListener('abort', abort, { once: true })
-    return Effect.sync(() => {
-      signal.removeEventListener('abort', abort)
-    })
-  })
-}
-
 /** Copy an included folder to its place inside the working directory, never outside it. */
 async function copyIncluded(folder: IncludedFolder, workspaceRoot: string, signal: AbortSignal) {
   const destination = resolve(workspaceRoot, folder.as)
@@ -435,14 +384,8 @@ async function copyIncluded(folder: IncludedFolder, workspaceRoot: string, signa
   await copyForInspection(folder.directory, destination, signal)
 }
 
-type TurnStart = Extract<OrchestrationV2Command, { type: 'message.dispatch' }>
-
 /** Threads and messages Slopbusters creates are the user's, sent from a T3 Code client. */
 const CREATED_BY_USER = { createdBy: 'user', creationSource: 'web' } as const
-
-function commandBase(threadId: string) {
-  return { commandId: CommandId.make(randomUUID()), threadId: ThreadId.make(threadId) }
-}
 
 /**
  * Claude asks before every edit and every command it does not consider read-only, and each ask is

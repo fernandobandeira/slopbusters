@@ -63,6 +63,11 @@ export const T3_ENGINE_TURN_MARGIN_MS = 30_000
  * still not running by then never will be, so it fails now instead of at its full timeout.
  */
 export const T3_ENGINE_TURN_START_TIMEOUT_MS = 2 * 60_000
+/**
+ * Times a structured turn follows its thread again on a new socket after the old one drops, as
+ * when the computer sleeps through the ping timeout. The turn keeps running in the engine meanwhile.
+ */
+export const MAX_T3_ENGINE_TURN_REATTACHES = 3
 /** Room left under the engine's message limit for anything it adds to a turn's input. */
 export const T3_ENGINE_TURN_INPUT_MARGIN_CHARS = 4000
 /** Copying a review checkout for one structured turn; a clone on APFS takes moments. */

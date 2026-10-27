@@ -20,7 +20,11 @@ export type TurnOutcome =
   | { readonly status: 'interrupted' }
 
 export interface TurnStep {
-  /** True once, on the first snapshot: the caller sends the turn's prompt then. */
+  /**
+   * True on a snapshot that does not hold the turn's prompt yet: the caller sends it then. A
+   * snapshot after a dropped socket already holds a prompt the engine received, so it is not sent
+   * twice.
+   */
   readonly start: boolean
   /** Commands that keep the turn moving without a human: declined approvals, answered questions. */
   readonly responses: readonly OrchestrationV2Command[]
@@ -86,10 +90,10 @@ export class TurnFollower {
   receive(item: OrchestrationV2ThreadStreamItem): TurnStep {
     let start = false
     if (item.kind === 'snapshot') {
-      start = !this.started
       this.started = true
       this.sequence = item.snapshotSequence
       this.restore(item.projection)
+      start = !this.messages.has(this.messageId)
     } else if (item.kind === 'event' && item.sequence > this.sequence) {
       this.sequence = item.sequence
       const { event } = item

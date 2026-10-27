@@ -1,4 +1,6 @@
+import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Queue from 'effect/Queue'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
@@ -7,7 +9,10 @@ import {
   ProjectMutation,
   type OrchestrationV2ThreadStreamItem,
 } from '@t3tools/contracts'
-import type { EngineClient } from '../../server/adapters/t3Engine/engineConnection'
+import {
+  EngineDisconnectedError,
+  type EngineClient,
+} from '../../server/adapters/t3Engine/engineConnection'
 import type { RunningEngine } from '../../server/adapters/t3Engine/engineLocation'
 import { EngineTurns } from '../../server/adapters/t3Engine/engineTurns'
 
@@ -58,11 +63,16 @@ export function fakeEngine(
   const connection = {
     run: <A, E>(
       operation: (client: EngineClient, engine: RunningEngine) => Effect.Effect<A, E>,
-    ): Promise<A> => Effect.runPromise(Effect.orDie(operation(methods as EngineClient, engine))),
+    ): Promise<A> =>
+      Effect.runPromiseExit(operation(methods as EngineClient, engine)).then((exit) => {
+        if (Exit.isSuccess(exit)) return exit.value
+        throw Cause.squash(exit.cause)
+      }),
   }
   return {
     turns: new EngineTurns(connection, startTimeoutMs),
     commands,
+    thread,
     types: () => commands.map((command) => command.type),
     /** The directory the engine project of the run was created in. */
     workspaceRoots: () =>
@@ -88,10 +98,23 @@ class FakeThread {
   private readonly messages: FakeMessage[] = []
   private readonly runs: { id: string; userMessageId: string; status: string }[] = []
   private push: ((item: Item) => void) | undefined
+  private fail: (() => void) | undefined
+  /** Every later subscription fails at once, as when the engine socket keeps dropping. */
+  unreachable = false
+  subscriptions = 0
 
   subscribe() {
-    return Stream.callback<Item>((queue) =>
+    this.subscriptions += 1
+    return Stream.callback<Item, EngineDisconnectedError>((queue) =>
       Effect.sync(() => {
+        const dropped = () => {
+          Queue.failCauseUnsafe(queue, Cause.fail(new EngineDisconnectedError('ping timeout')))
+        }
+        if (this.unreachable) {
+          dropped()
+          return
+        }
+        this.fail = dropped
         this.push = (item) => {
           Queue.offerUnsafe(queue, item)
         }
@@ -107,6 +130,13 @@ class FakeThread {
         } as unknown as Item)
       }),
     )
+  }
+
+  /** The socket drops: the subscription fails, and later events reach no one until resubscribed. */
+  drop() {
+    this.push = undefined
+    this.fail?.()
+    this.fail = undefined
   }
 
   emit(type: string, payload: Record<string, unknown>) {

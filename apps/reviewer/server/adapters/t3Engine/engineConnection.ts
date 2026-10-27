@@ -6,6 +6,7 @@ import * as RcMap from 'effect/RcMap'
 import * as Schedule from 'effect/Schedule'
 import * as Scope from 'effect/Scope'
 import * as RpcClient from 'effect/rpc/RpcClient'
+import { RpcClientError } from 'effect/rpc/RpcClientError'
 import * as RpcSerialization from 'effect/rpc/RpcSerialization'
 import * as Socket from 'effect/socket/Socket'
 import { z } from 'zod'
@@ -47,6 +48,19 @@ export interface EngineConnectionOptions {
 }
 
 const ticketSchema = z.object({ ticket: z.string().min(1) })
+
+/**
+ * The socket to the engine dropped during a call, as when the computer sleeps past the ping
+ * timeout. The engine and the work it was doing may be fine; the next call opens a new socket.
+ */
+export class EngineDisconnectedError extends UserError {}
+
+const SOCKET_FAILURES: ReadonlySet<string> = new Set([
+  'SocketReadError',
+  'SocketWriteError',
+  'SocketCloseError',
+  'SocketOpenError',
+])
 
 /**
  * Typed access to a T3 Code engine. Calls share one authenticated WebSocket per engine: it opens
@@ -232,8 +246,19 @@ function engineFailure(cause: Cause.Cause<unknown>): Error {
   logError('T3 Code engine call', Cause.pretty(cause))
   if (error instanceof UserError) return error
   if (Cause.isTimeoutError(error)) return new UserError('T3 Code took too long to respond.')
+  const dropped = socketFailure(error)
+  if (dropped) return new EngineDisconnectedError(`T3 Code lost the connection: ${dropped}`)
   const message = engineMessage(error)
   return new UserError(message ? `T3 Code: ${message}` : 'T3 Code could not complete the request.')
+}
+
+/** What went wrong with the socket, with its cause, such as `ping timeout`, when it has one. */
+function socketFailure(error: unknown): string | undefined {
+  if (!(error instanceof RpcClientError) || !SOCKET_FAILURES.has(error.reason._tag))
+    return undefined
+  const { reason } = error
+  const cause = 'cause' in reason && reason.cause instanceof Error ? reason.cause.message : ''
+  return cause ? `${reason.message} (${cause})` : reason.message
 }
 
 function engineMessage(error: unknown): string | undefined {

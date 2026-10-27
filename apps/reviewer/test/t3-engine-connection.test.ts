@@ -3,10 +3,16 @@ import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
+import * as Socket from 'effect/socket/Socket'
 import * as RpcClient from 'effect/rpc/RpcClient'
+import { RpcClientError } from 'effect/rpc/RpcClientError'
 import * as RpcSerialization from 'effect/rpc/RpcSerialization'
 import { expect, it, vi } from 'vitest'
-import { EngineConnection, type EngineClient } from '../server/adapters/t3Engine/engineConnection'
+import {
+  EngineConnection,
+  EngineDisconnectedError,
+  type EngineClient,
+} from '../server/adapters/t3Engine/engineConnection'
 import type { RunningEngine } from '../server/adapters/t3Engine/engineLocation'
 import { UserError } from '../server/errors'
 
@@ -24,6 +30,8 @@ interface FakeSocket {
   open: boolean
   /** The engine drops the socket, as when it restarts. */
   drop(): Promise<void>
+  /** The socket fails the calls waiting on it with `reason`, as the RPC client does on a ping timeout. */
+  fail(reason: Socket.SocketReadError): Promise<void>
 }
 
 /**
@@ -40,6 +48,7 @@ function fakeEngine() {
         Effect.gen(function* () {
           const hooks = yield* RpcClient.ConnectionHooks
           const scope = yield* Effect.scope
+          const clients = new Set<number>()
           const socket: FakeSocket = {
             url,
             requests: [],
@@ -47,6 +56,14 @@ function fakeEngine() {
             drop: () => {
               socket.open = false
               return Effect.runPromise(hooks.onDisconnect)
+            },
+            fail: async (reason) => {
+              const error = new RpcClientError({ reason })
+              for (const clientId of clients)
+                await Effect.runPromise(
+                  writeResponse(clientId, { _tag: 'ClientProtocolError', error }),
+                )
+              await socket.drop()
             },
           }
           sockets.push(socket)
@@ -58,6 +75,7 @@ function fakeEngine() {
           )
           return {
             send: (clientId, message) => {
+              clients.add(clientId)
               if (message._tag !== 'Request') return Effect.void
               socket.requests.push(message.tag)
               if (message.tag !== 'server.probe') return Effect.void
@@ -137,6 +155,27 @@ it('opens a new socket with a new ticket after the socket closes', async () => {
   expect(ticket).toHaveBeenCalledTimes(2)
   expect(fake.sockets[1]?.url).toContain('wsTicket=ticket-2')
   expect(fake.sockets[1]?.requests).toEqual(['server.probe'])
+  await connection.close()
+})
+
+it('reports a socket that drops during a call as a lost connection, with its cause', async () => {
+  const fake = fakeEngine()
+  const { connection } = connectionTo(fake)
+  const pending = connection.run(subscribeShell)
+  await vi.waitFor(() => {
+    expect(fake.sockets[0]?.requests).toEqual(['orchestration.subscribeShell'])
+  })
+
+  await fake.sockets[0]?.fail(new Socket.SocketReadError({ cause: new Error('ping timeout') }))
+
+  const error: unknown = await pending.catch((caught: unknown) => caught)
+  expect(error).toBeInstanceOf(EngineDisconnectedError)
+  expect(error).toHaveProperty(
+    'message',
+    'T3 Code lost the connection: An error occurred during Read (ping timeout)',
+  )
+  await connection.run(probe)
+  expect(fake.sockets).toHaveLength(2)
   await connection.close()
 })
 
