@@ -5,7 +5,8 @@ import { hardenedGit } from '../../adapters/git'
 import type { LocalSourceRepository } from '../../adapters/sourceRepository'
 import { UserError } from '../../errors'
 import { MAX_GIT_OUTPUT_BYTES, MAX_WORKSPACE_STATUS_OUTPUT_BYTES } from '../../limits'
-import { detectTransfers, fileGroups, parseFile } from '../diff'
+import { fileGroups, parseFile } from '../diff'
+import { detectTransfers } from '../transfers'
 import { loadOriginals } from '../pulls/originals'
 
 export interface LocalSources {

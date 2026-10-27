@@ -19,7 +19,6 @@ import type { CodeViewHandle } from '@pierre/diffs/react'
 import { Link } from 'react-router'
 
 import { Check, Copy, MessageSquare, ArrowLeft } from 'lucide-react'
-import { CodeTransfers } from './CodeTransfers'
 import { Button } from '~/components/ui/button'
 
 import { message } from '../../lib/api'
@@ -28,11 +27,8 @@ import { SourceContextDialog } from '../source-navigation/SourceContextDialog'
 import { SymbolContextMenu, type SymbolMenuSelection } from '../source-navigation/SymbolContextMenu'
 
 import type { NavigationRequest } from '../../../shared/domain/navigation'
-import {
-  annotateDiscussions,
-  discussionGroup,
-  type LineDiscussion,
-} from './discussions/discussions'
+import { annotateDiscussions, discussionGroup } from './discussions/discussions'
+import { annotateTransfers, type LineNote } from './transferNotes'
 
 import { DiscussionsTray } from './discussions/DiscussionsTray'
 import { CompactReviewHeader, ReviewPullDetails } from './CompactReviewHeader'
@@ -142,7 +138,7 @@ export function ReviewWorkspace({
   const [discussionTray, setDiscussionTray] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const viewerRef = useRef<CodeViewHandle<LineDiscussion, undefined>>(null)
+  const viewerRef = useRef<CodeViewHandle<LineNote, undefined>>(null)
   const focus = useReviewFocus(pull, {
     searchParams,
     setSearchParams,
@@ -199,18 +195,17 @@ export function ReviewWorkspace({
   const copied = clipboard.state === 'copied'
   const [descriptionOpen, setDescriptionOpen] = useState(false)
   const hasFeedback = draft.comments.length > 0 || draft.summary.trim().length > 0
-  const annotated = useMemo(
-    () =>
-      annotateDiscussions({
-        items,
-        pull,
-        discussions,
-        comments: draft.comments,
-        editor,
-        groupId: selected?.id,
-      }),
-    [items, pull, discussions, draft.comments, editor, selected?.id],
-  )
+  const annotated = useMemo(() => {
+    const discussed = annotateDiscussions({
+      items,
+      pull,
+      discussions,
+      comments: draft.comments,
+      editor,
+      groupId: selected?.id,
+    })
+    return { ...discussed, items: annotateTransfers(discussed.items, pull) }
+  }, [items, pull, discussions, draft.comments, editor, selected?.id])
   useEffect(() => {
     if (!editor) return
     const file = pull.files.find((file) => file.path === editor.path)
@@ -231,13 +226,6 @@ export function ReviewWorkspace({
       setError(message(error))
     }
   }
-  const transfers = pull.transfers.filter((transfer) =>
-    selected?.fileIds.some(
-      (id) =>
-        pull.files.find((file) => file.id === id)?.path === transfer.toPath ||
-        pull.files.find((file) => file.id === id)?.path === transfer.fromPath,
-    ),
-  )
 
   async function copyFeedback() {
     if (!(await clipboard.copy(exportFeedback(pull, draft)))) setExportOpen(true)
@@ -495,12 +483,6 @@ export function ReviewWorkspace({
             >
               {selected ? (
                 <>
-                  <CodeTransfers
-                    pull={pull}
-                    transfers={transfers}
-                    contents={fileContext.contents}
-                    load={fileContext.load}
-                  />
                   {items.length ? (
                     <ReviewDiffViewer
                       key={selected.id}

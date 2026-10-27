@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import { z } from 'zod'
-import { parseFile, detectTransfers, fileGroups } from '../diff'
+import { parseFile, fileGroups } from '../diff'
+import { detectTransfers } from '../transfers'
 import { buildGitHubReview } from '../../../shared/domain/review'
 import {
   ReviewEvent,

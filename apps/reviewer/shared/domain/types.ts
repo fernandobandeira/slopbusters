@@ -64,16 +64,36 @@ export interface ChangeGroup {
   hunkIds: string[]
   fileIds: string[]
 }
+/** One hunk of edits made inside a moved or copied block, in old/new file coordinates. */
+export interface TransferChange {
+  header: string
+  lines: Pick<DiffLine, 'kind' | 'text' | 'oldLine' | 'newLine'>[]
+}
+/**
+ * A block the PR moved or copied, possibly with small edits. Each end is an inclusive line range
+ * in its own revision: the source in the base, the destination in the head.
+ */
 export interface CodeTransfer {
   id: string
   kind: TransferKind
   fromPath: string
   fromLine: number
+  fromEndLine: number
   toPath: string
   toLine: number
+  toEndLine: number
+  /** Lines in the destination block. */
   lineCount: number
-  destinationLineIds: string[]
+  /** Destination lines that differ from the source, ignoring indentation. 0 when exact. */
+  changedLines: number
+  /** Source and destination match line for line once indentation is ignored. */
+  exact: boolean
+  /** The edits inside the block, ignoring indentation; empty when exact. */
+  changes: TransferChange[]
+  /** Removed patch lines of the source that belong to the block (empty for copies). */
   sourceLineIds: string[]
+  /** Added patch lines of the destination that belong to the block, matched or edited. */
+  destinationLineIds: string[]
   text: string
 }
 export interface PullRequest {

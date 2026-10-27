@@ -1,4 +1,5 @@
-import { useState, type RefObject, type Dispatch, type SetStateAction } from 'react'
+import { useMemo, useState, type RefObject, type Dispatch, type SetStateAction } from 'react'
+import type { CodeViewItem } from '@pierre/diffs'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { ReviewDiffCodeView } from '../../components/ReviewDiffCodeView'
@@ -15,11 +16,10 @@ import type { SyntheticItemKind } from './reviewUpdates'
 import { clickedSymbol } from './diff/codeSymbols'
 import type { SymbolMenuSelection } from '../source-navigation/SymbolContextMenu'
 import type { useFileContext } from './diff/useFileContext'
-import {
-  hasDiscussion,
-  type annotateDiscussions,
-  type LineDiscussion,
-} from './discussions/discussions'
+import { hasDiscussion, type annotateDiscussions } from './discussions/discussions'
+import { transferCounts, transferRows, type LineNote, type LinePlace } from './transferNotes'
+import { TransferCard } from './TransferCard'
+import { markTransferRows } from './diff/transferMarkers'
 import { FileContextActions } from './FileContextActions'
 import { collapseExpandedLines, separatorClick } from './diff/hunkExpansion'
 import { labelSeparators } from './diff/separatorSymbols'
@@ -28,8 +28,10 @@ type Selection = SymbolMenuSelection & { fileId: string; side: DiffSide; path: s
 interface Props {
   pull: PullRequest
   split: boolean
-  viewerRef: RefObject<CodeViewHandle<LineDiscussion, undefined> | null>
-  annotated: ReturnType<typeof annotateDiscussions>
+  viewerRef: RefObject<CodeViewHandle<LineNote, undefined> | null>
+  annotated: Omit<ReturnType<typeof annotateDiscussions>, 'items'> & {
+    items: CodeViewItem<LineNote>[]
+  }
   fileContext: ReturnType<typeof useFileContext>
   contextLines: Map<string, number>
   setContextLines: Dispatch<SetStateAction<Map<string, number>>>
@@ -77,6 +79,16 @@ export function ReviewDiffViewer({
 }: Props) {
   const { themeId, resolvedTheme } = useReviewerTheme()
   const [expandedFiles, setExpandedFiles] = useState(() => new Set<string>())
+  const transferred = useMemo(() => transferRows(pull), [pull])
+  function jumpTo(place: LinePlace) {
+    viewerRef.current?.scrollTo({
+      type: 'line',
+      id: place.fileId,
+      lineNumber: place.line,
+      side: place.side === DiffSide.left ? 'deletions' : 'additions',
+      align: 'center',
+    })
+  }
   function collapseLines(fileId: string) {
     collapseExpandedLines(viewerRef.current, fileId)
     setFileRevealed(fileId, false)
@@ -144,24 +156,35 @@ export function ReviewDiffViewer({
             setContextLines={setContextLines}
             viewed={fileSectionsViewed(file.id)}
             toggleFile={toggleFile}
+            transfers={transferCounts(item.annotations)}
           />
         ) : null
       }}
-      renderAnnotation={(annotation) =>
-        hasDiscussion(annotation.metadata) && (
-          <InlineDiscussion
-            discussion={annotation.metadata}
-            body={body}
-            onBodyChange={setBody}
-            onSave={saveComment}
-            onCancel={() => {
-              setEditor(null)
-            }}
-            onEdit={editComment}
-            onDelete={deleteComment}
-            onReply={postReply}
-            submitted={Boolean(submitted)}
+      renderAnnotation={({ metadata }) =>
+        metadata.kind === 'transfer' ? (
+          <TransferCard
+            pull={pull}
+            note={metadata}
+            contents={fileContext.contents}
+            load={fileContext.load}
+            onJump={jumpTo}
           />
+        ) : (
+          hasDiscussion(metadata) && (
+            <InlineDiscussion
+              discussion={metadata}
+              body={body}
+              onBodyChange={setBody}
+              onSave={saveComment}
+              onCancel={() => {
+                setEditor(null)
+              }}
+              onEdit={editComment}
+              onDelete={deleteComment}
+              onReply={postReply}
+              submitted={Boolean(submitted)}
+            />
+          )
         )
       }
       renderGutterUtility={(getHoveredLine, item) =>
@@ -209,6 +232,7 @@ export function ReviewDiffViewer({
         onPostRender: (node, _instance, _phase, context) => {
           const content = fileContext.contents.get(context.item.id)
           if (content && node.shadowRoot) labelSeparators(node.shadowRoot, content)
+          if (node.shadowRoot) markTransferRows(node.shadowRoot, transferred.get(context.item.id))
           node.onclick = (event) => {
             const action = separatorClick(event)
             if (!action || syntheticItems.has(context.item.id)) return

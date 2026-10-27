@@ -44,16 +44,25 @@ const group = z.object({
   hunkIds: z.array(z.string()),
   fileIds: z.array(z.string()),
 })
+const transferChange = z.object({
+  header: z.string(),
+  lines: z.array(line.pick({ kind: true, text: true, oldLine: true, newLine: true })),
+})
 const transfer = z.object({
   id: z.string(),
   kind: z.enum(TransferKind),
   fromPath: z.string(),
   fromLine: z.number(),
+  fromEndLine: z.number(),
   toPath: z.string(),
   toLine: z.number(),
+  toEndLine: z.number(),
   lineCount: z.number(),
-  destinationLineIds: z.array(z.string()),
+  changedLines: z.number(),
+  exact: z.boolean(),
+  changes: z.array(transferChange),
   sourceLineIds: z.array(z.string()),
+  destinationLineIds: z.array(z.string()),
   text: z.string(),
 })
 export const pullSchema = z.object({

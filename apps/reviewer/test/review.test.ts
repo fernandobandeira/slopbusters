@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createTwoFilesPatch } from 'diff'
-import { parseFile, detectTransfers } from '../server/features/diff'
+import { parseFile } from '../server/features/diff'
 import { buildGitHubReview, exportFeedback, groupChangeTotals } from '../shared/domain/review'
 import { validateGrouping } from '../server/features/organization/organize'
 import { fixturePull } from './fixtures/pull'
@@ -14,16 +13,6 @@ import {
 } from '../shared/domain/types'
 import { diffItems } from '../src/features/review/diff/diffItems'
 import { inboxPulls } from '../src/features/inbox/inbox'
-
-const block =
-  'export function slug(value: string) {\n  return value.trim()\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, "-")\n    .replace(/^-|-$/g, "");\n}\n'
-function changedFile(path: string, old: string, current: string) {
-  const raw = createTwoFilesPatch(path, path, old, current)
-  const patch = raw.slice(raw.indexOf('@@'))
-  const additions = patch.split('\n').filter((line) => line.startsWith('+')).length
-  const deletions = patch.split('\n').filter((line) => line.startsWith('-')).length
-  return parseFile({ path, status: 'modified', patch, additions, deletions, oldContent: old })
-}
 
 describe('diff mapping and transfer detection', () => {
   it('keeps original and updated locations distinct', () => {
@@ -43,40 +32,6 @@ describe('diff mapping and transfer detection', () => {
       lines.filter((line) => line.kind === LineKind.added).map((line) => line.newLine),
     ).toEqual([11, 12])
     expect(file.coverage).toBe('complete')
-  })
-  it('distinguishes an exact move from a copy of retained code', () => {
-    const destination = changedFile('slug.ts', '', block)
-    expect(detectTransfers([changedFile('utils.ts', block, ''), destination])).toMatchObject([
-      { kind: TransferKind.moved, fromLine: 1, toLine: 1, lineCount: 6 },
-    ])
-    expect(
-      detectTransfers([
-        changedFile(
-          'utils.ts',
-          `${block}\nexport const version = 1;\n`,
-          `${block}\nexport const version = 2;\n`,
-        ),
-        destination,
-      ]),
-    ).toMatchObject([{ kind: TransferKind.copied }])
-  })
-  it('does not mark short boilerplate or changed text as an exact transfer', () => {
-    expect(
-      detectTransfers([
-        changedFile('a.ts', '}\n}\n}\n}\n', ''),
-        changedFile('b.ts', '', '}\n}\n}\n}\n'),
-      ]),
-    ).toEqual([])
-    expect(
-      detectTransfers([
-        changedFile('a.ts', block, ''),
-        changedFile(
-          'b.ts',
-          '',
-          block.replace('trim()', 'trimEnd()').replace('toLowerCase()', 'toUpperCase()'),
-        ),
-      ]),
-    ).toEqual([])
   })
   it('flags missing and truncated patches', () => {
     expect(

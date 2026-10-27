@@ -73,6 +73,11 @@ export const MAX_INSPECTION_LISTED_FILES = 2000
 export const MAX_STRUCTURED_ERROR_CHARS = 2000
 /** How much of a persona's review the first message of a T3 Code chat carries over. */
 export const MAX_CHAT_REVIEW_CHARACTERS = 20_000
+/**
+ * Line comparisons one pull request may spend matching moved and copied blocks that were edited on
+ * the way. Past it, only blocks copied or moved unchanged are found.
+ */
+export const MAX_TRANSFER_COMPARISONS = 4_000_000
 export const MAX_DIFF_FILE_CACHE_ENTRIES = 60
 export const MAX_SOURCE_FILE_CACHE_ENTRIES = 1000
 export const MAX_SOURCE_TREE_CACHE_ENTRIES = 20

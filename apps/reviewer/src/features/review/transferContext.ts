@@ -1,26 +1,18 @@
-import type { PullFileContent, RevisionFileContent } from '../../../shared/domain/fileContent'
-import { TransferKind, type CodeTransfer, type PullRequest } from '../../../shared/domain/types'
+import type { PullFileContent } from '../../../shared/domain/fileContent'
+import {
+  DiffSide,
+  TransferKind,
+  type ChangedFile,
+  type CodeTransfer,
+  type PullRequest,
+} from '../../../shared/domain/types'
 import { enclosingSymbol } from './diff/separatorSymbols'
 
-const CONTEXT = 4
-
-export interface TransferLine {
-  number: number
-  text: string
-  transferred: boolean
-}
-
-/** One end of a moved or copied block, read in the revision it lives in. */
-export interface TransferEnd {
-  path: string
-  line: number
-  symbol?: string
-  lines: TransferLine[]
-}
-
 export interface TransferView {
-  from: TransferEnd
-  to: TransferEnd
+  /** The function or class around the block where it came from, in the base. */
+  fromSymbol?: string
+  /** The function or class around the block where it landed, in the head. */
+  toSymbol?: string
   /**
    * Moved code now sits in a different function or class, where its logic may no longer hold.
    * Copies always land somewhere new and keep their original, so they are not flagged.
@@ -28,48 +20,40 @@ export interface TransferView {
   changedSymbol: boolean
 }
 
-/** Where a block came from and where it went, each with the code around it. */
+/** The code around both ends of a moved or copied block, read in the revision each lives in. */
 export function transferView(
   pull: PullRequest,
   transfer: CodeTransfer,
   contents: ReadonlyMap<string, PullFileContent>,
 ): TransferView {
-  const content = (path: string) =>
-    contents.get(pull.files.find((file) => file.path === path)?.id ?? '')
-  const from = transferEnd(
-    transfer.fromPath,
-    transfer.fromLine,
-    transfer.lineCount,
-    content(transfer.fromPath)?.old,
-  )
-  const to = transferEnd(
-    transfer.toPath,
-    transfer.toLine,
-    transfer.lineCount,
-    content(transfer.toPath)?.new,
-  )
-  const known = from.lines.length > 0 && to.lines.length > 0
+  const from = contents.get(transferFile(pull, transfer, DiffSide.left)?.id ?? '')?.old
+  const to = contents.get(transferFile(pull, transfer, DiffSide.right)?.id ?? '')?.new
+  const fromSymbol = from ? enclosingSymbol(from.symbols, transfer.fromLine) : undefined
+  const toSymbol = to ? enclosingSymbol(to.symbols, transfer.toLine) : undefined
   const moved = transfer.kind === TransferKind.moved
-  return { from, to, changedSymbol: moved && known && from.symbol !== to.symbol }
+  return {
+    ...(fromSymbol ? { fromSymbol } : {}),
+    ...(toSymbol ? { toSymbol } : {}),
+    changedSymbol: moved && Boolean(from && to) && fromSymbol !== toSymbol,
+  }
 }
 
-function transferEnd(
-  path: string,
-  line: number,
-  count: number,
-  revision?: RevisionFileContent | null,
-): TransferEnd {
-  if (!revision) return { path, line, lines: [] }
-  const source = revision.content.split('\n')
-  const first = Math.max(1, line - CONTEXT)
-  const last = Math.min(source.length, line + count - 1 + CONTEXT)
-  const lines = []
-  for (let number = first; number <= last; number++)
-    lines.push({
-      number,
-      text: source[number - 1]?.replace(/\r$/, '') ?? '',
-      transferred: number >= line && number < line + count,
-    })
-  const symbol = enclosingSymbol(revision.symbols, line)
-  return { path, line, ...(symbol ? { symbol } : {}), lines }
+/** The PR file holding one end of a block: its source in the base or destination in the head. */
+export function transferFile(
+  pull: PullRequest,
+  transfer: CodeTransfer,
+  side: DiffSide,
+): ChangedFile | undefined {
+  const path = side === DiffSide.left ? transfer.fromPath : transfer.toPath
+  const revisionPath = (file: ChangedFile) =>
+    side === DiffSide.left ? (file.previousPath ?? file.path) : file.path
+  return (
+    pull.files.find((file) => revisionPath(file) === path) ??
+    pull.files.find((file) => file.path === path)
+  )
+}
+
+/** e.g. `12–18`, or `12` for a single line. */
+export function lineRange(first: number, last: number) {
+  return first === last ? String(first) : `${String(first)}–${String(last)}`
 }

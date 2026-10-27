@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { useFileContext } from './diff/useFileContext'
 import { CONTEXT_STEP, MAX_CONTEXT } from './diff/displayContext'
+import { TransferChip } from './TransferCard'
 
 interface ContextProps {
   fileContext: ReturnType<typeof useFileContext>
@@ -8,7 +9,7 @@ interface ContextProps {
   setContextLines: Dispatch<SetStateAction<Map<string, number>>>
 }
 
-/** The header actions of a PR file: fold expanded lines, add context, and mark it viewed. */
+/** The header of a PR file: its moved code, and actions to fold or add context and mark it viewed. */
 export function FileContextActions({
   fileId,
   path,
@@ -20,6 +21,7 @@ export function FileContextActions({
   setContextLines,
   viewed,
   toggleFile,
+  transfers,
 }: ContextProps & {
   fileId: string
   path: string
@@ -28,9 +30,11 @@ export function FileContextActions({
   onCollapseLines: (fileId: string) => void
   viewed: boolean
   toggleFile: (fileId: string) => void
+  transfers: { moved: number; copied: number }
 }) {
   return (
     <div className="file-context-actions">
+      <TransferChip {...transfers} />
       {expanded && (
         <button
           type="button"

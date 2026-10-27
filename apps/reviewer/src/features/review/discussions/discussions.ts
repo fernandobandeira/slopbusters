@@ -10,6 +10,7 @@ import {
 
 export type CommentEditor = Omit<DraftComment, 'body'>
 export interface LineDiscussion {
+  kind: 'discussion'
   path: string
   line: number
   side: DiffSide
@@ -62,7 +63,7 @@ export function discussionGroup(params: {
   }
   return groups[0]
 }
-function controlledItemVersion(item: CodeViewItem<LineDiscussion>): number {
+export function controlledItemVersion<T>(item: CodeViewItem<T>): number {
   // CodeView ignores controlled payload changes with an unchanged version. A content signature
   // publishes discussion edits without producing new versions for equivalent React renders.
   const content = JSON.stringify(item)
@@ -113,6 +114,7 @@ export function annotateDiscussions(params: AnnotationParams): {
       const key = `${side}:${line}`
       if (!available.has(key)) return undefined
       const value = coordinates.get(key) ?? {
+        kind: 'discussion' as const,
         path,
         line,
         side,
@@ -160,7 +162,8 @@ function ownsThread(params: AnnotationParams, thread: ReviewThread, canMap: bool
   return owner?.id === params.groupId
 }
 
-function availableLines(
+/** `side:line` keys of every line a displayed patch shows, on its original/updated side. */
+export function availableLines(
   hunks: {
     deletionStart: number
     deletionCount: number

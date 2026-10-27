@@ -86,17 +86,6 @@
       "count": 1
     }
   },
-  "server/features/diff.ts": {
-    "complexity": {
-      "count": 1
-    },
-    "max-depth": {
-      "count": 8
-    },
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "server/features/navigation/fileContent.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 4
@@ -669,9 +658,6 @@
   "test/review.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 2
-    },
-    "max-lines-per-function": {
-      "count": 1
     }
   },
   "test/routes.test.ts": {

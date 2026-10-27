@@ -1,0 +1,64 @@
+.transfer-card {
+  margin: 6px 14px 8px;
+  border: 1px solid color-mix(in srgb, var(--info) 40%, var(--border));
+  border-left: 3px solid var(--info);
+  border-radius: 6px;
+  background: var(--surface);
+  font: 11px/1.4 var(--font-sans);
+  color: var(--foreground);
+  white-space: normal;
+  min-width: 0;
+}
+.transfer-card-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px;
+}
+.transfer-card-icon {
+  color: var(--info);
+  flex-shrink: 0;
+}
+.transfer-card-label {
+  font-weight: 600;
+}
+.transfer-card code {
+  font: 11px var(--font-mono);
+  color: var(--contrast-muted-foreground);
+  overflow-wrap: anywhere;
+}
+.transfer-card .muted {
+  color: var(--muted-foreground);
+}
+.transfer-card-spacer {
+  flex: 1;
+}
+.transfer-card-changes {
+  border-top: 1px solid color-mix(in srgb, var(--info) 25%, var(--border));
+  padding: 6px 8px 8px;
+}
+.transfer-card-caption {
+  margin: 0 0 6px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.transfer-card-diff {
+  display: block;
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  --diffs-font-size: 11px;
+}
+.transfer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--info);
+  background: color-mix(in srgb, var(--info) 10%, transparent);
+  white-space: nowrap;
+}
