@@ -1,27 +1,27 @@
 import { randomUUID } from 'node:crypto'
-import { setTimeout as sleep } from 'node:timers/promises'
-import type { GandalfSession, GandalfTask, GandalfTurn } from '../../../shared/domain/gandalf'
+import type { GandalfSession, GandalfTask } from '../../../shared/domain/gandalf'
 import { savedModels } from '../models'
 import type { PullRequest } from '../../../shared/domain/types'
 import type { ReviewerStore } from '../../adapters/store'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import type { ConflictWorkspace } from '../../adapters/conflictWorkspace'
-import { BaseAdvancedError } from '../../adapters/conflictRevision'
 import type { CiFailure } from '../../adapters/ciFailures'
 import { CommandTimeoutError } from '../../adapters/process'
-import { NetworkError } from '../../adapters/network'
 import { UserError, publicError } from '../../errors'
-import {
-  GANDALF_NETWORK_RETRY_DELAYS_MS,
-  MAX_GANDALF_BASE_RETRIES,
-  MAX_GANDALF_TURNS,
-  MAX_GANDALF_TIMEOUT_RETRIES,
-} from '../../limits'
+import { GANDALF_NETWORK_RETRY_DELAYS_MS, MAX_GANDALF_TURNS } from '../../limits'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { debate, unanimousApproval, type DebateMove } from '../flows/debate'
 import { FlowJobs } from '../flows/flowJobs'
-import { resolveWithGandalf } from './gandalfResolution'
-import { completion, publishedResult, saveResult, unchangedResult } from './gandalfResults'
+import { approvesTurn, resolveWithGandalf } from './gandalfResolution'
+import { failsOnlyThisPull, retryAutomatically } from './gandalfRecovery'
+import {
+  completion,
+  failedResult,
+  partialCompletion,
+  publishedResult,
+  saveResult,
+  unchangedResult,
+} from './gandalfResults'
 
 interface Options {
   store: ReviewerStore
@@ -170,7 +170,11 @@ export class GandalfJobs {
       } catch (cause) {
         if (signal.aborted) return
         this.options.sessions?.diagnostic(session.id, session.progress, cause)
-        if (await this.retryAutomatically(session, cause, signal)) continue
+        const delays = this.options.networkRetryDelaysMs ?? GANDALF_NETWORK_RETRY_DELAYS_MS
+        const progress = (text: string) => {
+          this.progress(session, text)
+        }
+        if (await retryAutomatically({ session, cause, signal, delays, progress })) continue
         session.failureContext = session.progress
         session.status = 'failed'
         session.error =
@@ -182,54 +186,56 @@ export class GandalfJobs {
       }
     }
   }
-  /** Rechecks the stack from the start; published layers are detected as up to date. */
-  private async retryAutomatically(session: GandalfSession, cause: unknown, signal: AbortSignal) {
-    if (
-      cause instanceof CommandTimeoutError &&
-      (session.timeoutRetries ?? 0) < MAX_GANDALF_TIMEOUT_RETRIES
-    ) {
-      session.timeoutRetries = (session.timeoutRetries ?? 0) + 1
-      this.progress(
-        session,
-        'A command timed out. Automatically retrying the unfinished resolution…',
-      )
-      return true
-    }
-    if (
-      cause instanceof BaseAdvancedError &&
-      (session.baseRetries ?? 0) < MAX_GANDALF_BASE_RETRIES
-    ) {
-      session.baseRetries = (session.baseRetries ?? 0) + 1
-      this.progress(
-        session,
-        'A base branch gained commits during resolution. Rechecking the stack against them…',
-      )
-      return true
-    }
-    const delays = this.options.networkRetryDelaysMs ?? GANDALF_NETWORK_RETRY_DELAYS_MS
-    const attempt = session.networkRetries ?? 0
-    const delay = delays[attempt]
-    if (!(cause instanceof NetworkError) || delay === undefined) return false
-    session.networkRetries = attempt + 1
-    this.progress(
-      session,
-      `GitHub did not respond. Retrying automatically in ${String(Math.round(delay / 1000))} seconds (attempt ${String(attempt + 1)} of ${String(delays.length)})…`,
-    )
-    // Cancellation and sleep end the wait; the loop then stops on the aborted signal.
-    await sleep(delay, undefined, { signal }).catch(() => undefined)
-    return true
-  }
   private async run(session: GandalfSession, signal: AbortSignal) {
     this.progress(session, 'Refreshing the PR stack from GitHub…')
     session.urls = (await this.options.plan?.(session.urls, signal)) ?? session.urls
     signal.throwIfAborted()
-    session.results = session.results.filter((result) => session.urls.includes(result.url))
+    // A retry tries every PR again, so an earlier PR failure is no longer the latest word.
+    session.results = session.results.filter(
+      (result) => session.urls.includes(result.url) && !result.error,
+    )
     this.save(session)
     const verifications: (() => Promise<void>)[] = []
     const stackBranches = new Set<string>()
+    /** Head branches left behind, with the PR whose failure left them, so children wait. */
+    const blocked = new Map<string, number>()
     for (const url of session.urls) {
       signal.throwIfAborted()
-      verifications.push(await this.resolvePull(session, url, stackBranches, signal))
+      this.progress(session, `Loading ${url}…`)
+      const pull = await this.options.loadPull(url)
+      signal.throwIfAborted()
+      const parent = blocked.get(pull.baseBranch)
+      if (parent !== undefined) {
+        blocked.set(pull.headBranch, parent)
+        saveResult(
+          session,
+          failedResult(
+            session,
+            url,
+            pull,
+            `Skipped because its base PR #${String(parent)} was not resolved.`,
+          ),
+        )
+        this.save(session)
+        continue
+      }
+      try {
+        verifications.push(await this.resolvePull(session, pull, stackBranches, signal))
+      } catch (cause) {
+        if (signal.aborted || !failsOnlyThisPull(cause)) throw cause
+        this.options.sessions?.diagnostic(session.id, session.progress, cause)
+        blocked.set(pull.headBranch, pull.number)
+        saveResult(
+          session,
+          failedResult(
+            session,
+            url,
+            pull,
+            publicError(cause, 'Gandalf stopped on an unexpected error.'),
+          ),
+        )
+        this.save(session)
+      }
     }
     signal.throwIfAborted()
     this.progress(session, 'Verifying all updated branches…')
@@ -238,17 +244,26 @@ export class GandalfJobs {
       await verify()
     }
     signal.throwIfAborted()
+    const unresolved = partialCompletion(session)
+    if (unresolved) {
+      session.status = 'failed'
+      session.error = unresolved
+      session.failureContext = undefined
+      this.progress(session, 'Resolution stopped. Completed PR updates are saved.')
+      return
+    }
     session.status = 'complete'
     this.progress(session, completion(session))
   }
   /** Stack branches processed earlier in this run; their children merge any update to them. */
   private async resolvePull(
     session: GandalfSession,
-    url: string,
+    loaded: PullRequest,
     stackBranches: Set<string>,
     signal: AbortSignal,
   ) {
-    const { workspace, failures } = await this.prepare(session, url, signal)
+    const url = loaded.url
+    const { workspace, failures } = await this.prepare(session, loaded, signal)
     const pull = workspace.pull
     let resolvedSha = pull.headSha
     try {
@@ -278,10 +293,7 @@ export class GandalfJobs {
     }
     return () => workspace.verify(resolvedSha)
   }
-  private async prepare(session: GandalfSession, url: string, signal: AbortSignal) {
-    this.progress(session, `Loading ${url}…`)
-    const loaded = await this.options.loadPull(url)
-    signal.throwIfAborted()
+  private async prepare(session: GandalfSession, loaded: PullRequest, signal: AbortSignal) {
     if (loaded.state !== 'open') throw new UserError('Select open PRs for Gandalf.')
     this.progress(
       session,
@@ -342,27 +354,24 @@ export class GandalfJobs {
       history: session.turns,
       signal,
     }
-    const turn = await this.modelTurn(session.id, index, request)
+    const move = await this.modelTurn(session.id, index, request)
     signal.throwIfAborted()
-    await workspace.apply(turn.edits, turn.selections)
     const next = await workspace.inspect()
-    const changed = snapshot.revision !== next.revision
-    const approved = approvesTurn(turn, index, changed)
+    const changed = snapshot.revision !== next.revision || move.changedPaths.length > 0
+    const approved = approvesTurn(move, index, changed)
     session.turns.push({
       url: pull.url,
       role,
       round: index + 1,
-      summary: turn.summary,
-      issues: turn.issues,
+      summary: move.turn.summary,
+      // What Gandalf found still wrong reaches the other model with the turn's own findings.
+      issues: [...move.turn.issues, ...move.problems.map((problem) => `Gandalf: ${problem}`)],
       approved,
-      changedPaths: [
-        ...turn.edits.map((edit) => edit.path),
-        ...turn.selections.map((selection) => selection.path),
-      ],
+      changedPaths: move.changedPaths,
       revision: next.revision,
     })
     this.save(session)
-    return { changed: changed || turn.edits.length > 0 || turn.selections.length > 0, approved }
+    return { changed, approved }
   }
   private async modelTurn(
     sessionId: string,
@@ -399,15 +408,4 @@ interface Debate {
   workspace: ConflictWorkspace
   failures: CiFailure[]
   signal: AbortSignal
-}
-
-function approvesTurn(turn: GandalfTurn, index: number, changed: boolean) {
-  return (
-    index > 0 &&
-    !changed &&
-    !turn.edits.length &&
-    !turn.selections.length &&
-    !turn.issues.length &&
-    turn.approved
-  )
 }

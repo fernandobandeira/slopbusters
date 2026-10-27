@@ -5,29 +5,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GandalfJobs } from '../server/features/gandalf/gandalfJobs'
 import { ReviewerStore } from '../server/adapters/store'
 import { Provider, type PullRequest } from '../shared/domain/types'
-import type { GandalfTurn } from '../shared/domain/gandalf'
+import type { GandalfMove } from '../server/features/gandalf/gandalfResolution'
 import { UserError } from '../server/errors'
 import { CommandTimeoutError } from '../server/adapters/process'
 import { fixturePull } from './fixtures/pull'
 import { recordingTurns } from './fixtures/turns'
+import { gandalfMove, idleWorkspaceParts } from './fixtures/gandalf'
 
 const primary = { provider: Provider.codex, model: 'gpt-6.1-sol' }
 const companion = { provider: Provider.claude, model: 'claude-opus-5-5' }
 const { turns } = recordingTurns()
-const clean: GandalfTurn = {
-  summary: 'No issues found.',
-  approved: true,
-  issues: [],
-  edits: [],
-  selections: [],
+const clean = gandalfMove()
+/** A turn that edits the resolution in its copy, which changes the merge's revision. */
+const fix = (content: string) => () => {
+  revision = content
+  return Promise.resolve(
+    gandalfMove(
+      { summary: 'Fixed the resolution.', approved: false },
+      { changedPaths: ['code.ts'] },
+    ),
+  )
 }
-const fix = (content: string): GandalfTurn => ({
-  summary: 'Fixed the resolution.',
-  approved: false,
-  issues: [],
-  edits: [{ path: 'code.ts', content }],
-  selections: [],
-})
 let directory: string
 let store: ReviewerStore
 let jobs: GandalfJobs
@@ -46,11 +44,8 @@ const openWorkspace = vi.fn((pull: PullRequest) =>
     needsUpdate: true,
     verify,
     conflicts: ['code.ts'],
-    inspect: () => Promise.resolve({ revision, diff: revision, conflicts: [] }),
-    apply: (edits: GandalfTurn['edits']) => {
-      if (edits.length) revision = edits[0]?.content ?? ''
-      return Promise.resolve()
-    },
+    inspect: () => Promise.resolve({ revision, conflicts: [] }),
+    ...idleWorkspaceParts,
     publish,
     close,
   }),
@@ -81,9 +76,9 @@ async function completed(id: string, status = 'complete') {
 describe('Gandalf round robin', () => {
   it('starts with the primary, applies secondary fixes and requires both approvals of the final revision', async () => {
     resolve
-      .mockResolvedValueOnce(fix('primary-resolution'))
-      .mockResolvedValueOnce(fix('secondary-fix'))
-      .mockResolvedValueOnce(fix('primary-fix'))
+      .mockImplementationOnce(fix('primary-resolution'))
+      .mockImplementationOnce(fix('secondary-fix'))
+      .mockImplementationOnce(fix('primary-fix'))
       .mockResolvedValue(clean)
     const session = jobs.start('review-room/example', [fixturePull().url])
     const saved = await completed(session.id)
@@ -115,9 +110,9 @@ describe('Gandalf round robin', () => {
   })
   it('revokes earlier approval when the other model changes a previously approved resolution', async () => {
     resolve
-      .mockResolvedValueOnce(fix('resolved'))
+      .mockImplementationOnce(fix('resolved'))
       .mockResolvedValueOnce(clean)
-      .mockResolvedValueOnce(fix('new-fix'))
+      .mockImplementationOnce(fix('new-fix'))
       .mockResolvedValue(clean)
     const session = jobs.start('review-room/example', [fixturePull().url])
     expect((await completed(session.id)).results[0]?.rounds).toBe(5)
@@ -127,10 +122,11 @@ describe('Gandalf round robin', () => {
     expect((await completed(session.id)).results[0]?.rounds).toBe(3)
   })
   it('stops without publishing when the models do not agree', async () => {
-    resolve.mockResolvedValue({ ...clean, approved: false, issues: ['Still unsure.'] })
+    resolve.mockResolvedValue(gandalfMove({ approved: false, issues: ['Still unsure.'] }))
     const session = jobs.start('review-room/example', [fixturePull().url])
     const saved = await completed(session.id, 'failed')
-    expect(saved.error).toContain('20 turns')
+    expect(saved.results[0]?.error).toContain('20 turns')
+    expect(saved.error).toContain('PR #128 was not updated')
     expect(resolve).toHaveBeenCalledTimes(20)
     expect(publish).not.toHaveBeenCalled()
   })
@@ -218,7 +214,7 @@ describe('Gandalf session lifecycle', () => {
     expect(publish).toHaveBeenCalledTimes(2)
   })
   it('cancels an active model and never publishes its late response', async () => {
-    let finish: ((turn: GandalfTurn) => void) | undefined
+    let finish: ((move: GandalfMove) => void) | undefined
     resolve.mockImplementation(
       () =>
         new Promise((done) => {

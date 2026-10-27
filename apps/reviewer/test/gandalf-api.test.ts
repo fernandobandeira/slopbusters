@@ -9,6 +9,7 @@ import { resolveWithGandalf } from '../server/features/gandalf/gandalfResolution
 import { gandalfSessionSchema } from '../shared/domain/gandalf'
 import { Provider } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
+import { gandalfMove, idleWorkspaceParts } from './fixtures/gandalf'
 
 vi.mock('../server/features/pulls/github', async (original) => ({
   ...(await original<typeof import('../server/features/pulls/github')>()),
@@ -24,7 +25,10 @@ vi.mock('../server/features/pulls/stacks', async (original) => ({
   })),
 }))
 vi.mock('../server/adapters/conflictWorkspace', () => ({ openConflictWorkspace: vi.fn() }))
-vi.mock('../server/features/gandalf/gandalfResolution', () => ({ resolveWithGandalf: vi.fn() }))
+vi.mock('../server/features/gandalf/gandalfResolution', async (original) => ({
+  ...(await original<typeof import('../server/features/gandalf/gandalfResolution')>()),
+  resolveWithGandalf: vi.fn(),
+}))
 const directories: string[] = []
 afterEach(() => {
   vi.resetAllMocks()
@@ -89,18 +93,12 @@ describe('Gandalf persistence across restarts', () => {
       needsUpdate: true,
       verify: () => Promise.resolve(),
       conflicts: ['code.ts'],
-      inspect: () => Promise.resolve({ revision: 'resolved', diff: '', conflicts: [] }),
-      apply: () => Promise.resolve(),
+      inspect: () => Promise.resolve({ revision: 'resolved', conflicts: [] }),
+      ...idleWorkspaceParts,
       publish: () => Promise.resolve('resolved-sha'),
       close: () => Promise.resolve(),
     })
-    vi.mocked(resolveWithGandalf).mockResolvedValue({
-      summary: 'Approved.',
-      approved: true,
-      issues: [],
-      edits: [],
-      selections: [],
-    })
+    vi.mocked(resolveWithGandalf).mockResolvedValue(gandalfMove({ summary: 'Approved.' }))
     const server = await startReviewerServer({
       dataDirectory: path,
       staticDirectory: path,

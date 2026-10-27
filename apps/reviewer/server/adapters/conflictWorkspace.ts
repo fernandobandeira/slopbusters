@@ -3,8 +3,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile, lstat } from 'node:fs/promises
 import { dirname, join } from 'node:path'
 import type { PullRequest } from '../../shared/domain/types'
 import type { GandalfTask, GandalfTurn } from '../../shared/domain/gandalf'
-import { MAX_FILE_BYTES, MAX_GANDALF_PROMPT_BYTES } from '../limits'
+import { MAX_FILE_BYTES, MAX_GANDALF_CHANGED_FILES } from '../limits'
 import { UserError } from '../errors'
+import { CONFLICT_MARKER, changesInCopy, currentText } from './conflictHarvest'
+import { mergeContext, viewsDirectory, type MergeContext } from './conflictMergeContext'
 import type { GitHub } from './github'
 import { hardenedGit } from './git'
 import { workspacePath } from './workspacePath'
@@ -14,24 +16,34 @@ import { GANDALF_IDENTITY, type GitIdentity } from './gitIdentity'
 import { createConflictChoices } from './conflictChoices'
 
 export interface ConflictSnapshot {
+  /** Changes whenever the merge's files or index change. */
   revision: string
-  diff: string
   conflicts: {
     path: string
     /** Every merge conflict stays listed; later turns see which ones are already settled. */
     state: 'unresolved' | 'resolved' | 'deleted'
-    content: string
+    /** A file/symlink conflict, settled by choosing a side instead of editing. */
     choices?: { side: 'head' | 'base'; type: 'file' | 'symlink'; content: string }[]
   }[]
 }
+/** What a turn changed in the merge, and what still blocks agreement on it. */
+export interface Absorbed {
+  changedPaths: string[]
+  problems: string[]
+}
+type FileEdit = GandalfTurn['edits'][number]
 export interface ConflictWorkspace {
   directory: string
   pull: PullRequest
   needsUpdate: boolean
   conflicts: string[]
+  merge: MergeContext
   verify: (headSha?: string) => Promise<void>
   inspect: () => Promise<ConflictSnapshot>
-  apply: (edits: GandalfTurn['edits'], selections?: GandalfTurn['selections']) => Promise<void>
+  /** Applies what is valid and reports the rest as problems for the agent to fix. */
+  apply: (edits: FileEdit[], selections?: GandalfTurn['selections']) => Promise<Absorbed>
+  /** Applies what the agent changed in `copy`, a copy of this checkout, plus its reply. */
+  absorb: (copy: string, reply: Pick<GandalfTurn, 'edits' | 'selections'>) => Promise<Absorbed>
   publish: () => Promise<string>
   close: () => Promise<void>
 }
@@ -71,6 +83,7 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
     )
     const conflicts = await mergeBase(git, pull.baseSha)
     await verify()
+    const merge = await mergeContext(git, directory, pull, conflicts)
     const {
       regular: allowed,
       structural,
@@ -84,6 +97,8 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
       directory,
       pull,
       conflicts,
+      merge,
+      signal,
       needsUpdate,
       verify,
       allowed,
@@ -123,6 +138,7 @@ export async function openConflictWorkspace(options: Options): Promise<ConflictW
     })
   } catch (error) {
     await rm(directory, { recursive: true, force: true })
+    await rm(viewsDirectory(directory), { recursive: true, force: true })
     throw error
   }
 }
@@ -181,6 +197,9 @@ async function mergeBase(git: (args: string[]) => Promise<string>, sha: string) 
       `user.name=${GANDALF_IDENTITY.name}`,
       '-c',
       `user.email=${GANDALF_IDENTITY.email}`,
+      // Markers that also show the common ancestor make each side's intent visible.
+      '-c',
+      'merge.conflictStyle=zdiff3',
       'merge',
       '--no-commit',
       '--no-ff',
@@ -242,10 +261,12 @@ async function textFile(directory: string, path: string, allowed: Set<string>) {
     throw error
   }
 }
-function workspaceOperations(options: {
+interface Operations {
   directory: string
   pull: PullRequest
   conflicts: string[]
+  merge: MergeContext
+  signal: AbortSignal
   needsUpdate: boolean
   verify: (headSha?: string) => Promise<void>
   allowed: Set<string>
@@ -254,30 +275,18 @@ function workspaceOperations(options: {
   choices: ReturnType<typeof createConflictChoices>
   git: (args: string[]) => Promise<string>
   publish: () => Promise<string>
-}): ConflictWorkspace {
-  const { directory, pull, conflicts, allowed, git } = options
-  return {
+}
+
+function workspaceOperations(options: Operations): ConflictWorkspace {
+  const { directory, pull, conflicts, allowed } = options
+  const operations: ConflictWorkspace = {
     directory,
     pull,
     conflicts,
+    merge: options.merge,
     needsUpdate: options.needsUpdate,
     verify: options.verify,
-    async inspect() {
-      const diff = await git(['diff', '--no-ext-diff', '--no-textconv', pull.headSha, '--'])
-      const state = await conflictStates(git)
-      const files = await Promise.all(
-        conflicts.map(async (path) => ({
-          ...(allowed.has(path)
-            ? { path, content: await textFile(directory, path, allowed) }
-            : await options.choices.inspect(path)),
-          state: state(path),
-        })),
-      )
-      const data = JSON.stringify({ diff, conflicts: files })
-      if (Buffer.byteLength(data) > MAX_GANDALF_PROMPT_BYTES)
-        throw new UserError('These conflicts exceed the automatic resolution size limit.')
-      return { revision: createHash('sha256').update(data).digest('hex'), diff, conflicts: files }
-    },
+    inspect: () => snapshot(options),
     async apply(requestedEdits, requestedSelections = []) {
       // Deleting a regular conflict file through a selection means the same as a deletion edit.
       const deletions = requestedSelections.filter(
@@ -288,36 +297,112 @@ function workspaceOperations(options: {
         ...deletions.map((selection) => ({ path: selection.path, content: null })),
       ]
       const selections = requestedSelections.filter((selection) => !deletions.includes(selection))
-      if (new Set(edits.map((edit) => edit.path)).size !== edits.length)
-        throw new UserError('The model returned duplicate file edits.')
-      for (const edit of edits) {
-        if (options.task === 'ci') await admitCiEdit(directory, edit, allowed, options.tracked)
-        const target = safePath(directory, edit.path, allowed)
-        await textFile(directory, edit.path, allowed)
-        if (
-          edit.content !== null &&
-          (Buffer.byteLength(edit.content) > MAX_FILE_BYTES ||
-            edit.content.includes('\0') ||
-            /^([<]{7}|[=]{7}|[>]{7})( |$)/m.test(edit.content))
-        )
-          throw new UserError(
-            `The resolution has invalid content or conflict markers: ${edit.path}.`,
-          )
-        if (edit.content === null) {
-          await rm(target, { force: true })
-          // An earlier turn may already have deleted it; that is still the requested result.
-          await git(['rm', '--cached', '--ignore-unmatch', '--quiet', '--', edit.path])
-        } else {
-          await writeFile(target, edit.content)
-          await git(['add', '--all', '--', edit.path])
+      const paths = [...edits, ...selections].map((change) => change.path)
+      if (new Set(paths).size !== paths.length)
+        return { changedPaths: [], problems: ['The turn changed the same file more than once.'] }
+      const changedPaths: string[] = []
+      const problems: string[] = []
+      const attempt = async (path: string, step: () => Promise<void>) => {
+        try {
+          await step()
+          changedPaths.push(path)
+        } catch (error) {
+          if (!(error instanceof UserError)) throw error
+          problems.push(error.message)
         }
       }
-      await options.choices.apply(selections)
-      if ((await git(['ls-files', '--unmerged'])).trim())
-        throw new UserError('The model left unresolved conflicts. Retry the resolution.')
-      await git(['diff', '--cached', '--check'])
+      for (const edit of edits) await attempt(edit.path, () => applyEdit(options, edit))
+      for (const selection of selections)
+        await attempt(selection.path, () => options.choices.apply([selection]))
+      problems.push(...(await leftovers(options)))
+      return { changedPaths, problems }
+    },
+    async absorb(copy, reply) {
+      const harvested = await changesInCopy(directory, copy, options.signal)
+      const edits = [...harvested.edits, ...reply.edits]
+      if (edits.length > MAX_GANDALF_CHANGED_FILES)
+        return {
+          changedPaths: [],
+          problems: [
+            `The working directory changed ${String(edits.length)} files, more than the ${String(MAX_GANDALF_CHANGED_FILES)} a resolution may change. Undo every change that is not part of the resolution.`,
+          ],
+        }
+      const applied = await operations.apply(edits, reply.selections)
+      return { ...applied, problems: [...harvested.problems, ...applied.problems] }
     },
     publish: options.publish,
-    close: () => rm(directory, { recursive: true, force: true }),
+    close: async () => {
+      await rm(directory, { recursive: true, force: true })
+      await rm(viewsDirectory(directory), { recursive: true, force: true })
+    },
+  }
+  return operations
+}
+
+async function applyEdit(options: Operations, edit: FileEdit) {
+  const { directory, allowed, git } = options
+  if (options.task === 'ci') await admitCiEdit(directory, edit, allowed, options.tracked)
+  const target = safePath(directory, edit.path, allowed)
+  await textFile(directory, edit.path, allowed)
+  if (
+    edit.content !== null &&
+    (Buffer.byteLength(edit.content) > MAX_FILE_BYTES ||
+      edit.content.includes('\0') ||
+      CONFLICT_MARKER.test(edit.content))
+  )
+    throw new UserError(`The resolution has invalid content or conflict markers: ${edit.path}.`)
+  if (edit.content === null) {
+    await rm(target, { force: true })
+    // An earlier turn may already have deleted it; that is still the requested result.
+    await git(['rm', '--cached', '--ignore-unmatch', '--quiet', '--', edit.path])
+  } else {
+    await writeFile(target, edit.content)
+    await git(['add', '--all', '--', edit.path])
+  }
+}
+
+/** Conflicts Git still records, and resolved conflict files that kept a marker. */
+async function leftovers({ directory, conflicts, allowed, git }: Operations) {
+  const problems: string[] = []
+  const unresolved = (await git(['diff', '--name-only', '--diff-filter=U', '-z']))
+    .split('\0')
+    .filter(Boolean)
+  if (unresolved.length)
+    problems.push(
+      `These merge conflicts are still unresolved: ${unresolved.join(', ')}. Edit each file in place to remove every conflict marker, keeping both the PR intent and the base behavior.`,
+    )
+  for (const path of conflicts) {
+    if (unresolved.includes(path) || !allowed.has(path)) continue
+    const content = await currentText(directory, path)
+    if (content !== null && CONFLICT_MARKER.test(content))
+      problems.push(`Conflict markers remain in ${path}.`)
+  }
+  return problems
+}
+
+async function snapshot({
+  directory,
+  pull,
+  conflicts,
+  allowed,
+  git,
+  choices: fileTypeChoices,
+}: Operations): Promise<ConflictSnapshot> {
+  const diff = await git(['diff', '--no-ext-diff', '--no-textconv', pull.headSha, '--'])
+  const state = await conflictStates(git)
+  const files = await Promise.all(
+    conflicts.map(async (path) => {
+      if (allowed.has(path))
+        return { path, content: await textFile(directory, path, allowed), state: state(path) }
+      const { choices } = await fileTypeChoices.inspect(path)
+      return { path, content: '', choices, state: state(path) }
+    }),
+  )
+  const revision = createHash('sha256')
+    .update(JSON.stringify({ diff, conflicts: files }))
+    .digest('hex')
+  return {
+    revision,
+    conflicts: files.map(({ content: _content, ...conflict }) => conflict),
   }
 }

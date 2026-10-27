@@ -167,7 +167,9 @@ describe('isolated conflict checkout and publication', () => {
   it('merges both histories and publishes only the reviewed resolution to the PR branch', async () => {
     const work = await open()
     expect(work.conflicts).toEqual(['code.ts'])
-    expect((await work.inspect()).conflicts[0]?.content).toContain('<<<<<<<')
+    expect((await work.inspect()).conflicts).toEqual([{ path: 'code.ts', state: 'unresolved' }])
+    // zdiff3 markers carry the common ancestor between the two sides.
+    expect(await readFile(join(work.directory, 'code.ts'), 'utf8')).toContain('||||||| ')
     await work.apply([{ path: 'code.ts', content: 'export const value = "head-and-base"\n' }])
     const resolved = await work.publish()
     expect((await git(['rev-parse', 'feature'])).trim()).toBe(resolved)
@@ -212,15 +214,20 @@ describe('isolated conflict checkout and publication', () => {
     await expect(work.publish()).rejects.toThrow()
     expect((await git(['rev-parse', 'feature'])).trim()).toBe(concurrent)
   })
-  it('rejects traversal, Git metadata, unknown files and unresolved markers', async () => {
+  it('reports traversal, Git metadata, unknown files and unresolved markers as problems', async () => {
     const work = await open()
     for (const path of ['../escape', '.git/config', 'new-file.ts']) {
-      await expect(work.apply([{ path, content: 'bad' }])).rejects.toThrow('unsupported file')
+      const { changedPaths, problems } = await work.apply([{ path, content: 'bad' }])
+      expect(changedPaths).toEqual([])
+      expect(problems[0]).toContain('unsupported file')
     }
-    await expect(work.apply([{ path: 'code.ts', content: '<<<<<<< HEAD\nbad\n' }])).rejects.toThrow(
-      'conflict markers',
-    )
-    await expect(work.apply([])).rejects.toThrow('unresolved conflicts')
+    for (const marker of ['<<<<<<< HEAD', '||||||| ancestor']) {
+      const { problems } = await work.apply([{ path: 'code.ts', content: `${marker}\nbad\n` }])
+      expect(problems[0]).toContain('conflict markers')
+    }
+    expect((await work.apply([])).problems).toEqual([
+      expect.stringContaining('still unresolved: code.ts'),
+    ])
     expect((await git(['rev-parse', 'feature'])).trim()).toBe(originalHead)
   })
   it('supports intentional file deletion during resolution', async () => {
@@ -285,18 +292,16 @@ describe('CI fixes', () => {
   })
   it('refuses CI configuration, Git metadata, deleting missing files and paths beneath files', async () => {
     const work = await openCi()
-    await expect(
-      work.apply([{ path: '.github/workflows/ci.yml', content: 'on: push\n' }]),
-    ).rejects.toThrow('CI configuration')
-    await expect(work.apply([{ path: '.git/config', content: 'bad' }])).rejects.toThrow(
+    const refused = async (edit: { path: string; content: string | null }) =>
+      (await work.apply([edit])).problems[0]
+    expect(await refused({ path: '.github/workflows/ci.yml', content: 'on: push\n' })).toContain(
+      'CI configuration',
+    )
+    expect(await refused({ path: '.git/config', content: 'bad' })).toContain('unsupported file')
+    expect(await refused({ path: 'code.ts/inner.ts', content: 'bad' })).toContain(
       'unsupported file',
     )
-    await expect(work.apply([{ path: 'code.ts/inner.ts', content: 'bad' }])).rejects.toThrow(
-      'unsupported file',
-    )
-    await expect(work.apply([{ path: 'missing.ts', content: null }])).rejects.toThrow(
-      'does not exist',
-    )
+    expect(await refused({ path: 'missing.ts', content: null })).toContain('does not exist')
     expect((await git(['rev-parse', 'feature'])).trim()).toBe(originalHead)
   })
 })
@@ -371,7 +376,7 @@ describe('file versus symlink conflicts', () => {
   it('rejects invented and traversing selections and permits reviewed deletion', async () => {
     const work = await fileTypeConflict()
     for (const path of ['../escape', '.git/config', 'code.ts'])
-      await expect(work.apply([], [{ path, side: 'base' }])).rejects.toThrow(
+      expect((await work.apply([], [{ path, side: 'base' }])).problems[0]).toContain(
         'Unsupported file-type selection',
       )
     const edits = work.conflicts

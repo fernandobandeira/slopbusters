@@ -54,6 +54,38 @@ export function publishedResult(
   }
 }
 
+/** A PR left untouched so the session could go on to the rest of the stack. */
+export function failedResult(
+  session: GandalfSession,
+  url: string,
+  pull: PullRequest,
+  error: string,
+): Result {
+  const turns = session.turns.filter((turn) => turn.url === url)
+  return {
+    url,
+    number: pull.number,
+    title: pull.title,
+    headSha: pull.headSha,
+    baseSha: pull.baseSha,
+    resolvedSha: pull.headSha,
+    changedPaths: [],
+    rounds: turns.length,
+    published: false,
+    error,
+  }
+}
+
+/** Why a session that reached every PR still did not finish, or undefined when it did. */
+export function partialCompletion(session: GandalfSession) {
+  const failed = session.results.filter((result) => result.error)
+  if (!failed.length) return undefined
+  const numbers = failed.map((result) => `#${String(result.number)}`).join(', ')
+  return failed.length === 1
+    ? `PR ${numbers} was not updated. The other PRs are saved; review its findings and retry.`
+    : `PRs ${numbers} were not updated. The other PRs are saved; review their findings and retry.`
+}
+
 export function completion(session: GandalfSession) {
   if (session.task === 'conflicts')
     return 'You may pass. All PRs and their stack layers are up to date.'

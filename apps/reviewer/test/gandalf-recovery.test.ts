@@ -8,18 +8,12 @@ import { AgentSessions } from '../server/features/agent-sessions/agentSessions'
 import { GandalfJobs } from '../server/features/gandalf/gandalfJobs'
 import { NetworkError } from '../server/adapters/network'
 import { BaseAdvancedError } from '../server/adapters/conflictRevision'
-import type { GandalfTurn } from '../shared/domain/gandalf'
 import { Provider, type PullRequest } from '../shared/domain/types'
 import { fixturePull } from './fixtures/pull'
 import { recordingTurns } from './fixtures/turns'
+import { gandalfMove, idleWorkspaceParts } from './fixtures/gandalf'
 
-const clean: GandalfTurn = {
-  summary: 'Reviewed',
-  approved: true,
-  issues: [],
-  edits: [],
-  selections: [],
-}
+const clean = gandalfMove({ summary: 'Reviewed' })
 
 it('records the preparation phase and private cause when no model pass could start', async () => {
   const fixture = recoveryFixture()
@@ -283,8 +277,8 @@ function recoveryFixture(networkRetryDelaysMs = [0, 0]) {
       pull,
       needsUpdate: !published.has(pull.url),
       conflicts: [],
-      inspect: () => Promise.resolve({ revision: 'revision', diff: '', conflicts: [] }),
-      apply: () => Promise.resolve(),
+      inspect: () => Promise.resolve({ revision: 'revision', conflicts: [] }),
+      ...idleWorkspaceParts,
       verify,
       publish: () => publish(pull),
       close: () => Promise.resolve(),

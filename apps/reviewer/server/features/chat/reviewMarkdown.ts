@@ -67,11 +67,13 @@ export function gandalfSessionMarkdown(session: GandalfSession, url: string): st
     `**Task:** ${session.task === 'ci' ? 'fix the failing CI checks' : 'bring the PR up to date with its base branch and resolve the merge conflicts'}`,
     result &&
       `**Result:** ${
-        result.published
-          ? `pushed ${result.resolvedSha.slice(0, 8)} on top of ${result.headSha.slice(0, 8)} after ${String(result.rounds)} round${result.rounds === 1 ? '' : 's'}`
-          : session.task === 'ci'
-            ? 'no change was needed'
-            : 'already up to date'
+        result.error
+          ? `not updated. ${result.error}`
+          : result.published
+            ? `pushed ${result.resolvedSha.slice(0, 8)} on top of ${result.headSha.slice(0, 8)} after ${String(result.rounds)} round${result.rounds === 1 ? '' : 's'}`
+            : session.task === 'ci'
+              ? 'no change was needed'
+              : 'already up to date'
       }${result.changedPaths.length ? `. Changed: ${result.changedPaths.join(', ')}` : ''}`,
     list(
       'My turns on this PR',
@@ -89,7 +91,9 @@ function remaining(
   url: string,
   last: GandalfSession['turns'][number] | undefined,
 ): string[] {
-  const finished = new Set(session.results.map((result) => result.url))
+  const finished = new Set(
+    session.results.filter((result) => !result.error).map((result) => result.url),
+  )
   const items = [
     ...(last && !last.approved ? last.issues.map((issue) => `On this PR: ${issue}`) : []),
     ...session.urls

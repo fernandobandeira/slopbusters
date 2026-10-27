@@ -5,7 +5,8 @@ import type {
 
 /**
  * Structured turns that record every request and reply with `reply`, validated by the
- * request's schema as the engine runner does. Without `reply`, any turn fails the test.
+ * request's schema as the engine runner does, and settled once on the request's directory as
+ * if it were the agent's copy. Without `reply`, any turn fails the test.
  */
 export function recordingTurns(
   reply: (request: StructuredTurnRequest<unknown>) => unknown = () => {
@@ -17,7 +18,9 @@ export function recordingTurns(
     run: async <T>(request: StructuredTurnRequest<T>) => {
       requests.push(request)
       await Promise.resolve()
-      return request.schema.parse(reply(request))
+      const parsed = request.schema.parse(reply(request))
+      await request.copy?.settle?.(request.directory ?? '', parsed)
+      return parsed
     },
   }
   return { turns, requests }

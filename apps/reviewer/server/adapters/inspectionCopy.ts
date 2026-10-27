@@ -26,13 +26,17 @@ export const INSPECTION_EXCLUDED_PATHS = [
  * A disposable copy of `source` at `destination` (which must not exist) for an agent to inspect,
  * without the repository's agent configuration. Nothing the agent does there reaches `source`.
  * On macOS the copy is a copy-on-write clone; elsewhere, or if cloning fails, a plain copy.
+ * `git` keeps the Git metadata. Only pass it for a repository Slopbusters created itself, without
+ * hooks or configuration that runs commands, such as Gandalf's merge checkout.
  */
 export async function copyForInspection(
   source: string,
   destination: string,
   signal?: AbortSignal,
+  options: { git?: boolean } = {},
 ): Promise<void> {
   const from = resolve(source)
+  const excluded = scrubbedPaths(options)
   if (!(await cloneTree(from, destination, signal))) {
     signal?.throwIfAborted()
     await cp(from, destination, {
@@ -40,13 +44,11 @@ export async function copyForInspection(
       verbatimSymlinks: true,
       errorOnExist: true,
       force: false,
-      filter: (path) => !isExcluded(relative(from, path)),
+      filter: (path) => !isExcluded(relative(from, path), excluded),
     })
   }
   await Promise.all(
-    INSPECTION_EXCLUDED_PATHS.map((path) =>
-      rm(join(destination, path), { recursive: true, force: true }),
-    ),
+    excluded.map((path) => rm(join(destination, path), { recursive: true, force: true })),
   )
 }
 
@@ -69,12 +71,18 @@ async function cloneTree(source: string, destination: string, signal?: AbortSign
   }
 }
 
-function isExcluded(path: string) {
-  const top = path.split(sep)[0]
-  return INSPECTION_EXCLUDED_PATHS.some((excluded) => excluded === top)
+function scrubbedPaths(options: { git?: boolean }): readonly string[] {
+  return options.git
+    ? INSPECTION_EXCLUDED_PATHS.filter((path) => path !== '.git')
+    : INSPECTION_EXCLUDED_PATHS
 }
 
-/** The files under `directory`, relative and sorted, up to the listing limit. */
+function isExcluded(path: string, excluded: readonly string[]) {
+  const top = path.split(sep)[0]
+  return excluded.some((candidate) => candidate === top)
+}
+
+/** The files under `directory`, relative and sorted, up to the listing limit; never Git metadata. */
 export async function listInspectionFiles(
   directory: string,
 ): Promise<{ paths: string[]; truncated: boolean }> {
@@ -82,6 +90,7 @@ export async function listInspectionFiles(
   const paths = entries
     .filter((entry) => !entry.isDirectory())
     .map((entry) => relative(directory, join(entry.parentPath, entry.name)))
+    .filter((path) => path.split(sep)[0] !== '.git')
     .sort()
   return {
     paths: paths.slice(0, MAX_INSPECTION_LISTED_FILES),

@@ -8,6 +8,8 @@ interface GitOptions {
   maxOutputBytes?: number
   /** Retries dropped GitHub connections; pushes repeat only when nothing was sent. */
   network?: 'fetch' | 'push'
+  /** Reads and writes this index file instead of the repository's own. */
+  indexFile?: string
 }
 
 /** Both snapshots and checkouts ignore user configuration and never run hooks or filters. */
@@ -33,6 +35,7 @@ export function hardenedGit(directory: string, args: string[], options: GitOptio
         GIT_LFS_SKIP_SMUDGE: '1',
         // Do not inherit command-scoped configuration from the parent process.
         GIT_CONFIG_COUNT: '0',
+        ...(options.indexFile ? { GIT_INDEX_FILE: options.indexFile } : {}),
       },
       signal: options.signal,
       timeoutMs: GIT_TIMEOUT_MS,

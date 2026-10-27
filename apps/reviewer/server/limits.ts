@@ -71,6 +71,8 @@ export const INSPECTION_COPY_TIMEOUT_MS = 120_000
 export const MAX_INSPECTION_LISTED_FILES = 2000
 /** How much of a schema validation failure is quoted back to the agent and in errors. */
 export const MAX_STRUCTURED_ERROR_CHARS = 2000
+/** Times a structured turn's caller may send problems it found in the copy back to the agent. */
+export const MAX_STRUCTURED_FOLLOW_UPS = 2
 /** How much of a persona's review the first message of a T3 Code chat carries over. */
 export const MAX_CHAT_REVIEW_CHARACTERS = 20_000
 /**
@@ -108,7 +110,10 @@ export const MAX_GANDALF_TIMEOUT_RETRIES = 1
 export const MAX_GANDALF_BASE_RETRIES = 3
 export const GANDALF_NETWORK_RETRY_DELAYS_MS = [15_000, 30_000, 60_000]
 export const MAX_GANDALF_PULLS = 20
-export const MAX_GANDALF_PROMPT_BYTES = 4 * 1024 * 1024
+/** Files one turn may change; more means the agent rewrote the merge rather than resolving it. */
+export const MAX_GANDALF_CHANGED_FILES = 100
+/** Commits on each side of the merge named in the prompt for the conflicted files. */
+export const MAX_GANDALF_CONFLICT_COMMITS = 20
 
 export const MAX_AGENT_EVENT_CHARS = 128 * 1024
 export const MAX_AGENT_EVENT_PAGE = 200

@@ -5,7 +5,11 @@ export const gandalfTurnSchema = z.object({
   summary: z.string().min(1).max(4000),
   approved: z.boolean(),
   issues: z.array(z.string().max(2000)).max(30),
-  edits: z.array(z.object({ path: z.string().min(1), content: z.string().nullable() })).max(100),
+  /** Files the agent could not edit in place; it edits the rest in its working copy. */
+  edits: z
+    .array(z.object({ path: z.string().min(1), content: z.string().nullable() }))
+    .max(100)
+    .default([]),
   selections: z
     .array(z.object({ path: z.string().min(1), side: z.enum(['head', 'base', 'delete']) }))
     .max(100)
@@ -55,6 +59,8 @@ export const gandalfSessionSchema = z.object({
       changedPaths: z.array(z.string()),
       rounds: z.number().int(),
       published: z.boolean(),
+      /** Why this PR was left untouched while the session went on to the others. */
+      error: z.string().optional(),
     }),
   ),
 })

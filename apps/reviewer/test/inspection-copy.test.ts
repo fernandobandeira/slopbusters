@@ -80,3 +80,14 @@ it('lists the files left in the copy, relative and sorted', async () => {
     truncated: false,
   })
 })
+
+it('keeps Git metadata on request, still scrubs agent configuration, and never lists it', async () => {
+  const { source, destination } = checkoutWithAgentConfiguration()
+
+  await copyForInspection(source, destination, undefined, { git: true })
+
+  expect(readFileSync(join(destination, '.git', 'config'), 'utf8')).toBe('run something\n')
+  for (const path of INSPECTION_EXCLUDED_PATHS.filter((path) => path !== '.git'))
+    expect(existsSync(join(destination, path))).toBe(false)
+  expect((await listInspectionFiles(destination)).paths).not.toContain('.git/config')
+})

@@ -56,8 +56,8 @@ it('explains a schema mismatch so the agent can correct it', () => {
 it("lists the copy's files for Claude, which has no search tool, and lets Codex use its sandbox", () => {
   const files = { paths: ['README.md', 'src/index.ts'], truncated: true }
 
-  const claude = withOutputContract('Review this.', schema, Provider.claude, files)
-  const codex = withOutputContract('Review this.', schema, Provider.codex, files)
+  const claude = withOutputContract('Review this.', schema, Provider.claude, { files })
+  const codex = withOutputContract('Review this.', schema, Provider.codex, { files })
 
   expect(claude).toContain('Do not use Bash or any other shell tool')
   expect(claude).toContain(

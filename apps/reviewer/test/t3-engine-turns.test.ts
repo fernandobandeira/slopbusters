@@ -9,6 +9,7 @@ import { Provider } from '../shared/domain/types'
 import { CommandTimeoutError } from '../server/adapters/process'
 import type { StructuredTurnRequest } from '../server/adapters/t3Engine/engineTurns'
 import { UNATTENDED_ANSWER } from '../server/adapters/t3Engine/turnFollower'
+import { MAX_STRUCTURED_FOLLOW_UPS } from '../server/limits'
 import { fakeEngine } from './fixtures/fakeEngine'
 
 const claude = { provider: Provider.claude, model: 'claude-haiku-5-5' }
@@ -351,4 +352,79 @@ it('copies included folders, such as a skill, into the copy, scrubbed, and never
   await expect(escape).rejects.toThrow(/must stay inside the working directory/)
   expect(copied).toEqual(['README.md', 'skill/patterns.md'])
   rmSync(skill, { recursive: true, force: true })
+})
+
+it('lets the agent edit a copy that keeps Git metadata, and settles the copy before deleting it', async () => {
+  let copied: string[] = []
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'message.dispatch') return
+    const root = fake.workspaceRoots()[0] ?? ''
+    copied = ['.git', '.claude', 'README.md'].filter((path) => existsSync(join(root, path)))
+    writeFileSync(join(root, 'README.md'), 'edited by the agent\n')
+    thread.reply(command, fenced({ files: ['README.md'] }))
+  })
+  const settled: string[] = []
+
+  const result = await fake.turns.run(
+    request({
+      copy: {
+        git: true,
+        editable: true,
+        settle: (copy, reply) => {
+          settled.push(
+            `${readFileSync(join(copy, 'README.md'), 'utf8').trim()}: ${reply.files.join()}`,
+          )
+          return Promise.resolve(undefined)
+        },
+      },
+    }),
+  )
+
+  expect(result).toEqual({ files: ['README.md'] })
+  expect(settled).toEqual(['edited by the agent: README.md'])
+  expect(copied).toEqual(['.git', 'README.md'])
+  const create = fake.commands.find((command) => command.type === 'thread.create')
+  expect(create).toMatchObject({ runtimeMode: 'auto-accept-edits' })
+  const start = fake.commands.find((command) => command.type === 'message.dispatch')
+  expect(String(start?.text)).toContain('editing files there in place')
+  expect(String(start?.text)).toContain('read-only Git commands')
+  expect(readFileSync(join(checkout, 'README.md'), 'utf8')).toBe('readme\n')
+  expect(existsSync(fake.workspaceRoots()[0] ?? '')).toBe(false)
+})
+
+it('sends problems found in the copy back in the same thread until they are fixed', async () => {
+  let turns = 0
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'message.dispatch') return
+    turns += 1
+    thread.reply(command, fenced({ files: [String(turns)] }))
+  })
+  const settle = (_copy: string, reply: { files: string[] }) =>
+    Promise.resolve(reply.files[0] === '1' ? 'code.ts still has conflict markers.' : undefined)
+
+  const result = await fake.turns.run(request({ copy: { editable: true, settle } }))
+
+  expect(result).toEqual({ files: ['2'] })
+  expect(fake.types()).toEqual(lifecycle('message.dispatch', 'message.dispatch'))
+  const followUp = String(
+    fake.commands.filter((command) => command.type === 'message.dispatch')[1]?.text,
+  )
+  expect(followUp).toContain('code.ts still has conflict markers.')
+  expect(followUp).toContain('reply again with only one JSON object')
+})
+
+it('stops following up after the limit and returns the newest reply', async () => {
+  let turns = 0
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'message.dispatch') return
+    turns += 1
+    thread.reply(command, fenced({ files: [String(turns)] }))
+  })
+
+  const result = await fake.turns.run(
+    request({ copy: { editable: true, settle: () => Promise.resolve('Still broken.') } }),
+  )
+
+  expect(turns).toBe(1 + MAX_STRUCTURED_FOLLOW_UPS)
+  expect(result).toEqual({ files: [String(turns)] })
 })

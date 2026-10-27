@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import * as Effect from 'effect/Effect'
@@ -10,7 +10,6 @@ import {
   CommandId,
   MessageId,
   ProjectId,
-  PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   ProviderInstanceId,
   RunId,
   ThreadId,
@@ -23,8 +22,8 @@ import type { OrganizationPreferences } from '../../../shared/domain/preferences
 import { Provider } from '../../../shared/domain/types'
 import { logError, UserError } from '../../errors'
 import {
+  MAX_STRUCTURED_FOLLOW_UPS,
   PROVIDER_TIMEOUT_MS,
-  T3_ENGINE_TURN_INPUT_MARGIN_CHARS,
   T3_ENGINE_TURN_MARGIN_MS,
   T3_ENGINE_TURN_START_TIMEOUT_MS,
 } from '../../limits'
@@ -33,14 +32,12 @@ import { CommandTimeoutError } from '../process'
 import type { EngineClient, EngineConnection } from './engineConnection'
 import {
   correctionPrompt,
-  instructionsInFile,
-  OVERFLOW_DIRECTORY,
+  followUpPrompt,
   parseStructuredReply,
-  withOutputContract,
-  wrapLongLines,
-  type FileListing,
+  type CopyAccess,
   type InspectionFiles,
 } from './structuredOutput'
+import { firstMessage } from './firstMessage'
 import { TurnFollower, type TurnOutcome } from './turnFollower'
 
 export interface StructuredTurnRequest<T> {
@@ -59,12 +56,31 @@ export interface StructuredTurnRequest<T> {
    * scrubbed of agent configuration and deleted with the run.
    */
   readonly include?: readonly IncludedFolder[]
+  /** What the agent may do in its copy of `directory`; by default it only reads. */
+  readonly copy?: WorkingCopy<T>
   readonly observer?: ProviderObserver
   /** The whole run, including a corrective turn; defaults to `PROVIDER_TIMEOUT_MS`. */
   readonly timeoutMs?: number
   /** Names the thread in the engine's sidebar, e.g. `Linus review`. */
   readonly purpose?: string
 }
+
+/**
+ * A copy the agent may keep Git metadata in, or edit. The caller reads the edits back in `settle`,
+ * since the copy is deleted when the run ends.
+ */
+export interface WorkingCopy<T> extends CopyAccess {
+  /**
+   * Runs on the copy after each valid reply, before the copy is deleted. A returned message goes
+   * back to the agent in the same thread, at most `MAX_STRUCTURED_FOLLOW_UPS` times, and its next
+   * reply is settled again; undefined accepts the reply. After the last follow-up the newest reply
+   * is returned whatever `settle` says.
+   */
+  settle?(copy: string, reply: T): Promise<string | undefined>
+}
+
+/** The engine accepted a turn but never started it: the engine, not the task, is at fault. */
+export class TurnNotStartedError extends UserError {}
 
 export interface IncludedFolder {
   readonly directory: string
@@ -117,14 +133,16 @@ export class EngineTurns implements StructuredTurns {
       title: 'Instructions',
     })
     const deadline = Date.now() + (request.timeoutMs ?? PROVIDER_TIMEOUT_MS)
-    const workspace = await this.workspace(request.directory, request.signal, request.include)
+    const workspace = await this.workspace(request, request.signal)
     try {
       const thread = await this.createThread(workspace.projectId, request)
       try {
-        return await this.converse(thread, request, {
+        const reply = await this.converse(thread, request, {
           deadline,
           message: await firstMessage(request, workspace),
+          round: 0,
         })
+        return await this.settle(thread, request, { deadline, copy: workspace.root, reply })
       } finally {
         await this.archive(thread.id)
       }
@@ -133,11 +151,33 @@ export class EngineTurns implements StructuredTurns {
     }
   }
 
+  /** Let the caller check the copy, and send what it finds back until it is satisfied. */
+  private async settle<T>(
+    thread: TurnThread,
+    request: StructuredTurnRequest<T>,
+    { deadline, copy, reply }: { deadline: number; copy: string; reply: T },
+  ): Promise<T> {
+    let settled = reply
+    for (let round = 1; request.copy?.settle; round++) {
+      const problems = await request.copy.settle(copy, settled)
+      if (!problems || round > MAX_STRUCTURED_FOLLOW_UPS) break
+      const message = followUpPrompt(problems)
+      request.observer?.({
+        id: `follow-up-${String(round)}`,
+        kind: 'prompt',
+        text: message,
+        title: 'Follow-up',
+      })
+      settled = await this.converse(thread, request, { deadline, message, round })
+    }
+    return settled
+  }
+
   /** Ask for the reply, and once more quoting the problem if it does not match the schema. */
   private async converse<T>(
     thread: TurnThread,
     request: StructuredTurnRequest<T>,
-    { deadline, message }: { deadline: number; message: string },
+    { deadline, message, round }: { deadline: number; message: string; round: number },
   ): Promise<T> {
     const first = await this.turn(thread, message, {
       request,
@@ -146,7 +186,12 @@ export class EngineTurns implements StructuredTurns {
     const reply = parseStructuredReply(first, request.schema)
     if (reply.success) return reply.data
     const correction = correctionPrompt(reply.error)
-    request.observer?.({ id: 'correction', kind: 'prompt', text: correction, title: 'Correction' })
+    request.observer?.({
+      id: round ? `correction-${String(round)}` : 'correction',
+      kind: 'prompt',
+      text: correction,
+      title: 'Correction',
+    })
     const second = await this.turn(thread, correction, { request, deadline })
     const corrected = parseStructuredReply(second, request.schema)
     if (corrected.success) return corrected.data
@@ -198,7 +243,7 @@ export class EngineTurns implements StructuredTurns {
       case 'timeout':
         throw new CommandTimeoutError(agent)
       case 'unstarted':
-        throw new UserError(
+        throw new TurnNotStartedError(
           `${agent} never started this turn: T3 Code accepted it but opened no session within ${String(Math.round(this.startTimeoutMs / 60_000))} minutes. Restart Slopbusters, then retry.`,
         )
     }
@@ -216,7 +261,7 @@ export class EngineTurns implements StructuredTurns {
         ),
         model: request.model.model,
       },
-      runtimeMode: runtimeModeFor(request.model),
+      runtimeMode: runtimeModeFor(request.model, request.copy?.editable),
       answered: new Set(),
     }
     await this.dispatch({
@@ -247,10 +292,9 @@ export class EngineTurns implements StructuredTurns {
    * A per-run project in a throwaway directory: a scrubbed copy of `directory`, or an empty one.
    * The project and the directory are deleted when the run ends.
    */
-  private async workspace(
-    directory: string | undefined,
+  private async workspace<T>(
+    { directory, include = [], copy }: StructuredTurnRequest<T>,
     signal: AbortSignal,
-    include: readonly IncludedFolder[] = [],
   ): Promise<Workspace> {
     const root = await mkdtemp(join(tmpdir(), 'slopbusters-turn-'))
     const removeRoot = () => rm(root, { recursive: true, force: true })
@@ -259,7 +303,7 @@ export class EngineTurns implements StructuredTurns {
     const workspaceRoot = directory ? join(root, basename(resolve(directory)) || 'source') : root
     try {
       if (directory) {
-        await copyForInspection(directory, workspaceRoot, signal)
+        await copyForInspection(directory, workspaceRoot, signal, { git: copy?.git })
         files = await listInspectionFiles(workspaceRoot)
       }
       for (const folder of include) await copyIncluded(folder, workspaceRoot, signal)
@@ -402,50 +446,16 @@ function commandBase(threadId: string) {
 
 /**
  * Claude asks before every edit and every command it does not consider read-only, and each ask is
- * declined. Codex in that mode asks even for `ls`, so it gets T3 Code's workspace-write sandbox
- * instead (network off, approval on request): it runs read commands in the run's copy without
- * asking, its writes can only land in that throwaway copy, and any escalation it asks for is
- * declined.
+ * declined; in a copy it may edit, its edits are accepted (Claude Code's acceptEdits, confined to
+ * the working directory) and other commands are still declined. Codex in the asking mode asks even
+ * for `ls`, so it always gets T3 Code's workspace-write sandbox instead (network off, approval on
+ * request): it runs read commands in the run's copy without asking, its writes can only land in
+ * that throwaway copy, and any escalation it asks for is declined.
  */
-function runtimeModeFor(model: OrganizationPreferences): RuntimeMode {
-  return model.provider === Provider.claude ? 'approval-required' : 'auto-accept-edits'
+function runtimeModeFor(model: OrganizationPreferences, editable = false): RuntimeMode {
+  return model.provider === Provider.claude && !editable ? 'approval-required' : 'auto-accept-edits'
 }
 
 function agentName(model: OrganizationPreferences) {
   return model.provider === Provider.claude ? 'Claude' : 'Codex'
-}
-
-/**
- * The first message: the prompt and its output contract. The engine refuses a turn input over
- * `PROVIDER_SEND_TURN_MAX_INPUT_CHARS`, so what does not fit moves into files in the working
- * directory, first Claude's file list and then the prompt itself.
- */
-async function firstMessage<T>(
-  request: StructuredTurnRequest<T>,
-  workspace: Workspace,
-): Promise<string> {
-  const agent = request.model.provider
-  const fits = (message: string) =>
-    message.length <= PROVIDER_SEND_TURN_MAX_INPUT_CHARS - T3_ENGINE_TURN_INPUT_MARGIN_CHARS
-  const inline = withOutputContract(request.prompt, request.schema, agent, workspace.files)
-  if (fits(inline)) return inline
-  const overflow = join(workspace.root, OVERFLOW_DIRECTORY)
-  await mkdir(overflow, { recursive: true })
-  let files: FileListing | undefined = workspace.files
-  if (workspace.files) {
-    const path = `${OVERFLOW_DIRECTORY}/files.txt`
-    await writeFile(join(workspace.root, path), `${workspace.files.paths.join('\n')}\n`)
-    files = { path, count: workspace.files.paths.length }
-    const listed = withOutputContract(request.prompt, request.schema, agent, files)
-    if (fits(listed)) return listed
-  }
-  const path = `${OVERFLOW_DIRECTORY}/instructions.md`
-  const instructions = wrapLongLines(request.prompt)
-  await writeFile(join(workspace.root, path), instructions)
-  return withOutputContract(
-    instructionsInFile(path, instructions, agent),
-    request.schema,
-    agent,
-    files,
-  )
 }

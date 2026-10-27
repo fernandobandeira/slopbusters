@@ -17,6 +17,32 @@ const inspectionRules: Record<Provider, string> = {
     '- Inspect files with read-only commands such as ls, rg and cat; they run in a sandbox. Never ask for approval or escalation: no one is available, and every request is declined.',
 }
 
+/**
+ * Claude Code runs the read-only Git commands it recognises without asking, so in a copy that
+ * keeps its Git metadata Claude may try them; anything else it asks for is still declined.
+ */
+const gitRules: Record<Provider, string> = {
+  claude:
+    '- Read files by path with the Read tool; any files in the working directory are listed below. The working directory is a Git checkout: you may run read-only Git commands such as git diff, git log, git show and git blame. Every other shell command is declined here.',
+  codex:
+    '- Inspect files and history with read-only commands such as ls, rg, cat, git diff, git log, git show and git blame; they run in a sandbox. Never ask for approval or escalation: no one is available, and every request is declined.',
+}
+
+/** What the agent may do in its working directory. */
+export interface CopyAccess {
+  /** The copy keeps its Git metadata, so the agent can read history, the index and diffs. */
+  readonly git?: boolean
+  /** The agent makes its changes by editing files in the copy. */
+  readonly editable?: boolean
+}
+
+function accessRules(agent: Provider, access: CopyAccess): string[] {
+  const changes = access.editable
+    ? '- Your working directory is a disposable copy. Make the changes the task asks for by editing files there in place. Do not run commands that change anything else, and do not ask for approval.'
+    : '- You may read files in the working directory. Do not create, edit or delete files, and do not run commands that change anything.'
+  return [changes, (access.git ? gitRules : inspectionRules)[agent]]
+}
+
 /** The working directory's files, for an agent that cannot list them itself. */
 export interface InspectionFiles {
   readonly paths: readonly string[]
@@ -43,7 +69,7 @@ export function withOutputContract(
   prompt: string,
   schema: z.ZodType,
   agent: Provider,
-  files?: FileListing,
+  { files, access = {} }: { files?: FileListing; access?: CopyAccess } = {},
 ): string {
   const jsonSchema = JSON.stringify(z.toJSONSchema(schema, { target: 'draft-7' }), null, 2)
   return [
@@ -53,8 +79,7 @@ export function withOutputContract(
     '',
     'Output contract:',
     '- Reply with only one JSON object that matches this JSON Schema, inside a ```json fenced block, and nothing else.',
-    '- You may read files in the working directory. Do not create, edit or delete files, and do not run commands that change anything.',
-    inspectionRules[agent],
+    ...accessRules(agent, access),
     '- Always reply under this contract, even when you could not inspect everything. Say what you could not check in the reply rather than asking for permission.',
     '',
     '```json',
@@ -115,6 +140,15 @@ export function correctionPrompt(error: string): string {
     error,
     '',
     'Reply again with only one JSON object that matches the JSON Schema from the output contract, inside a ```json fenced block. If a tool was declined, answer from what you could read.',
+  ].join('\n')
+}
+
+/** The turn that sends problems the caller found in the copy back to the agent. */
+export function followUpPrompt(problems: string): string {
+  return [
+    problems.trimEnd(),
+    '',
+    'Fix this in the working directory, then reply again with only one JSON object that matches the JSON Schema from the output contract, inside a ```json fenced block.',
   ].join('\n')
 }
 

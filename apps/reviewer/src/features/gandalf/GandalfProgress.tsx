@@ -25,7 +25,8 @@ export function GandalfProgress({
         {session.progress}
       </p>
       <p className="gandalf-detail">
-        {session.results.length} of {session.urls.length} PRs finished
+        {session.results.filter((result) => !result.error).length} of {session.urls.length} PRs
+        finished
       </p>
       {latest && (
         <p className="gandalf-detail">
@@ -41,22 +42,7 @@ export function GandalfProgress({
       )}
       {session.error && <p role="alert">{session.error}</p>}
       {session.results.map((result) => (
-        <div className="gandalf-result" key={result.url}>
-          <p className="gandalf-detail">
-            <a href={result.url} target="_blank" rel="noreferrer">
-              PR #{result.number}
-            </a>
-            {' · '}
-            {result.published
-              ? `Updated ${result.resolvedSha.slice(0, 8)}`
-              : session.task === 'ci'
-                ? 'No changes needed'
-                : 'Already up to date'}
-          </p>
-          <ContinueInT3CodeButton
-            request={{ persona: 'gandalf', sessionId: session.id, url: result.url }}
-          />
-        </div>
+        <GandalfResult key={result.url} session={session} result={result} />
       ))}
       <GandalfHistory turns={session.turns} />
       <div className="gandalf-actions">
@@ -78,6 +64,36 @@ export function GandalfProgress({
         )}
       </div>
     </>
+  )
+}
+
+function GandalfResult({
+  session,
+  result,
+}: {
+  session: GandalfSession
+  result: GandalfSession['results'][number]
+}) {
+  return (
+    <div className="gandalf-result">
+      <p className="gandalf-detail">
+        <a href={result.url} target="_blank" rel="noreferrer">
+          PR #{result.number}
+        </a>
+        {' · '}
+        {result.error
+          ? 'Not updated'
+          : result.published
+            ? `Updated ${result.resolvedSha.slice(0, 8)}`
+            : session.task === 'ci'
+              ? 'No changes needed'
+              : 'Already up to date'}
+      </p>
+      {result.error && <p className="gandalf-detail">{result.error}</p>}
+      <ContinueInT3CodeButton
+        request={{ persona: 'gandalf', sessionId: session.id, url: result.url }}
+      />
+    </div>
   )
 }
 

@@ -5,18 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GandalfJobs } from '../server/features/gandalf/gandalfJobs'
 import { ReviewerStore } from '../server/adapters/store'
 import { Provider, type PullRequest } from '../shared/domain/types'
-import type { GandalfTask, GandalfTurn } from '../shared/domain/gandalf'
+import type { GandalfTask } from '../shared/domain/gandalf'
 import { fixturePull } from './fixtures/pull'
 import { recordingTurns } from './fixtures/turns'
+import { gandalfMove, idleWorkspaceParts } from './fixtures/gandalf'
 
 type Options = ConstructorParameters<typeof GandalfJobs>[0]
-const clean: GandalfTurn = {
-  summary: 'No issues found.',
-  approved: true,
-  issues: [],
-  edits: [],
-  selections: [],
-}
+const clean = gandalfMove()
 const failure = { name: 'build-and-test-server', summary: '', log: 'error TS2741' }
 let directory: string
 let store: ReviewerStore
@@ -55,7 +50,11 @@ function layers(count: number): PullRequest[] {
   }))
 }
 /** Starts a CI session over a stack whose layers fail CI or are behind their base. */
-async function fixCi(pulls: PullRequest[], state: { failing: number[]; behind: number[] }) {
+async function fixCi(
+  pulls: PullRequest[],
+  state: { failing: number[]; behind: number[] },
+  status = 'complete',
+) {
   loadFailures.mockImplementation((pull) =>
     Promise.resolve(state.failing.includes(pull.number) ? [failure] : []),
   )
@@ -66,8 +65,8 @@ async function fixCi(pulls: PullRequest[], state: { failing: number[]; behind: n
       needsUpdate: state.behind.includes(pull.number),
       conflicts: [],
       verify,
-      inspect: () => Promise.resolve({ revision: 'tree', diff: '', conflicts: [] }),
-      apply: () => Promise.resolve(),
+      inspect: () => Promise.resolve({ revision: 'tree', conflicts: [] }),
+      ...idleWorkspaceParts,
       publish,
       close: () => Promise.resolve(),
     }),
@@ -87,7 +86,7 @@ async function fixCi(pulls: PullRequest[], state: { failing: number[]; behind: n
   })
   const { id } = jobs.start('review-room/example', urls, 'ci')
   await vi.waitFor(() => {
-    expect(jobs?.get(id).status).toBe('complete')
+    expect(jobs?.get(id).status).toBe(status)
   })
   return jobs.get(id)
 }
@@ -117,5 +116,36 @@ describe('Gandalf CI fixes', () => {
     const saved = await fixCi(layers(1), { failing: [1], behind: [] })
     expect(saved.results[0]?.published).toBe(false)
     expect(saved.progress).toBe('You may pass. No failing check needed a change.')
+  })
+  it('leaves a PR the models cannot agree on, skips the layers above it and fixes the rest', async () => {
+    const independent: PullRequest = {
+      ...fixturePull(),
+      number: 3,
+      url: fixturePull().url.replace(/\d+$/, '3'),
+      headBranch: 'layer-3',
+      baseBranch: 'main',
+    }
+    resolve.mockImplementation(({ pull }) =>
+      Promise.resolve(
+        pull.number === 1 ? gandalfMove({ approved: false, issues: ['Still unsure.'] }) : clean,
+      ),
+    )
+    const saved = await fixCi(
+      [...layers(2), independent],
+      { failing: [1, 3], behind: [2] },
+      'failed',
+    )
+    expect(saved.results.map(({ number, published, error }) => [number, published, error])).toEqual(
+      [
+        [1, false, expect.stringContaining('20 turns')],
+        [2, false, 'Skipped because its base PR #1 was not resolved.'],
+        [3, true, undefined],
+      ],
+    )
+    expect(saved.error).toBe(
+      'PRs #1, #2 were not updated. The other PRs are saved; review their findings and retry.',
+    )
+    expect(openWorkspace.mock.calls.map(([pull]) => pull.number)).toEqual([1, 3])
+    expect(publish).toHaveBeenCalledTimes(1)
   })
 })
