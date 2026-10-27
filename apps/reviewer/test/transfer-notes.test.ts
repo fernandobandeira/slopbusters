@@ -58,12 +58,31 @@ describe('transfer notes', () => {
     expect(transferCounts(destination)).toEqual({ moved: 1, copied: 0 })
   })
 
-  it('shows no card or jump for an end the group does not display', () => {
-    const { source, destination } = annotate('destination', [])
+  it('jumps into the group that shows an end this group does not display', () => {
+    const { pull, source, destination } = annotate('destination', [])
 
     expect(source).toEqual([])
     expect(destination).toHaveLength(1)
-    expect(destination[0]?.metadata).not.toHaveProperty('counterpart')
+    expect(destination[0]?.metadata).toMatchObject({
+      counterpart: { fileId: pull.files[0]?.id, side: DiffSide.left, line: 13, groupId: 'both' },
+    })
+  })
+
+  it('offers no jump when no group shows the other end', () => {
+    const pull = transferPull()
+    const group = pull.groups.find((candidate) => candidate.id === 'destination')
+    if (!group) throw new Error('Missing group')
+    pull.groups = [group]
+
+    const { items } = annotateDiscussions({
+      items: diffItems(pull, group),
+      pull,
+      comments: [],
+      editor: null,
+    })
+    const [item] = annotateTransfers(items, pull)
+
+    expect(item?.annotations?.[0]?.metadata).not.toHaveProperty('counterpart')
   })
 
   it('keeps a discussion on the same line and side next to the card', () => {

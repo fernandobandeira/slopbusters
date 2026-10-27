@@ -64,42 +64,6 @@ const REVIEW_DIFF_CSS = `
 [data-diff-span][data-whitespace-only] {
   background-color: transparent !important;
 }
-
-/* Moved and copied rows keep their place but read as relocated, not as new or deleted code. */
-:is([data-line], [data-column-number])[data-transfer] {
-  background-color: color-mix(in srgb, var(--info) 7%, var(--code-background)) !important;
-  color: color-mix(in srgb, var(--info) 70%, var(--code-foreground)) !important;
-}
-
-[data-line][data-transfer] > * {
-  opacity: 0.62;
-}
-
-[data-line][data-transfer] [data-diff-span] {
-  background-color: transparent !important;
-}
-
-[data-line][data-transfer]::before {
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-start: 0;
-  width: 1ch;
-  text-align: center;
-  color: var(--info);
-  user-select: none;
-}
-
-[data-line][data-transfer='moved']::before {
-  content: '⇄';
-}
-
-[data-line][data-transfer='copied']::before {
-  content: '⧉';
-}
-
-[data-indicators='bars'] [data-column-number][data-transfer]::before {
-  background: color-mix(in srgb, var(--info) 60%, transparent) !important;
-}
 `
 
 /** The reviewer's diff surface: T3 Code's viewer plus symbol menus and gutter comment buttons. */

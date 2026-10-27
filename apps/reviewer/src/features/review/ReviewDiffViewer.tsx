@@ -17,9 +17,9 @@ import { clickedSymbol } from './diff/codeSymbols'
 import type { SymbolMenuSelection } from '../source-navigation/SymbolContextMenu'
 import type { useFileContext } from './diff/useFileContext'
 import { hasDiscussion, type annotateDiscussions } from './discussions/discussions'
-import { transferCounts, transferRows, type LineNote, type LinePlace } from './transferNotes'
+import { transferCounts, transferRows, type LineNote, type Counterpart } from './transferNotes'
 import { TransferCard } from './TransferCard'
-import { markTransferRows } from './diff/transferMarkers'
+import { markTransferRows, TRANSFER_ROWS_CSS } from './diff/transferMarkers'
 import { FileContextActions } from './FileContextActions'
 import { collapseExpandedLines, separatorClick } from './diff/hunkExpansion'
 import { labelSeparators } from './diff/separatorSymbols'
@@ -51,6 +51,7 @@ interface Props {
   submitted?: string
   commentOnLine: (location: { fileId: string; line: number; side: DiffSide }) => void
   navigateSymbol: (kind: NavigationRequest['kind'], selection?: Selection) => void
+  onJumpToTransfer: (target: Counterpart) => void
 }
 export function ReviewDiffViewer({
   pull,
@@ -76,19 +77,11 @@ export function ReviewDiffViewer({
   submitted,
   commentOnLine,
   navigateSymbol,
+  onJumpToTransfer,
 }: Props) {
   const { themeId, resolvedTheme } = useReviewerTheme()
   const [expandedFiles, setExpandedFiles] = useState(() => new Set<string>())
   const transferred = useMemo(() => transferRows(pull), [pull])
-  function jumpTo(place: LinePlace) {
-    viewerRef.current?.scrollTo({
-      type: 'line',
-      id: place.fileId,
-      lineNumber: place.line,
-      side: place.side === DiffSide.left ? 'deletions' : 'additions',
-      align: 'center',
-    })
-  }
   function collapseLines(fileId: string) {
     collapseExpandedLines(viewerRef.current, fileId)
     setFileRevealed(fileId, false)
@@ -102,6 +95,7 @@ export function ReviewDiffViewer({
     <ReviewDiffCodeView
       className="viewer"
       viewerRef={viewerRef}
+      unsafeCSSExtra={TRANSFER_ROWS_CSS}
       items={annotated.items}
       onTokenContextMenu={(props, event, item) => {
         const symbol = clickedSymbol(props, event)
@@ -167,7 +161,7 @@ export function ReviewDiffViewer({
             note={metadata}
             contents={fileContext.contents}
             load={fileContext.load}
-            onJump={jumpTo}
+            onJump={onJumpToTransfer}
           />
         ) : (
           hasDiscussion(metadata) && (

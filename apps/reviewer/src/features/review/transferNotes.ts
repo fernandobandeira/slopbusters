@@ -26,9 +26,11 @@ export interface TransferNote {
   transfer: CodeTransfer
   /** The source sits in the base (left); the destination in the head (right). */
   end: 'source' | 'destination'
-  /** The other end's annotated line, when this view shows it. */
-  counterpart?: LinePlace & { below: boolean }
+  /** The other end's annotated line, here or in the group that shows it, if any does. */
+  counterpart?: Counterpart
 }
+/** Where a card jumps: below or above it in this view, or into another group. */
+export type Counterpart = LinePlace & ({ below: boolean } | { groupId: string })
 /** Everything annotated under a diff line. Several notes can share one line and side. */
 export type LineNote = LineDiscussion | TransferNote
 
@@ -37,7 +39,7 @@ export type TransferRows = ReadonlyMap<string, ReadonlyMap<string, TransferKind>
 
 /**
  * Add a card under each displayed end of every moved or copied block. An end the displayed
- * patch does not show gets no card, and its counterpart offers no jump to it.
+ * patch does not show gets no card; its counterpart jumps to the group that shows it, if any.
  */
 export function annotateTransfers(
   items: CodeViewItem<LineNote>[],
@@ -50,12 +52,19 @@ export function annotateTransfers(
     const destination = endPlace(shown, pull, transfer, DiffSide.right)
     const add = (place: Shown | undefined, other: Shown | undefined, end: TransferNote['end']) => {
       if (!place) return
+      const elsewhere = other ? undefined : groupPlace(pull, transfer, otherSide(place.side))
       const list = notes.get(place.fileId) ?? []
       notes.set(place.fileId, list)
       list.push({
         lineNumber: place.line,
         side: place.side === DiffSide.left ? 'deletions' : 'additions',
-        metadata: { kind: 'transfer', transfer, end, ...counterpart(place, other) },
+        metadata: {
+          kind: 'transfer',
+          transfer,
+          end,
+          ...(other ? { counterpart: nearby(place, other) } : {}),
+          ...(elsewhere ? { counterpart: elsewhere } : {}),
+        },
       })
     }
     add(source, destination, 'source')
@@ -128,21 +137,43 @@ function endPlace(
   const file = transferFile(pull, transfer, side)
   const item = file && shown.get(file.id)
   if (!file || !item) return undefined
-  const [first, last] =
-    side === DiffSide.left
-      ? [transfer.fromLine, transfer.fromEndLine]
-      : [transfer.toLine, transfer.toEndLine]
+  const [first, last] = endRange(transfer, side)
   for (let line = last; line >= first; line--)
     if (item.lines.has(`${side}:${String(line)}`))
       return { fileId: file.id, side, line, index: item.index }
   return undefined
 }
 
-function counterpart(place: Shown, other: Shown | undefined) {
-  if (!other) return {}
+function nearby(place: Shown, other: Shown): Counterpart {
   const below =
     other.index > place.index || (other.index === place.index && other.line > place.line)
-  return { counterpart: { fileId: other.fileId, side: other.side, line: other.line, below } }
+  return { fileId: other.fileId, side: other.side, line: other.line, below }
+}
+
+/** The last line of one end that some group's sections show, for a jump into that group. */
+function groupPlace(pull: PullRequest, transfer: CodeTransfer, side: DiffSide) {
+  const file = transferFile(pull, transfer, side)
+  if (!file) return undefined
+  const [first, last] = endRange(transfer, side)
+  for (const group of pull.groups) {
+    const lines = file.hunks
+      .filter((hunk) => group.hunkIds.includes(hunk.id))
+      .flatMap((hunk) => hunk.lines)
+      .flatMap((line) => (side === DiffSide.left ? line.oldLine : line.newLine) ?? [])
+      .filter((line) => line >= first && line <= last)
+    if (lines.length) return { fileId: file.id, side, line: Math.max(...lines), groupId: group.id }
+  }
+  return undefined
+}
+
+function endRange(transfer: CodeTransfer, side: DiffSide): [number, number] {
+  return side === DiffSide.left
+    ? [transfer.fromLine, transfer.fromEndLine]
+    : [transfer.toLine, transfer.toEndLine]
+}
+
+function otherSide(side: DiffSide) {
+  return side === DiffSide.left ? DiffSide.right : DiffSide.left
 }
 
 function rowKey(line: Pick<DiffLine, 'kind' | 'oldLine' | 'newLine'>) {

@@ -29,6 +29,7 @@ import { SymbolContextMenu, type SymbolMenuSelection } from '../source-navigatio
 import type { NavigationRequest } from '../../../shared/domain/navigation'
 import { annotateDiscussions, discussionGroup } from './discussions/discussions'
 import { annotateTransfers, type LineNote } from './transferNotes'
+import { useTransferJump } from './useTransferJump'
 
 import { DiscussionsTray } from './discussions/DiscussionsTray'
 import { CompactReviewHeader, ReviewPullDetails } from './CompactReviewHeader'
@@ -206,6 +207,13 @@ export function ReviewWorkspace({
     })
     return { ...discussed, items: annotateTransfers(discussed.items, pull) }
   }, [items, pull, discussions, draft.comments, editor, selected?.id])
+  const jumpToTransfer = useTransferJump({
+    selected,
+    items,
+    changeView,
+    setFileCollapsed,
+    viewerRef,
+  })
   useEffect(() => {
     if (!editor) return
     const file = pull.files.find((file) => file.path === editor.path)
@@ -509,6 +517,7 @@ export function ReviewWorkspace({
                       submitted={submitted}
                       commentOnLine={commentOnLine}
                       navigateSymbol={navigateSymbol}
+                      onJumpToTransfer={jumpToTransfer}
                     />
                   ) : (
                     <div className="empty-state">

@@ -118,4 +118,53 @@ describe('transfer card', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hide changes ▾' }))
     expect(screen.queryByTestId('nested-diff')).toBeNull()
   })
+
+  it('opens another group for an end this view does not show', () => {
+    const pull = transferPull()
+    const counterpart = { fileId: 'old', side: DiffSide.left, line: 13, groupId: 'both' }
+    const { onJump } = renderCard(pull, { counterpart })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Jump →' }))
+
+    expect(onJump).toHaveBeenCalledWith(counterpart)
+  })
+
+  it('shows the original of a copy no section shows, one panel at a time', () => {
+    const pull = transferPull({ kind: TransferKind.copied })
+    const [source] = pull.files
+    const original = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
+    const contents = new Map<string, PullFileContent>([
+      [
+        source?.id ?? '',
+        {
+          fileId: source?.id ?? '',
+          old: { ...revision('src/old.ts', 'f', 1), content: [...original, ...block()].join('\n') },
+          new: null,
+        },
+      ],
+    ])
+    renderCard(pull, {}, contents)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show original ▸' }))
+    const excerpt = screen.getByTestId('nested-diff').textContent
+    expect(excerpt).toContain('seven')
+    expect(excerpt).toContain('const a = 1')
+    expect(excerpt).not.toContain('six')
+    fireEvent.click(screen.getByRole('button', { name: 'Show changes ▸' }))
+    expect(screen.queryByText(/The original in/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Show original ▸' })).toBeTruthy()
+  })
+
+  it('offers no original when the copy source is on screen', () => {
+    const counterpart = { fileId: 'old', side: DiffSide.left, line: 13, below: false }
+
+    renderCard(transferPull({ kind: TransferKind.copied }), { counterpart })
+
+    expect(screen.queryByRole('button', { name: /original/ })).toBeNull()
+  })
 })
+
+/** The four lines the fixture moves, at old.ts 10–13. */
+function block() {
+  return ['  const a = 1', '  const b = 2', '  const c = 3', '  return a + b + c']
+}

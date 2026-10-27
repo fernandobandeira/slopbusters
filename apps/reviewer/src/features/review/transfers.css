@@ -43,6 +43,10 @@
   font-size: 10px;
   color: var(--muted-foreground);
 }
+/* The viewer pads below its last file for scrolling past it; a snippet fits and never scrolls. */
+.transfer-card-diff > div {
+  margin-bottom: 0 !important;
+}
 .transfer-card-diff {
   display: block;
   width: 100%;

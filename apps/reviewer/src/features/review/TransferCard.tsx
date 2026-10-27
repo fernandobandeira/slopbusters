@@ -5,8 +5,8 @@ import { Button } from '~/components/ui/button'
 import { DiffSide, TransferKind, type PullRequest } from '../../../shared/domain/types'
 import type { PullFileContent } from '../../../shared/domain/fileContent'
 import { lineRange, transferFile, transferView, type TransferView } from './transferContext'
-import type { LinePlace, TransferNote } from './transferNotes'
-import { TransferChanges } from './TransferChanges'
+import type { Counterpart, TransferNote } from './transferNotes'
+import { TransferChanges, TransferOriginal } from './TransferSnippets'
 import './transfers.css'
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
   note: TransferNote
   contents: ReadonlyMap<string, PullFileContent>
   load: (fileId: string) => Promise<PullFileContent>
-  onJump: (place: LinePlace) => void
+  onJump: (place: Counterpart) => void
 }
 
 /**
@@ -23,8 +23,11 @@ interface Props {
  */
 export function TransferCard({ pull, note, contents, load, onJump }: Props) {
   const { transfer, counterpart } = note
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState<'changes' | 'original'>()
   useTransferContents(pull, note, load)
+  const toggle = (panel: 'changes' | 'original') => {
+    setOpen((value) => (value === panel ? undefined : panel))
+  }
   const view = transferView(pull, transfer, contents)
   const other = otherEnd(note, view)
   const Icon = transfer.kind === TransferKind.moved ? ArrowLeftRight : Copy
@@ -55,33 +58,79 @@ export function TransferCard({ pull, note, contents, load, onJump }: Props) {
             : `${String(transfer.changedLines)} of ${String(transfer.lineCount)} lines changed`}
         </Badge>
         <span className="transfer-card-spacer" />
-        {counterpart && (
-          <Button
-            variant="ghost-muted"
-            size="micro"
-            onClick={() => {
-              onJump(counterpart)
+        {counterpart && <JumpButton target={counterpart} onJump={onJump} />}
+        {showsOriginal(note) && (
+          <PanelToggle
+            label="original"
+            open={open === 'original'}
+            onToggle={() => {
+              toggle('original')
             }}
-          >
-            Jump {counterpart.below ? '↓' : '↑'}
-          </Button>
+          />
         )}
         {!transfer.exact && (
-          <Button
-            variant="outline"
-            size="micro"
-            aria-expanded={open}
-            onClick={() => {
-              setOpen((value) => !value)
+          <PanelToggle
+            label="changes"
+            open={open === 'changes'}
+            onToggle={() => {
+              toggle('changes')
             }}
-          >
-            {open ? 'Hide changes ▾' : 'Show changes ▸'}
-          </Button>
+          />
         )}
       </div>
-      {open && <TransferChanges transfer={transfer} />}
+      {open === 'changes' && <TransferChanges transfer={transfer} />}
+      {open === 'original' && (
+        <TransferOriginal
+          transfer={transfer}
+          revision={contents.get(transferFile(pull, transfer, DiffSide.left)?.id ?? '')?.old}
+        />
+      )}
     </section>
   )
+}
+
+function JumpButton({
+  target,
+  onJump,
+}: {
+  target: Counterpart
+  onJump: (target: Counterpart) => void
+}) {
+  const elsewhere = 'groupId' in target
+  return (
+    <Button
+      variant="ghost-muted"
+      size="micro"
+      title={elsewhere ? 'Opens the group that shows it' : undefined}
+      onClick={() => {
+        onJump(target)
+      }}
+    >
+      Jump {elsewhere ? '→' : target.below ? '↓' : '↑'}
+    </Button>
+  )
+}
+
+function PanelToggle({
+  label,
+  open,
+  onToggle,
+}: {
+  label: string
+  open: boolean
+  onToggle: () => void
+}) {
+  return (
+    <Button variant="outline" size="micro" aria-expanded={open} onClick={onToggle}>
+      {open ? `Hide ${label} ▾` : `Show ${label} ▸`}
+    </Button>
+  )
+}
+
+/** A copy's original is unchanged code no section of this view shows, so the card can. */
+function showsOriginal({ transfer, end, counterpart }: TransferNote) {
+  const sourceShown = counterpart != null && !('groupId' in counterpart)
+  return transfer.kind === TransferKind.copied && end === 'destination' && !sourceShown
 }
 
 /** Both ends' revisions name the functions around the block; fetch them once a card shows. */
