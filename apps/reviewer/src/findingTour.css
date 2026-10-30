@@ -162,3 +162,21 @@
     padding-bottom: 400px;
   }
 }
+.code-reference {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.code-reference code {
+  text-decoration: underline dotted color-mix(in srgb, var(--primary) 50%, transparent);
+  text-underline-offset: 3px;
+}
+.code-reference:hover code,
+.code-reference:focus-visible code {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  text-decoration-style: solid;
+}

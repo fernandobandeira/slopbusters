@@ -25,6 +25,9 @@ import {
   visitSource,
 } from './sourceNavigationHistory'
 import type { ReviewWorkspaceInfo } from '../../../shared/domain/workspace'
+import type { CodeReference } from '../../../shared/domain/codeReferences'
+import { useReferenceSource } from './useReferenceSource'
+import { SourceToolbar } from './SourceToolbar'
 import '../../sourceContext.css'
 
 interface Props {
@@ -38,6 +41,8 @@ interface Props {
   split: boolean
   error?: string
   initialRequest?: NavigationRequest
+  /** A place a reviewer named, opened at its lines in the PR head. */
+  reference?: CodeReference
   onRetry: () => void
   onClose: () => void
 }
@@ -51,6 +56,7 @@ export function SourceContextDialog({
   split: initialSplit,
   error,
   initialRequest,
+  reference,
   onRetry,
   onClose,
 }: Props) {
@@ -62,9 +68,13 @@ export function SourceContextDialog({
   const visit = history.visits[history.index]
   const [notice, setNotice] = useState('')
   const [workspace, setWorkspace] = useState<ReviewWorkspaceInfo>()
-  const [busy, setBusy] = useState(Boolean(initialRequest))
+  const [busy, setBusy] = useState(Boolean(initialRequest || reference))
   const [loadingMessage, setLoadingMessage] = useState(
-    initialRequest ? navigationLoadingMessage(initialRequest.kind) : 'Loading source…',
+    initialRequest
+      ? navigationLoadingMessage(initialRequest.kind)
+      : reference
+        ? 'Opening source…'
+        : 'Loading source…',
   )
   const [sourceError, setSourceError] = useState('')
   const [symbolMenu, setSymbolMenu] = useState<SymbolMenuSelection>()
@@ -163,6 +173,19 @@ export function SourceContextDialog({
       controller.abort()
     }
   }, [initialRequest, pull.id])
+  useReferenceSource({
+    pull,
+    reference,
+    claim: () => ++requestVersion.current,
+    isLatest: (version) => version === requestVersion.current,
+    onOpen: (visit) => {
+      setHistory((current) => visitSource(current, visit))
+    },
+    onError: setSourceError,
+    onSettled: () => {
+      setBusy(false)
+    },
+  })
   async function openSource(target: NavigationTarget) {
     const version = ++requestVersion.current
     setBusy(true)
@@ -246,7 +269,7 @@ export function SourceContextDialog({
   }
   return (
     <Dialog
-      open={Boolean(fileId)}
+      open={Boolean(fileId || reference)}
       onOpenChange={(open) => {
         if (!open) onClose()
       }}
@@ -272,52 +295,21 @@ export function SourceContextDialog({
         )}
         {revision && (
           <>
-            <nav className="source-context-toolbar" aria-label="Source navigation">
-              {history.visits.length > 0 && (
-                <>
-                  <button
-                    type="button"
-                    aria-label="Back in source"
-                    disabled={busy || history.index < 0}
-                    onClick={() => {
-                      setHistory((current) => ({ ...current, index: current.index - 1 }))
-                      setNavigation(undefined)
-                      setNotice('')
-                    }}
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Forward in source"
-                    disabled={busy || history.index + 1 >= history.visits.length}
-                    onClick={() => {
-                      setHistory((current) => ({ ...current, index: current.index + 1 }))
-                      setNavigation(undefined)
-                      setNotice('')
-                    }}
-                  >
-                    Forward →
-                  </button>
-                </>
-              )}
-              {showsDiff && (
-                <button
-                  type="button"
-                  aria-pressed={split}
-                  onClick={() => {
-                    setSplit((value) => !value)
-                  }}
-                >
-                  {split ? 'Unified' : 'Split'}
-                </button>
-              )}
-              {navigation?.source?.kind !== 'local' && workspace?.status !== 'ready' && (
-                <button type="button" disabled={busy} onClick={() => void prepareLocalSource()}>
-                  Prepare local source
-                </button>
-              )}
-            </nav>
+            <SourceToolbar
+              history={history}
+              busy={busy}
+              split={showsDiff ? split : undefined}
+              canPrepare={navigation?.source?.kind !== 'local' && workspace?.status !== 'ready'}
+              onStep={(step) => {
+                setHistory((current) => ({ ...current, index: current.index + step }))
+                setNavigation(undefined)
+                setNotice('')
+              }}
+              onToggleSplit={() => {
+                setSplit((value) => !value)
+              }}
+              onPrepare={() => void prepareLocalSource()}
+            />
             {notice && (
               <p className="source-context-notice" role="status">
                 {notice}

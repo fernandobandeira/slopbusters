@@ -25,6 +25,7 @@ import {
   removeDraftComment,
   saveDraftComment,
 } from '../../components/FindingComment'
+import { CodeReferenceText } from '../../components/CodeReferenceText'
 import { FindingText } from '../../components/FindingText'
 import { GroundingSummary, GroundingVerdict } from './GroundingNotes'
 import { PanelFaces, reviewerName } from './PanelFaces'
@@ -180,7 +181,7 @@ function AnchorText({ anchor }: { anchor: Anchor }) {
   if (anchor.kind === 'description') return <>{where}</>
   return (
     <>
-      <code>{where}</code>
+      <CodeReferenceText>{where ?? ''}</CodeReferenceText>
       {rest.map((part) => ` · ${part}`).join('')}
     </>
   )

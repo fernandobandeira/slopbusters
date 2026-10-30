@@ -19,6 +19,7 @@ import {
   saveDraftComment,
 } from '../../components/FindingComment'
 import { CopyButton } from '../../components/CopyButton'
+import { CodeReferenceText } from '../../components/CodeReferenceText'
 import { FindingText } from '../../components/FindingText'
 
 export interface BobDraftContext {
@@ -57,10 +58,8 @@ export function BobTour({
         <h2 className="finding-title">{finding?.title ?? bobVerdictLabels[advice.verdict]}</h2>
         {finding && (
           <p className="finding-location">
-            <code>
-              {finding.path}:{finding.line}
-            </code>{' '}
-            · {finding.side === DiffSide.left ? 'original' : 'updated'} code
+            <CodeReferenceText>{`${finding.path}:${String(finding.line)}`}</CodeReferenceText> ·{' '}
+            {finding.side === DiffSide.left ? 'original' : 'updated'} code
           </p>
         )}
         <FindingText>{finding?.body ?? advice.summary}</FindingText>

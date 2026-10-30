@@ -24,6 +24,8 @@ import { Button } from '~/components/ui/button'
 import { message } from '../../lib/api'
 
 import { SourceContextDialog } from '../source-navigation/SourceContextDialog'
+import { OpenCodeProvider } from '../../components/CodeReferenceText'
+import type { CodeReference } from '../../../shared/domain/codeReferences'
 import { SymbolContextMenu, type SymbolMenuSelection } from '../source-navigation/SymbolContextMenu'
 
 import type { NavigationRequest } from '../../../shared/domain/navigation'
@@ -123,11 +125,10 @@ export function ReviewWorkspace({
   const [symbolMenu, setSymbolMenu] = useState<
     SymbolMenuSelection & { fileId: string; side: DiffSide; path: string }
   >()
-  const [sourceSelection, setSourceSelection] = useState<{
-    fileId: string
-    request: NavigationRequest
-    text: string
-  }>()
+  const [sourceSelection, setSourceSelection] = useState<
+    | { fileId: string; request: NavigationRequest; text: string; reference?: undefined }
+    | { fileId?: undefined; request?: undefined; reference: CodeReference }
+  >()
   const sourceFileId = sourceSelection?.fileId
   function navigateSymbol(kind: NavigationRequest['kind'], selection = symbolMenu) {
     if (!selection) return
@@ -572,15 +573,21 @@ export function ReviewWorkspace({
           )}
         </div>
       </div>
-      {renderCompanion?.({
-        draft,
-        setDraft,
-        ready: draftReady,
-        focusLine: focus.focusLine,
-        openReview: () => {
-          setSubmitOpen(true)
-        },
-      })}
+      <OpenCodeProvider
+        open={(reference) => {
+          setSourceSelection({ reference })
+        }}
+      >
+        {renderCompanion?.({
+          draft,
+          setDraft,
+          ready: draftReady,
+          focusLine: focus.focusLine,
+          openReview: () => {
+            setSubmitOpen(true)
+          },
+        })}
+      </OpenCodeProvider>
       <SubmitReviewDialog
         open={submitOpen}
         pull={pull}
@@ -626,6 +633,7 @@ export function ReviewWorkspace({
         pull={pull}
         fileId={sourceFileId}
         initialRequest={sourceSelection?.request}
+        reference={sourceSelection?.reference}
         content={sourceFileId ? fileContext.contents.get(sourceFileId) : undefined}
         contents={fileContext.contents}
         loadContent={fileContext.load}
