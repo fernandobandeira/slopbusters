@@ -49,6 +49,30 @@ export class PanelSessionStore {
           .get(repository)
     return row ? readSession(row.session) : undefined
   }
+  /**
+   * Each PR's newest panel in a repository when it has not completed: running, waiting on the
+   * user, or stopped with a review in progress.
+   */
+  unfinished(repository: string): { url: string; session: PanelSession }[] {
+    const rows = this.database
+      .prepare(
+        `WITH ranked AS (
+          SELECT sessions.session, url.value AS url,
+            row_number() OVER (
+              PARTITION BY url.value ORDER BY sessions.created_at DESC, sessions.rowid DESC
+            ) AS rank
+          FROM panel_sessions AS sessions, json_each(sessions.session, '$.urls') AS url
+          WHERE sessions.repository = ?
+        )
+        SELECT url, session FROM ranked
+        WHERE rank = 1 AND (
+          json_extract(session, '$.status') IN ('running', 'partial')
+          OR json_extract(session, '$.pending') IS NOT NULL
+        )`,
+      )
+      .all(repository)
+    return rows.map((row) => ({ url: String(row.url), session: readSession(row.session) }))
+  }
   /** The latest judged result of each PR in a repository. */
   reviews(repository: string): PanelReviewSummary[] {
     const rows = this.database

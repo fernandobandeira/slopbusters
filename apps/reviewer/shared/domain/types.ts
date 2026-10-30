@@ -195,6 +195,7 @@ export interface InboxPull {
   url: string
   title: string
   author: string
+  createdAt: string
   updatedAt: string
   isDraft: boolean
   headSha: string

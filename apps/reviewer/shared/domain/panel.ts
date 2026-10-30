@@ -289,3 +289,22 @@ export const panelReviewSummarySchema = z.object({
   reviewers: z.array(z.string()),
 })
 export type PanelReviewSummary = z.infer<typeof panelReviewSummarySchema>
+
+/** The most PRs one request may send to the panel, each in its own review. */
+export const MAX_PANEL_BATCH_PULLS = 10
+
+/**
+ * A panel still working on a PR, waiting on the user, or stopped with saved work: what the PR
+ * list shows until the panel finishes and its result takes the place.
+ */
+export const activePanelSchema = z.object({
+  sessionId: z.string(),
+  url: z.string(),
+  number: z.number().int().positive(),
+  status: z.enum(['running', 'partial', 'failed', 'cancelled']),
+  /** Running, but waiting for panels on other PRs to free a place. */
+  queued: z.boolean(),
+  progress: z.string(),
+  reviewers: z.array(z.string()),
+})
+export type ActivePanel = z.infer<typeof activePanelSchema>

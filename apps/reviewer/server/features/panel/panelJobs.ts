@@ -17,14 +17,15 @@ import type { PullRequest } from '../../../shared/domain/types'
 import type { PanelSessionStore } from '../../adapters/panelSessionStore'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
-import { publicError, UserError } from '../../errors'
-import { PANEL_REVIEWER_CONCURRENCY } from '../../limits'
+import { UserError } from '../../errors'
+import { PANEL_PULL_CONCURRENCY, PANEL_REVIEWER_CONCURRENCY } from '../../limits'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { FlowJobs } from '../flows/flowJobs'
 import { failedSeats, reviewSeats } from '../flows/panel'
+import { queuedNotice, Slots } from '../flows/slots'
 import type { PanelMembers } from './panelMembers'
 import { roundLoader } from './localRound'
-import { layersOf, preparePanelRound } from './panelPreparation'
+import { layersOf, openSource, preparePanelRound } from './panelPreparation'
 import { groundPanel } from './groundingDebate'
 import { reviewAsPanelist } from './panelReview'
 
@@ -47,6 +48,8 @@ interface Options {
   openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
   /** Evidence about what the PR is meant to do, such as its linked ticket. */
   context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
+  /** How many panels review at the same time; the rest wait their turn. */
+  concurrency?: number
 }
 
 /** How a run treats a PR that already has reviews waiting: start over, rerun failures, or ground. */
@@ -54,11 +57,14 @@ type RunMode = 'fresh' | 'retry' | 'ground'
 
 /**
  * A panel review: every chosen seat reviews each PR on its provider's model, a few at a time,
- * then two models ground their findings against the code in a bounded debate.
+ * then two models ground their findings against the code in a bounded debate. Panels on
+ * different PRs run side by side, a few at a time; one PR has one panel working at once.
  */
 export class PanelJobs {
   private readonly jobs: FlowJobs<PanelSession>
+  private readonly slots: Slots
   constructor(private readonly options: Options) {
+    this.slots = new Slots(options.concurrency ?? PANEL_PULL_CONCURRENCY)
     this.jobs = new FlowJobs({
       save: (session) => {
         this.save(session)
@@ -80,8 +86,10 @@ export class PanelJobs {
   ): Promise<PanelSession> {
     const models = this.options.models()
     const reviewers = await this.options.members.describe(requests, models)
-    const previous = this.latest(repository)
-    if (previous && blocksNewReview(previous)) {
+    const previous = urls
+      .map((url) => this.latest(repository, url))
+      .find((session) => session && blocksNewReview(session))
+    if (previous) {
       if (sameRequest(previous, urls, reviewers)) return previous
       throw new UserError(
         `Finish or cancel the current panel review of ${reviewedPullsLabel(previous.urls)} before starting another.`,
@@ -136,6 +144,7 @@ export class PanelJobs {
     const session = this.get(id)
     if (session.status === 'running' || session.status === 'partial') {
       session.status = 'cancelled'
+      session.queued = undefined
       session.progress = 'Panel review cancelled. Reviewed PRs are saved.'
       this.save(session)
     }
@@ -160,7 +169,12 @@ export class PanelJobs {
     )
   }
   private launch(session: PanelSession, mode: RunMode): void {
-    this.jobs.launch(session, (signal) => this.run(session, signal, mode))
+    const waiting = queuedNotice(session, 'Waiting for panels on other PRs to finish…', () => {
+      this.save(session)
+    })
+    this.jobs.launch(session, (signal) =>
+      this.slots.run(signal, () => this.run(session, signal, mode), waiting),
+    )
   }
   private async run(session: PanelSession, signal: AbortSignal, mode: RunMode): Promise<void> {
     const preparation = session.preparation ?? (await this.prepareRound(session, signal))
@@ -189,7 +203,7 @@ export class PanelJobs {
         mode === 'fresh' ? this.pendingFor(session, preparation, index) : session.pending
       if (!pending) throw new Error('Missing pending panel review.')
       const layers = layersOf(preparation, pending.pull.url)
-      const source = await this.openSource(pending.pull, signal)
+      const source = await openSource(this.options.openRepository, pending.pull, signal)
       repository = source.repository
       if (mode !== 'ground') await this.review(session, pending, { signal, repository, layers })
       if (!this.canGround(session, pending, mode)) return false
@@ -260,21 +274,6 @@ export class PanelJobs {
     session.preparation = preparation
     this.save(session)
     return preparation
-  }
-  /** The saved checkout of the PR head; without one, reviewers read the snapshot only. */
-  private async openSource(
-    pull: PullRequest,
-    signal: AbortSignal,
-  ): Promise<{ repository?: ReviewCheckout; limitation?: string }> {
-    if (!this.options.openRepository) return {}
-    try {
-      return { repository: await this.options.openRepository(pull, signal) }
-    } catch (error) {
-      signal.throwIfAborted()
-      return {
-        limitation: `Local repository inspection was unavailable: ${publicError(error, 'Source could not be prepared.')} The panel used the supplied PR snapshot.`,
-      }
-    }
   }
   /** Run every reviewer that has no review yet, a few at a time, saving each as it lands. */
   private async review(

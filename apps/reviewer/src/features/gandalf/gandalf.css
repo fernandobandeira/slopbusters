@@ -104,15 +104,3 @@
   gap: 8px;
   margin-top: 14px;
 }
-.inbox-conflict-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.inbox-conflict-heading .inbox-section-title {
-  flex: 1;
-}
-.inbox-conflict-heading > button {
-  font-size: 12px;
-}

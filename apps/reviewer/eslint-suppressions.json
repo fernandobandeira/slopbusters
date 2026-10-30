@@ -249,21 +249,8 @@
       "count": 1
     }
   },
-  "src/features/inbox/InboxPage.tsx": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "src/features/inbox/RepositorySwitcher.tsx": {
     "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "src/features/inbox/inboxSections.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    },
-    "complexity": {
       "count": 1
     }
   },
@@ -500,11 +487,6 @@
       "count": 1
     },
     "max-params": {
-      "count": 1
-    }
-  },
-  "test/inbox-sections.test.ts": {
-    "max-lines-per-function": {
       "count": 1
     }
   },

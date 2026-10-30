@@ -51,9 +51,16 @@ export function readRoute(params: { pathname: string; search: string }): AppRout
   return { kind: 'pull', repository, number, revision, filter }
 }
 
-export function inboxPath(repository: string, filter: InboxFilter = 'mine'): string {
+/** The PR list of a repository on one tab, keeping the chips that filter it. */
+export function inboxPath(
+  repository: string,
+  filter: InboxFilter = 'mine',
+  chips: readonly string[] = [],
+): string {
   const path = repository ? `/repos/${repository}/pulls` : '/'
-  return `${path}?${new URLSearchParams({ inbox: filter })}`
+  const query = new URLSearchParams({ inbox: filter })
+  if (chips.length) query.set('only', chips.join(','))
+  return `${path}?${query}`
 }
 
 /** A PR's review page; `panel` opens the review panel companion on that session. */

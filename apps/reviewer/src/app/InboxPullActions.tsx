@@ -3,6 +3,8 @@ import { Button } from '~/components/ui/button'
 import { StackBadge } from '../features/stacks/StackBadge'
 import { PullStatusIcons, type PullStatusSection } from '../features/pull-status/PullStatusIcons'
 import type { InboxPull } from '../../shared/domain/types'
+import type { ActivePanel } from '../../shared/domain/panel'
+import { PanelActivityBadge } from '../features/panel/PanelActivityBadge'
 export function InboxPullActions({
   pull,
   recommendation,
@@ -11,6 +13,8 @@ export function InboxPullActions({
   onBobReplay,
   panelReview,
   onPanelReplay,
+  activePanel,
+  onActivePanel,
   onStack,
   onStatus,
   onStartReview,
@@ -18,11 +22,22 @@ export function InboxPullActions({
   reviewStartDisabled,
 }: PullReviewActionsProps & {
   pull: InboxPull
+  /** The PR's panel that has not finished, shown until its result takes the place. */
+  activePanel?: ActivePanel
+  onActivePanel: (panel: ActivePanel) => void
   onStack: () => void
   onStatus: (section?: PullStatusSection) => void
 }) {
   return (
     <>
+      {activePanel && (
+        <PanelActivityBadge
+          panel={activePanel}
+          onOpen={() => {
+            onActivePanel(activePanel)
+          }}
+        />
+      )}
       <PullReviewActions
         pull={pull}
         recommendation={recommendation}

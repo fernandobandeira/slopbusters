@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import {
+  activePanelSchema,
+  MAX_PANEL_BATCH_PULLS,
   judgeAdviceSchema,
   panelAdviceSchema,
   panelFindingSchema,
@@ -41,6 +43,7 @@ const session = z.object({
     .optional(),
   reviewers: z.array(panelReviewerSchema),
   status: z.enum(['running', 'partial', 'complete', 'failed', 'cancelled']),
+  queued: z.boolean().optional(),
   progress: z.string(),
   createdAt: z.string(),
   error: z.string().optional(),
@@ -85,6 +88,27 @@ export const startPanel = defineRoute('POST', '/panel', {
     })
     .strict(),
   response: session,
+})
+/** Each PR's panel that is not finished: running, queued, waiting on the user, or stopped. */
+export const activePanels = defineRoute('GET', '/panel/active', {
+  query: repositoryQuery,
+  response: z.object({ panels: z.array(activePanelSchema) }),
+})
+/**
+ * Start the same panel on each PR in its own review, so they run side by side and each finishes
+ * on its own. A PR whose panel is still working is skipped with the reason.
+ */
+export const startPanels = defineRoute('POST', '/panel/batch', {
+  request: repositoryQuery
+    .extend({
+      urls: z.array(pullUrlSchema).min(1).max(MAX_PANEL_BATCH_PULLS),
+      reviewers: z.array(panelSeatRequestSchema).min(1).max(8),
+    })
+    .strict(),
+  response: z.object({
+    panels: z.array(activePanelSchema),
+    skipped: z.array(z.object({ url: z.string(), reason: z.string() })),
+  }),
 })
 export const getPanel = defineRoute('GET', '/panel/:id', { params: idParams, response: session })
 export const continuePanel = defineRoute('POST', '/panel/:id/continue', {

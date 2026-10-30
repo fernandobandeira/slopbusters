@@ -2,6 +2,7 @@ import { Router } from 'express'
 import * as routes from '../../shared/api/panel'
 import { parsePullUrl } from '../../shared/domain/pullUrl'
 import { UserError } from '../errors'
+import { activePanels, startEach } from '../features/panel/panelBatches'
 import type { Services } from '../services'
 import { handle } from './contractRouter'
 
@@ -21,16 +22,19 @@ export function panelRouter({
     session: panelJobs.latest(query.repository, query.url) ?? null,
   }))
   handle(router, routes.startPanel, async ({ body }, _request, response) => {
-    for (const url of body.urls) {
-      const pull = parsePullUrl(url)
-      if (`${pull.owner}/${pull.repo}` !== body.repository)
-        throw new UserError('Select PRs from the current repository.')
-    }
-    if (new Set(body.urls).size !== body.urls.length)
-      throw new UserError('Select each PR only once.')
+    checkPulls(body.repository, body.urls)
     const session = await panelJobs.start(body.repository, body.urls, body.reviewers)
     response.status(202)
     return session
+  })
+  handle(router, routes.activePanels, ({ query }) => ({
+    panels: activePanels(panelJobs, store.panel, query.repository),
+  }))
+  handle(router, routes.startPanels, async ({ body }, _request, response) => {
+    checkPulls(body.repository, body.urls)
+    const started = await startEach(panelJobs, body)
+    response.status(202)
+    return started
   })
   handle(router, routes.getPanel, ({ params }) => panelJobs.get(params.id))
   handle(router, routes.continuePanel, ({ params }, _request, response) => {
@@ -63,4 +67,14 @@ export function panelRouter({
   handle(router, routes.checkLocalFixes, ({ params, body }) => fixChecks.check(params.id, body.url))
   handle(router, routes.cancelPanel, ({ params }) => panelJobs.cancel(params.id))
   return router
+}
+
+/** Every PR belongs to the repository, once. */
+function checkPulls(repository: string, urls: string[]) {
+  for (const url of urls) {
+    const pull = parsePullUrl(url)
+    if (`${pull.owner}/${pull.repo}` !== repository)
+      throw new UserError('Select PRs from the current repository.')
+  }
+  if (new Set(urls).size !== urls.length) throw new UserError('Select each PR only once.')
 }

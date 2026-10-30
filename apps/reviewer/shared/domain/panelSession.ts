@@ -74,6 +74,8 @@ export interface PanelSession {
   judges?: { primary: OrganizationPreferences; companion?: OrganizationPreferences }
   reviewers: PanelReviewer[]
   status: 'running' | 'partial' | 'complete' | 'failed' | 'cancelled'
+  /** Set while it runs but waits for panels on other PRs to free a place. */
+  queued?: boolean
   progress: string
   results: PanelResult[]
   pending?: PanelPending

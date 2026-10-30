@@ -13,6 +13,7 @@ const pull: InboxPull = {
   url,
   title: 'Preserve both changes',
   author: 'alice',
+  createdAt: '',
   updatedAt: '',
   isDraft: false,
   headSha: 'head',
@@ -80,9 +81,9 @@ describe('Gandalf selection and session feedback', () => {
           inbox={{ viewer: 'alice', pulls: [pull] }}
           inboxLoading={false}
           statusLoading={false}
-          selectingForLinus={false}
-          selectedLinusUrls={[]}
-          onSelectionChange={vi.fn()}
+          chips={[]}
+          chipContext={{ panelReviewed: () => false }}
+          onChips={vi.fn()}
           onFilter={vi.fn()}
           renderPullActions={() => null}
           onResolveConflicts={choose}
@@ -145,7 +146,7 @@ describe('Gandalf CI fixes', () => {
       checks: [{ name: 'build', kind: 'check', status: 'completed', conclusion: 'FAILURE' }],
     },
   }
-  it('opens from the failing CI subgroup with only its failing PRs', () => {
+  it('opens from the list with only its failing PRs', () => {
     const fix = vi.fn()
     render(
       <MemoryRouter>
@@ -155,9 +156,9 @@ describe('Gandalf CI fixes', () => {
           inbox={{ viewer: 'alice', pulls: [failing] }}
           inboxLoading={false}
           statusLoading={false}
-          selectingForLinus={false}
-          selectedLinusUrls={[]}
-          onSelectionChange={vi.fn()}
+          chips={[]}
+          chipContext={{ panelReviewed: () => false }}
+          onChips={vi.fn()}
           onFilter={vi.fn()}
           renderPullActions={() => null}
           onResolveConflicts={vi.fn()}

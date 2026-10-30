@@ -120,6 +120,7 @@ export const inboxSchema = z.object({
       url: z.string(),
       title: z.string(),
       author: z.string(),
+      createdAt: z.string(),
       updatedAt: z.string(),
       isDraft: z.boolean(),
       headSha: z.string(),

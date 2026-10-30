@@ -9,7 +9,12 @@ import type { InboxFilter } from './inbox'
 interface Props {
   pull: InboxPull
   filter: InboxFilter
-  selection?: { selected: boolean; disabled: boolean; onChange: (checked: boolean) => void }
+  selection?: {
+    purpose: string
+    selected: boolean
+    disabled: boolean
+    onChange: (checked: boolean) => void
+  }
   actions: ReactNode
 }
 export function PullRow({ pull: pr, filter, selection, actions }: Props) {
@@ -19,7 +24,7 @@ export function PullRow({ pull: pr, filter, selection, actions }: Props) {
         <input
           className="pr-selection-checkbox"
           type="checkbox"
-          aria-label={`Select PR #${pr.number} for Linus`}
+          aria-label={`Select PR #${pr.number} for ${selection?.purpose ?? ''}`}
           checked={selection?.selected}
           disabled={!selection?.selected && selection?.disabled}
           onChange={(event) => selection?.onChange(event.target.checked)}

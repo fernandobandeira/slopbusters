@@ -345,6 +345,68 @@ pre {
   border-color: var(--primary);
   color: var(--foreground);
 }
+.inbox-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+.inbox-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.inbox-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.inbox-chip:hover {
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+.inbox-chip[aria-pressed='true'] {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, var(--background));
+  color: var(--foreground);
+}
+.inbox-chip .count {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.inbox-toolbar-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+.pr-list {
+  margin-top: 10px;
+}
+.inbox-selection-bar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 20%);
+  font-size: 12px;
+}
+.inbox-selection-spacer {
+  flex: 1;
+}
 .pr-row {
   width: 100%;
   display: flex;
@@ -1067,20 +1129,6 @@ pre {
   padding: 4px 24px 24px;
   overflow-y: auto;
   min-height: 0;
-}
-.inbox-section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 26px 12px 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted-foreground);
-}
-.inbox-section-title span {
-  font-size: 10px;
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
 }
 @media (max-width: 1200px) {
   .app-frame {

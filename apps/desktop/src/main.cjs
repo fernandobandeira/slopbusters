@@ -145,7 +145,19 @@ async function openChatWindow(value) {
 
 /** Copy buttons write to the clipboard; every other permission a page asks for is refused. */
 function allowOnlyClipboardWrites(target) {
-  const allowed = (permission) => permission === 'clipboard-sanitized-write'
+  allowOnly(target, ['clipboard-sanitized-write'])
+}
+
+/**
+ * The review app also says through the system when a panel review finishes in the background.
+ * Chat windows keep clipboard writes only.
+ */
+function allowReviewerPermissions(target) {
+  allowOnly(target, ['clipboard-sanitized-write', 'notifications'])
+}
+
+function allowOnly(target, permissions) {
+  const allowed = (permission) => permissions.includes(permission)
   target.setPermissionRequestHandler((_contents, permission, callback) => callback(allowed(permission)))
   target.setPermissionCheckHandler((_contents, permission) => allowed(permission))
 }
@@ -390,7 +402,7 @@ async function start() {
   smokeStage('path-ready')
   if (process.platform === 'darwin') app.dock?.setIcon(join(__dirname, 'icon.png'))
   const appSession = session.fromPartition('persist:slopbusters')
-  allowOnlyClipboardWrites(appSession)
+  allowReviewerPermissions(appSession)
   appSession.on('will-download', (event) => event.preventDefault())
   server = await startReviewerServer({
     dataDirectory: app.getPath('userData'),

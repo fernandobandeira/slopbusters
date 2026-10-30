@@ -3,7 +3,13 @@ import { SessionsPage } from '../features/agent-sessions/SessionsPage'
 import type { Repository } from '../../shared/domain/types'
 import { GandalfCompanion } from '../features/gandalf/GandalfCompanion'
 import type { GandalfTask } from '../../shared/domain/gandalf'
-import { inboxSections } from '../features/inbox/inboxSections'
+import { pullStatusGroup } from '../features/inbox/inboxStatus'
+import { readInboxChips } from '../features/inbox/inboxChips'
+import type { PullSelection } from '../features/inbox/SelectionBar'
+import { PanelBatchPicker } from '../features/panel/PanelBatchPicker'
+import { notifySettled } from '../features/panel/panelNotifications'
+import { useActivePanels } from '../features/panel/useActivePanels'
+import { MAX_PANEL_BATCH_PULLS } from '../../shared/domain/panel'
 import { BobCompanion } from '../features/bob/BobCompanion'
 import { PanelCompanion } from '../features/panel/PanelCompanion'
 import { PullPanelActions } from './PullPanelActions'
@@ -89,6 +95,7 @@ export function App() {
     setGandalf(undefined)
   }, [])
   const [linusSelection, setLinusSelection] = useState<{ repository: string; urls: string[] }>()
+  const [panelSelection, setPanelSelection] = useState<{ repository: string; urls: string[] }>()
   const [linusRefresh, setLinusRefresh] = useState(0)
   const [linusReplay, setLinusReplay] = useState<LinusReplayRequest & { repository: string }>()
   const savedLinus = useLinusRecommendations(repository, refresh + linusRefresh)
@@ -186,6 +193,20 @@ export function App() {
     refresh,
     enabled: route.kind === 'inbox' && !historyLoading,
   })
+  const activePanels = useActivePanels({
+    repository,
+    enabled: route.kind === 'inbox' || route.kind === 'pull',
+    refresh,
+    onSettled: (settled) => {
+      panel.reload()
+      notifySettled(settled, {
+        titleFor: (url) => inbox?.pulls.find((item) => item.url === url)?.title,
+        onOpen: (stopped) => {
+          openPanel(stopped.url, stopped.sessionId)
+        },
+      })
+    },
+  })
   const displayError =
     error || historyError || inboxError || statusQuery.error || repositoryQuery.error
   useEffect(() => {
@@ -213,6 +234,46 @@ export function App() {
     linusSelection?.repository === repository
       ? linusSelection.urls.filter((url) => myPulls.some((pr) => pr.url === url))
       : []
+  const chips = route.kind === 'inbox' ? readInboxChips(location.search) : []
+  const selectedPanelUrls =
+    panelSelection?.repository === repository
+      ? panelSelection.urls.filter((url) => inbox?.pulls.some((pr) => pr.url === url))
+      : []
+  const closePanelSelection = () => {
+    setPanelSelection(undefined)
+  }
+  const inboxSelection: PullSelection | undefined = selectingForLinus
+    ? {
+        purpose: 'Linus',
+        urls: selectedLinusUrls,
+        max: 20,
+        onChange: (urls) => {
+          setLinusSelection({ repository, urls })
+        },
+      }
+    : panelSelection?.repository === repository && route.kind === 'inbox'
+      ? {
+          purpose: 'the panel',
+          urls: selectedPanelUrls,
+          max: MAX_PANEL_BATCH_PULLS,
+          onChange: (urls) => {
+            setPanelSelection({ repository, urls })
+          },
+          onCancel: closePanelSelection,
+          actions: (
+            <PanelBatchPicker
+              repository={repository}
+              urls={selectedPanelUrls}
+              provider={preferences?.organization?.provider}
+              onStarted={({ skipped }) => {
+                closePanelSelection()
+                activePanels.reload()
+                setError(skipped.map((item) => item.reason).join(' '))
+              }}
+            />
+          ),
+        }
+      : undefined
   const inboxPage = (
     <InboxPage
       repository={repository}
@@ -222,12 +283,18 @@ export function App() {
       statusLoading={inboxStatusLoading}
       recommendationsError={savedLinus.error}
       bobReviewsError={savedBob.error}
-      selectingForLinus={selectingForLinus}
-      selectedLinusUrls={selectedLinusUrls}
-      onSelectionChange={(urls) => {
-        setLinusSelection({ repository, urls })
+      chips={chips}
+      chipContext={{
+        panelReviewed: (pr) =>
+          Boolean(activePanels.panelFor(pr.url)) || panel.reviewFor(pr.url)?.headSha === pr.headSha,
       }}
-      onFilter={(next) => void navigate(inboxPath(repository, next))}
+      onChips={(next) => void navigate(inboxPath(repository, filter, next), { replace: true })}
+      selection={inboxSelection}
+      onSelect={() => {
+        setLinusSelection(undefined)
+        setPanelSelection({ repository, urls: [] })
+      }}
+      onFilter={(next) => void navigate(inboxPath(repository, next, chips))}
       onResolveConflicts={() => {
         openGandalf('conflicts')
       }}
@@ -254,6 +321,10 @@ export function App() {
           panelReview={panel.reviewFor(pr.url)}
           onPanelReplay={(review) => {
             openPanel(pr.url, review.sessionId)
+          }}
+          activePanel={activePanels.panelFor(pr.url)}
+          onActivePanel={(active) => {
+            openPanel(pr.url, active.sessionId)
           }}
           onReplay={(recommendation) => {
             setLinusSelection(undefined)
@@ -332,7 +403,7 @@ export function App() {
               route.kind === 'issues' ? route.view : route.kind === 'issue' ? 'open' : undefined
             }
             onFilter={(next) => {
-              void navigate(inboxPath(repository, next))
+              void navigate(inboxPath(repository, next, chips))
             }}
             onOpenUrl={() => {
               setUrlDialog(true)
@@ -560,6 +631,7 @@ export function App() {
                 urls: selectedLinusUrls,
                 onChoose: () => {
                   setLinusReplay(undefined)
+                  setPanelSelection(undefined)
                   setLinusSelection({ repository, urls: [] })
                   void navigate(inboxPath(repository, 'mine'))
                 },
@@ -578,11 +650,9 @@ export function App() {
             key={`${repository}:${gandalf.task}`}
             repository={repository}
             task={gandalf.task}
-            pulls={
-              inboxSections(myPulls).find(
-                (section) => section.id === (gandalf.task === 'ci' ? 'failing-ci' : 'conflicts'),
-              )?.pulls ?? []
-            }
+            pulls={myPulls.filter(
+              (pr) => pullStatusGroup(pr) === (gandalf.task === 'ci' ? 'failing-ci' : 'conflicts'),
+            )}
             ready={Boolean(preferences?.organization)}
             onClose={closeGandalf}
             onComplete={refreshAfterGandalf}

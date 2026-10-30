@@ -135,6 +135,11 @@ export const MAX_AVATAR_DIMENSION = 1024
 export const MAX_PANEL_REVIEWERS = 8
 /** How many panel reviewers run at the same time on one PR. */
 export const PANEL_REVIEWER_CONCURRENCY = 3
+/**
+ * How many PRs panels review at the same time. Each runs its own reviewers and grounding, so
+ * more PRs queue until one finishes.
+ */
+export const PANEL_PULL_CONCURRENCY = 2
 export const MAX_SAVED_PANEL_REVIEWS = 500
 /** How many PR snapshots a panel loads at the same time before its seats start. */
 export const PANEL_PREPARE_CONCURRENCY = 3

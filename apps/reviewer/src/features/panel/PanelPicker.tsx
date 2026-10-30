@@ -39,6 +39,37 @@ export function PanelPicker({
   openOnMount?: boolean
   onClose?: () => void
 }) {
+  const start = usePanelStart({ repository, url: pull.url, onOpen })
+  return (
+    <PanelPickerPopover
+      label={`Ask the review panel about PR #${String(pull.number)}`}
+      subject={`PR #${String(pull.number)}`}
+      provider={provider}
+      start={start}
+      openOnMount={openOnMount}
+      onClose={onClose}
+    />
+  )
+}
+
+/** The "Ask the panel" button and its picker; `start` decides what the chosen reviewers review. */
+export function PanelPickerPopover({
+  label,
+  subject,
+  provider,
+  start,
+  openOnMount = false,
+  onClose,
+  disabled = false,
+}: {
+  label: string
+  subject: string
+  provider?: Provider
+  start: PanelStart
+  openOnMount?: boolean
+  onClose?: () => void
+  disabled?: boolean
+}) {
   const [open, setOpen] = useState(openOnMount)
   function changeOpen(next: boolean) {
     setOpen(next)
@@ -48,7 +79,6 @@ export function PanelPicker({
   const candidates = panelCandidates(teammates.data?.teammates ?? [])
   const [selected, setSelected] = useState(savedPanelSelection)
   const chosen = provider ? resolveChoices(selected, candidates, provider) : []
-  const start = usePanelStart({ repository, url: pull.url, onOpen })
   function choose(next: Required<PanelChoice>[]) {
     setSelected(next)
     savePanelSelection(next)
@@ -57,7 +87,8 @@ export function PanelPicker({
     <Popover.Root open={open} onOpenChange={changeOpen}>
       <Popover.Trigger
         render={<Button size="sm" variant="outline" />}
-        aria-label={`Ask the review panel about PR #${String(pull.number)}`}
+        aria-label={label}
+        disabled={disabled}
       >
         <Users size={13} aria-hidden="true" />
         Ask the panel
@@ -71,7 +102,7 @@ export function PanelPicker({
         >
           <Popover.Popup className="panel-picker">
             <PickerBody
-              number={pull.number}
+              subject={subject}
               candidates={candidates}
               teammates={teammates}
               chosen={chosen}
@@ -95,8 +126,16 @@ export function PanelPicker({
   )
 }
 
+/** What a panel start reports: whether it started, while it starts, and why it did not. */
+export interface PanelStart {
+  run: (reviewers: Required<PanelChoice>[]) => Promise<boolean>
+  starting: boolean
+  error: string
+}
+
+/** Pick the reviewers and their providers, then start them; shared by one PR and several. */
 function PickerBody({
-  number,
+  subject,
   candidates,
   teammates,
   chosen,
@@ -106,19 +145,20 @@ function PickerBody({
   start,
   onStarted,
 }: {
-  number: number
+  /** What the panel reviews, such as "PR #12" or "4 PRs". */
+  subject: string
   candidates: Candidate[]
   teammates: { data?: { teammates: Teammate[] }; loading: boolean; error?: string }
   chosen: Required<PanelChoice>[]
   onToggle: (candidate: Candidate) => void
   onToggleProvider: (id: Candidate['id'], provider: Provider) => void
   provider?: Provider
-  start: ReturnType<typeof usePanelStart>
+  start: PanelStart
   onStarted: () => void
 }) {
   return (
     <>
-      <Popover.Title className="panel-picker-title">Who should review PR #{number}?</Popover.Title>
+      <Popover.Title className="panel-picker-title">Who should review {subject}?</Popover.Title>
       <Popover.Description className="muted">
         Each reviewer runs on Codex, Claude, or both, then Claude and Codex take turns checking
         their findings against the code.
@@ -184,7 +224,7 @@ function usePanelStart({
   repository: string
   url: string
   onOpen: (sessionId: string) => void
-}) {
+}): PanelStart {
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
   async function run(reviewers: PanelChoice[]): Promise<boolean> {
@@ -197,7 +237,7 @@ function usePanelStart({
       onOpen(session.id)
       return true
     } catch (cause) {
-      const blocking = await call(routes.latestPanel, { query: { repository } }).catch(
+      const blocking = await call(routes.latestPanel, { query: { repository, url } }).catch(
         () => undefined,
       )
       if (blocking?.session && blocksNewReview(blocking.session)) onOpen(blocking.session.id)

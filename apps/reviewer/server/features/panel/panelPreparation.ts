@@ -6,7 +6,8 @@ import type {
 } from '../../../shared/domain/panelSession'
 import type { PullStackResult } from '../../../shared/domain/stacks'
 import type { PullRequest } from '../../../shared/domain/types'
-import { UserError } from '../../errors'
+import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
+import { publicError, UserError } from '../../errors'
 import { MAX_PANEL_STACK_LAYERS, PANEL_PREPARE_CONCURRENCY } from '../../limits'
 import { pullFingerprint } from '../../reviewSnapshot'
 import { settleEach } from '../flows/panel'
@@ -153,4 +154,21 @@ function pullCount(count: number, noun = 'PR') {
 /** `PR #131` from its URL. */
 function pullLabel(url: string) {
   return `PR #${url.split('/').pop() ?? url}`
+}
+
+/** The saved checkout of the PR head; without one, reviewers read the snapshot only. */
+export async function openSource(
+  open: ((pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>) | undefined,
+  pull: PullRequest,
+  signal: AbortSignal,
+): Promise<{ repository?: ReviewCheckout; limitation?: string }> {
+  if (!open) return {}
+  try {
+    return { repository: await open(pull, signal) }
+  } catch (error) {
+    signal.throwIfAborted()
+    return {
+      limitation: `Local repository inspection was unavailable: ${publicError(error, 'Source could not be prepared.')} The panel used the supplied PR snapshot.`,
+    }
+  }
 }

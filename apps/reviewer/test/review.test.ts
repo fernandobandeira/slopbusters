@@ -197,6 +197,7 @@ it('separates own PRs, other authors, and requested reviews', () => {
     number: 1,
     url: '',
     title: '',
+    createdAt: '',
     updatedAt: '',
     isDraft: false,
     headSha: '',

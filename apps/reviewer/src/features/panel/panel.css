@@ -345,3 +345,20 @@
   margin: 4px 0 0;
   padding-left: 18px;
 }
+
+.panel-activity {
+  gap: 5px;
+}
+.panel-activity-running {
+  border-color: var(--info);
+  color: var(--info);
+}
+.panel-activity-partial {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.panel-activity-queued,
+.panel-activity-failed,
+.panel-activity-cancelled {
+  color: var(--muted-foreground);
+}
