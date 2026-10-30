@@ -53,6 +53,7 @@ import { TeammateStore } from './adapters/teammateStore'
 import { Teammates } from './features/teammates/teammates'
 import { PanelMembers } from './features/panel/panelMembers'
 import { PanelJobs } from './features/panel/panelJobs'
+import { RetryingTurns } from './adapters/t3Engine/retryingTurns'
 import { PanelFixes } from './features/panel/panelFixes'
 import { FixChecks } from './features/panel/fixCheck'
 import { localSnapshotLoader } from './features/panel/localRound'
@@ -186,7 +187,8 @@ export function createServices(options: ReviewerServerOptions) {
   const loadLocal = localSnapshotLoader(repository, pulls.fetchPull)
   const panelJobs = new PanelJobs({
     store: store.panel,
-    turns,
+    // A batch of panels outlasts an engine restart or a busy provider; retry those turns first.
+    turns: new RetryingTurns(turns),
     sessions: agentSessions,
     members: panelMembers,
     models: () => savedModels(store.getPreferences()),

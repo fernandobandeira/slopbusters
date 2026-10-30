@@ -23,7 +23,7 @@ import {
   T3_ENGINE_REQUEST_TIMEOUT_MS,
   T3_ENGINE_TOKEN_REFRESH_MARGIN_MS,
 } from '../../limits'
-import { findRunningEngine, type RunningEngine } from './engineLocation'
+import { EngineUnreachableError, findRunningEngine, type RunningEngine } from './engineLocation'
 import { pairWithEngine, type EngineAccess } from './enginePairing'
 
 const makeClient = RpcClient.make(WsRpcGroup)
@@ -203,7 +203,7 @@ export class EngineTickets {
         },
       )
     } catch {
-      throw new UserError('T3 Code is not answering. Restart T3 Code and try again.')
+      throw new EngineUnreachableError()
     }
     if (response.status === 401 || response.status === 403) return undefined
     const parsed = ticketSchema.safeParse(await response.json().catch(() => undefined))

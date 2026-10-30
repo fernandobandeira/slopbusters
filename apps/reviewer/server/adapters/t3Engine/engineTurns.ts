@@ -78,6 +78,10 @@ export interface WorkingCopy<T> extends CopyAccess {
 
 /** The engine accepted a turn but never started it: the engine, not the task, is at fault. */
 export class TurnNotStartedError extends UserError {}
+/** The turn ended without a reply, as when its engine stopped and the next one recovered it. */
+export class TurnInterruptedError extends Error {}
+/** The provider reported the turn failed, with its reason. */
+export class ProviderTurnError extends Error {}
 
 export interface IncludedFolder {
   readonly directory: string
@@ -219,9 +223,9 @@ export class EngineTurns implements StructuredTurns {
       case 'completed':
         return outcome.replies
       case 'failed':
-        throw new Error(`${agent} failed: ${outcome.error}`)
+        throw new ProviderTurnError(`${agent} failed: ${outcome.error}`)
       case 'interrupted':
-        throw new Error(`${agent} stopped before it finished.`)
+        throw new TurnInterruptedError(`${agent} stopped before it finished.`)
       case 'cancelled':
         throw new Error('The operation was cancelled.')
       case 'timeout':

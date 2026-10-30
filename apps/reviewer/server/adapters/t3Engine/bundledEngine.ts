@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { appendFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { setTimeout as delay } from 'node:timers/promises'
 import { logError, UserError } from '../../errors'
@@ -20,20 +21,22 @@ export interface BundledEngineOptions {
   readonly locate?: (home: string) => Promise<RunningEngine>
   readonly spawnEngine?: (executable: string, args: string[]) => ChildProcess
   readonly freePort?: () => Promise<number>
-  readonly isAlive?: (pid: number) => boolean
+  /** Stop an engine a previous run left behind, before this run starts its own. */
+  readonly stopLeftover?: (pid: number) => Promise<void>
+  /** Hears an engine that stopped on its own, with its exit status and last output. */
+  readonly onUnexpectedExit?: (report: string) => void
 }
 
 /**
  * The T3 Code engine Slopbusters ships and runs itself, in its own home and on its own loopback
  * port. It always speaks this build's protocol, and its threads never appear in the user's T3
- * Code. It starts on first use and stops with the server.
+ * Code. It starts on first use and stops with the server. It is always this run's own child: an
+ * engine an earlier run left behind is stopped, since its output went to a process that is gone
+ * and no one would hear it exit.
  */
 export class BundledEngine {
   private starting: Promise<RunningEngine> | undefined
-  /** The engine the last start found or launched. */
-  private running: RunningEngine | undefined
   private child: ChildProcess | undefined
-  private adopted: number | undefined
   private closed = false
 
   constructor(private readonly options: BundledEngineOptions) {}
@@ -45,32 +48,17 @@ export class BundledEngine {
 
   ensureRunning(): Promise<RunningEngine> {
     if (this.closed) return Promise.reject(new UserError('Slopbusters is shutting down.'))
-    // An adopted engine, left by an earlier run, sends no exit event; check it is still there.
-    if (this.running && !(this.options.isAlive ?? isProcessAlive)(this.running.pid)) this.forget()
-    this.starting ??= this.start()
-      .then((engine) => {
-        this.running = engine
-        return engine
-      })
-      .catch((error: unknown) => {
-        this.starting = undefined
-        throw error
-      })
+    this.starting ??= this.start().catch((error: unknown) => {
+      this.starting = undefined
+      throw error
+    })
     return this.starting
-  }
-
-  /** Drop an engine that has stopped, so the next use starts or adopts another. */
-  private forget() {
-    this.starting = undefined
-    this.running = undefined
-    this.adopted = undefined
   }
 
   async close(): Promise<void> {
     this.closed = true
     const child = this.child
     this.child = undefined
-    if (this.adopted) terminate(this.adopted)
     if (!child || child.exitCode !== null || child.signalCode !== null) return
     const exited = new Promise((resolve) => child.once('exit', resolve))
     child.kill('SIGTERM')
@@ -83,10 +71,7 @@ export class BundledEngine {
     const locate = this.options.locate ?? ((home: string) => findRunningEngine(home))
     // A previous run that did not shut down cleanly may have left its engine running.
     const leftover = await locate(this.options.home).catch(() => undefined)
-    if (leftover) {
-      this.adopted = leftover.pid
-      return leftover
-    }
+    if (leftover) await (this.options.stopLeftover ?? stopProcess)(leftover.pid)
     if (!existsSync(this.options.executable))
       throw new UserError('This Slopbusters build does not include the T3 Code engine.')
     const port = await (this.options.freePort ?? freeLoopbackPort)()
@@ -101,11 +86,15 @@ export class BundledEngine {
     ])
     this.child = child
     const output = captureOutput(child)
-    child.once('exit', () => {
-      if (this.child === child) {
-        this.child = undefined
-        this.forget()
-      }
+    child.once('exit', (code, signal) => {
+      if (this.child !== child) return
+      // The next use starts another engine.
+      this.child = undefined
+      this.starting = undefined
+      if (this.closed) return
+      const report = `${new Date().toISOString()} The bundled T3 Code engine stopped: exit code ${String(code)}, signal ${String(signal)}\n${output()}\n`
+      if (this.options.onUnexpectedExit) this.options.onUnexpectedExit(report)
+      else recordExit(this.options.home, report)
     })
     return this.waitUntilReady(child, locate, output)
   }
@@ -128,6 +117,16 @@ export class BundledEngine {
     logError('Starting the bundled T3 Code engine', output())
     child.kill('SIGTERM')
     throw new UserError('The T3 Code engine Slopbusters includes took too long to start.')
+  }
+}
+
+/** Log an engine that stopped on its own, and keep a copy in its home for later diagnosis. */
+function recordExit(home: string, report: string) {
+  logError('The bundled T3 Code engine stopped', report)
+  try {
+    appendFileSync(join(home, 'slopbusters-engine-exits.log'), report)
+  } catch {
+    /* The console log above still has it. */
   }
 }
 
@@ -160,10 +159,17 @@ function freeLoopbackPort(): Promise<number> {
   })
 }
 
-function terminate(pid: number) {
-  if (!isProcessAlive(pid)) return
+/** Ask a process to stop, and kill it if it is still there after the stop timeout. */
+async function stopProcess(pid: number): Promise<void> {
+  signalProcess(pid, 'SIGTERM')
+  const deadline = Date.now() + T3_ENGINE_STOP_TIMEOUT_MS
+  while (isProcessAlive(pid) && Date.now() < deadline) await delay(T3_ENGINE_START_POLL_MS)
+  if (isProcessAlive(pid)) signalProcess(pid, 'SIGKILL')
+}
+
+function signalProcess(pid: number, signal: NodeJS.Signals) {
   try {
-    process.kill(pid, 'SIGTERM')
+    process.kill(pid, signal)
   } catch {
     /* It exited in the meantime. */
   }

@@ -71,12 +71,19 @@ async function fetchDescriptor(origin: string, fetchImpl: typeof fetch) {
       signal: AbortSignal.timeout(T3_ENGINE_REQUEST_TIMEOUT_MS),
     })
   } catch {
-    throw new UserError('T3 Code is not answering. Restart T3 Code and try again.')
+    throw new EngineUnreachableError()
   }
   const parsed = descriptorSchema.safeParse(await response.json().catch(() => undefined))
   if (!response.ok || !parsed.success)
     throw new UserError('T3 Code returned an unexpected environment description.')
   return parsed.data
+}
+
+/** The engine did not answer a request in time, as when it stopped or is restarting. */
+export class EngineUnreachableError extends UserError {
+  constructor() {
+    super('T3 Code is not answering. Restart T3 Code and try again.')
+  }
 }
 
 export function isProcessAlive(pid: number): boolean {

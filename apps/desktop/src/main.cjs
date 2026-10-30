@@ -383,12 +383,17 @@ function registerUpdateHandlers() {
     // The handshake has already flushed SQLite and blocked further edits.
     installing = true
     quitting = true
+    // Stop the server, and with it the bundled engine, before Squirrel quits the
+    // app. An engine left running would outlive this process and be orphaned,
+    // and the reviews running on it would fail when the next run replaced it.
+    try { await server?.close() } catch (error) { console.error('Reviewer shutdown failed:', error.message) }
     try { updates.install() }
     catch (error) {
-      installing = false
-      quitting = false
-      if (!window.isDestroyed()) window.setEnabled(true)
-      throw error
+      // The server is closed, so start again on the installed version rather than
+      // leave a window without its API.
+      console.error('Update install failed:', error.message)
+      app.relaunch()
+      app.exit(1)
     }
   })
 }
@@ -425,9 +430,11 @@ async function start() {
     log: createUpdateLog(join(app.getPath('logs'), 'updates.log')),
     publish: (state) => {
       if (state.status === 'error' && installing) {
-        installing = false
-        quitting = false
-        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setEnabled(true)
+        // The server closed before the install began; start again without the update.
+        console.error('Update install failed:', state.message ?? 'unknown error')
+        app.relaunch()
+        app.exit(1)
+        return
       }
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('reviewer:update-state', state)
     },
@@ -464,7 +471,6 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
   app.on('will-quit', () => {
     updates?.dispose()
-    if (installing) void server?.close().catch((error) => console.error('Reviewer shutdown failed:', error.message))
   })
   app.on('before-quit', (event) => {
     if (quitting || !server) return

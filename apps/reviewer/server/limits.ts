@@ -68,6 +68,12 @@ export const T3_ENGINE_TURN_START_TIMEOUT_MS = 2 * 60_000
  * when the computer sleeps through the ping timeout. The turn keeps running in the engine meanwhile.
  */
 export const MAX_T3_ENGINE_TURN_REATTACHES = 3
+/**
+ * Pauses before a structured turn runs again after a transient failure, such as the engine
+ * restarting under it or a provider at capacity; one more attempt per pause. The first gives a
+ * restarted engine time to come up.
+ */
+export const TRANSIENT_TURN_RETRY_DELAYS_MS: readonly number[] = [20_000, 60_000]
 /** Room left under the engine's message limit for anything it adds to a turn's input. */
 export const T3_ENGINE_TURN_INPUT_MARGIN_CHARS = 4000
 /** Copying a review checkout for one structured turn; a clone on APFS takes moments. */
