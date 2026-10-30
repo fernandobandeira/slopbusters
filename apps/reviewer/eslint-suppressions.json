@@ -249,6 +249,30 @@
       "count": 1
     }
   },
+  "src/components/PullDescription.tsx": {
+    "max-lines-per-function": {
+      "count": 2
+    }
+  },
+  "src/components/PullStatusIcons.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/PullStatusPanel.tsx": {
+    "@typescript-eslint/switch-exhaustiveness-check": {
+      "count": 4
+    },
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
   "src/features/inbox/RepositorySwitcher.tsx": {
     "max-lines-per-function": {
       "count": 1
@@ -297,25 +321,6 @@
       "count": 1
     }
   },
-  "src/features/pull-status/PullStatusIcons.tsx": {
-    "complexity": {
-      "count": 1
-    },
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "src/features/pull-status/PullStatusPanel.tsx": {
-    "@typescript-eslint/switch-exhaustiveness-check": {
-      "count": 4
-    },
-    "complexity": {
-      "count": 1
-    },
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "src/features/pull-status/pullUpdates.ts": {
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 3
@@ -324,11 +329,6 @@
   "src/features/review/GroupSidebar.tsx": {
     "max-lines-per-function": {
       "count": 1
-    }
-  },
-  "src/features/review/PullDescription.tsx": {
-    "max-lines-per-function": {
-      "count": 2
     }
   },
   "src/features/review/ReviewDiffViewer.tsx": {
@@ -356,11 +356,6 @@
   "src/features/review/SubmitReviewDialog.tsx": {
     "max-lines-per-function": {
       "count": 1
-    }
-  },
-  "src/features/review/diff/codeSymbols.ts": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 2
     }
   },
   "src/features/review/diff/diffWorkerHandler.ts": {
@@ -433,6 +428,11 @@
       "count": 1
     },
     "max-lines-per-function": {
+      "count": 2
+    }
+  },
+  "src/lib/codeSymbols.ts": {
+    "@typescript-eslint/no-unnecessary-condition": {
       "count": 2
     }
   },

@@ -4,7 +4,8 @@ import { ticketViews, type TicketView } from '../../shared/domain/tickets'
 import { issuesPath } from '../lib/routes'
 import { Button } from '~/components/ui/button'
 import { ConnectionStatus } from '../components/ConnectionStatus'
-import { inboxPulls, inboxFilters as filters, type InboxFilter } from '../features/inbox/inbox'
+import { inboxPulls, inboxFilters as filters } from '../features/inbox/inbox'
+import type { InboxFilter } from '../lib/routes'
 import type { AppStatus, RepositoryInbox } from '../../shared/domain/types'
 export function AppSidebar({
   filter,

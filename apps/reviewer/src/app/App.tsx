@@ -48,14 +48,14 @@ import {
 } from '~/components/ui/dialog'
 import { call, message } from '../lib/api'
 import { inboxPulls } from '../features/inbox/inbox'
-import { ReviewWorkspace } from '../features/review/ReviewWorkspace'
+import { ReviewPage } from './ReviewPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { OrganizationSettings } from '../features/settings/OrganizationSettings'
 import { TeammateSettings } from '../features/teammates/TeammateSettings'
 
 import { StackDialog } from '../features/stacks/StackPanel'
 import { PullStatusDialog } from '../features/pull-status/PullStatusDialog'
-import { type PullStatusSection } from '../features/pull-status/PullStatusIcons'
+import { type PullStatusSection } from '../components/PullStatusIcons'
 
 import { LinusCompanion } from '../features/linus/LinusCompanion'
 
@@ -505,7 +505,7 @@ export function App() {
                     <Link to={inboxPath(repository, filter)}>Back to inbox</Link>
                   </div>
                 ) : pull ? (
-                  <ReviewWorkspace
+                  <ReviewPage
                     key={pull.id}
                     pull={pull}
                     onUpdate={updatePull}

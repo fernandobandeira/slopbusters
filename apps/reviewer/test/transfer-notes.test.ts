@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DiffSide, TransferKind } from '../shared/domain/types'
 import { annotateDiscussions } from '../src/features/review/discussions/discussions'
-import { diffItems } from '../src/features/review/diff/diffItems'
+import { diffItems } from '../src/lib/diffItems'
 import {
   annotateTransfers,
   transferCounts,

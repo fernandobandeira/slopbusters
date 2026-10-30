@@ -12,7 +12,7 @@ import { usePanelSession } from '../src/features/panel/usePanelSession'
 import { App } from '../src/app/App'
 import { call } from '../src/lib/api'
 import { useLinusSession } from '../src/features/linus/useLinusSession'
-import type { ReviewWorkspace } from '../src/features/review/ReviewWorkspace'
+import type { ReviewPage } from '../src/app/ReviewPage'
 import { fixturePull } from './fixtures/pull'
 import type { Preferences } from '../shared/domain/preferences'
 
@@ -85,8 +85,8 @@ vi.mock('../src/features/panel/usePanelSession', () => ({ usePanelSession: vi.fn
 vi.mock('../src/features/review/usePullReview', () => ({
   usePullReview: (route: { kind: string }) => ({ pull: route.kind === 'pull' ? pull : undefined }),
 }))
-vi.mock('../src/features/review/ReviewWorkspace', () => ({
-  ReviewWorkspace: (props: ComponentProps<typeof ReviewWorkspace>) =>
+vi.mock('../src/app/ReviewPage', () => ({
+  ReviewPage: (props: ComponentProps<typeof ReviewPage>) =>
     createElement(
       'div',
       null,

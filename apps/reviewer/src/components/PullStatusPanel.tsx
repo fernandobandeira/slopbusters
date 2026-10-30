@@ -13,9 +13,9 @@ import {
   Users,
   XCircle,
 } from 'lucide-react'
-import type { PullCheck, PullReviewer, PullStatus } from '../../../shared/domain/pullStatus'
+import type { PullCheck, PullReviewer, PullStatus } from '../../shared/domain/pullStatus'
 import type { PullStatusSection } from './PullStatusIcons'
-import '../../pullStatus.css'
+import '../pullStatus.css'
 
 export function readinessPresentation(status: PullStatus) {
   if (status.readiness === 'merged') return { label: 'Merged', tone: 'merged', Icon: GitMerge }

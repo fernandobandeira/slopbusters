@@ -6,6 +6,12 @@ export interface CodeSymbol {
   text: string
 }
 
+/** A symbol the reader right-clicked, with the pointer position to anchor its menu. */
+export interface SymbolMenuSelection extends CodeSymbol {
+  x: number
+  y: number
+}
+
 /** Resolve the caret inside a syntax token, which may contain several identifiers. */
 export function clickedSymbol(props: TokenEventBase, event: MouseEvent): CodeSymbol | undefined {
   const owner = props.tokenElement.ownerDocument

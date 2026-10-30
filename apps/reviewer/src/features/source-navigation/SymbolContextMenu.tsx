@@ -3,13 +3,8 @@ import { useEffect, useState } from 'react'
 import * as routes from '../../../shared/api'
 import { call } from '../../lib/api'
 import type { NavigationRequest } from '../../../shared/domain/navigation'
-import type { CodeSymbol } from '../review/diff/codeSymbols'
+import type { SymbolMenuSelection } from '../../lib/codeSymbols'
 import '../../sourceContext.css'
-
-export interface SymbolMenuSelection extends CodeSymbol {
-  x: number
-  y: number
-}
 
 interface Props {
   selection?: SymbolMenuSelection

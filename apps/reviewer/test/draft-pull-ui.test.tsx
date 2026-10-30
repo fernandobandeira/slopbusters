@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DiffSide, Provider, type PullRequest, type ReviewDraft } from '../shared/domain/types'
-import { ReviewWorkspace } from '../src/features/review/ReviewWorkspace'
+import { ReviewPage } from '../src/app/ReviewPage'
 import { fixturePull } from './fixtures/pull'
 import type { PullStatus } from '../shared/domain/pullStatus'
 
@@ -64,7 +64,7 @@ function openWorkspace(draft: ReviewDraft = { comments: [], summary: '', viewedF
   function Workspace() {
     const [current, setPull] = useState<PullRequest>(pull)
     return (
-      <ReviewWorkspace
+      <ReviewPage
         pull={current}
         onUpdate={(updated) => {
           onUpdate(updated)

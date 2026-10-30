@@ -11,7 +11,7 @@ import {
   TransferKind,
   type ReviewDraft,
 } from '../shared/domain/types'
-import { diffItems } from '../src/features/review/diff/diffItems'
+import { diffItems } from '../src/lib/diffItems'
 import { inboxPulls } from '../src/features/inbox/inbox'
 
 describe('diff mapping and transfer detection', () => {

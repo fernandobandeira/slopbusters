@@ -1,12 +1,12 @@
-import { useClipboard } from '../../lib/useClipboard'
+import { useClipboard } from '../lib/useClipboard'
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import Markdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import { Check, Copy, Image as ImageIcon } from 'lucide-react'
-import type { PullRequest } from '../../../shared/domain/types'
-import '../../description.css'
+import type { PullRequest } from '../../shared/domain/types'
+import '../description.css'
 
 const anchorPrefix = 'pull-description-'
 const descriptionSchema = {

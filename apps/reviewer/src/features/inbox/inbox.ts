@@ -1,5 +1,5 @@
 import type { RepositoryInbox } from '../../../shared/domain/types'
-export type InboxFilter = 'mine' | 'others' | 'requested'
+import type { InboxFilter } from '../../lib/routes'
 export function inboxPulls(inbox: RepositoryInbox, filter: InboxFilter) {
   return inbox.pulls.filter((pr) => {
     switch (filter) {

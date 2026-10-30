@@ -1,6 +1,6 @@
 import type { RevisionFileContent } from '../../../shared/domain/fileContent'
 import type { NavigationTarget } from '../../../shared/domain/navigation'
-import type { CodeSymbol } from '../review/diff/codeSymbols'
+import type { CodeSymbol } from '../../lib/codeSymbols'
 
 export interface SourceVisit {
   file: RevisionFileContent

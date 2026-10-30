@@ -1,5 +1,5 @@
 import type { PullRequest } from '../../../shared/domain/types'
-import { PullDescription } from './PullDescription'
+import { PullDescription } from '../../components/PullDescription'
 import {
   Dialog,
   DialogPopup,

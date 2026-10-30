@@ -9,8 +9,8 @@ import {
   UserRoundCheck,
   Users,
 } from 'lucide-react'
-import type { PullStatus } from '../../../shared/domain/pullStatus'
-import '../../pullStatus.css'
+import type { PullStatus } from '../../shared/domain/pullStatus'
+import '../pullStatus.css'
 
 export type PullStatusSection =
   'conflicts' | 'checks' | 'reviews' | 'changes' | 'comments' | 'overview'

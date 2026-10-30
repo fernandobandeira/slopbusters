@@ -13,7 +13,7 @@ import {
   groupViewed,
   nextUnviewedGroup,
 } from '../src/features/review/discussions/discussions'
-import { diffItems } from '../src/features/review/diff/diffItems'
+import { diffItems } from '../src/lib/diffItems'
 import { restoreDraft } from '../src/features/review/drafts'
 import { fixturePull } from './fixtures/pull'
 import { required } from './fixtures/bob'

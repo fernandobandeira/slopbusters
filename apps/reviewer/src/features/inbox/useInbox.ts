@@ -1,5 +1,5 @@
 import * as routes from '../../../shared/api'
-import type { InboxFilter } from './inbox'
+import type { InboxFilter } from '../../lib/routes'
 import { useApiQuery } from '../../lib/useApiQuery'
 
 export function useInbox(

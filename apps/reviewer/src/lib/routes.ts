@@ -1,13 +1,13 @@
 import { matchPath } from 'react-router'
 import type { PullRequest } from '../../shared/domain/types'
 import { parsePullUrl } from '../../shared/domain/pullUrl'
-import type { InboxFilter } from '../features/inbox/inbox'
 import {
   ticketIdentifierSchema,
   ticketViewSchema,
   type TicketView,
 } from '../../shared/domain/tickets'
 
+export type InboxFilter = 'mine' | 'others' | 'requested'
 type InboxRoute = { kind: 'inbox'; repository?: string; filter: InboxFilter }
 type PullRoute = {
   kind: 'pull'

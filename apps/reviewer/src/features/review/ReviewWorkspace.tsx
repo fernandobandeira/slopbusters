@@ -13,7 +13,7 @@ import { useDiscussions } from './discussions/useDiscussions'
 import { useOrganizeJob } from './useOrganizeJob'
 import { useReviewSubmission } from './useReviewSubmission'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { CodeViewHandle } from '@pierre/diffs/react'
 import { Link } from 'react-router'
@@ -23,10 +23,9 @@ import { Button } from '~/components/ui/button'
 
 import { message } from '../../lib/api'
 
-import { SourceContextDialog } from '../source-navigation/SourceContextDialog'
 import { OpenCodeProvider } from '../../components/CodeReferenceText'
 import type { CodeReference } from '../../../shared/domain/codeReferences'
-import { SymbolContextMenu, type SymbolMenuSelection } from '../source-navigation/SymbolContextMenu'
+import type { SymbolMenuSelection } from '../../lib/codeSymbols'
 
 import type { NavigationRequest } from '../../../shared/domain/navigation'
 import { annotateDiscussions, discussionGroup } from './discussions/discussions'
@@ -38,14 +37,10 @@ import { CompactReviewHeader, ReviewPullDetails } from './CompactReviewHeader'
 import { OrganizationEmptyState } from './OrganizationEmptyState'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import { useReviewDraft } from './useReviewDraft'
-import { usePullUpdates } from '../pull-status/usePullUpdates'
-import { usePullStack } from '../stacks/usePullStack'
-import { usePullStatus } from '../pull-status/usePullStatus'
-import { PullStatusDialog } from '../pull-status/PullStatusDialog'
-import type { PullStatusSection } from '../pull-status/PullStatusIcons'
-
-import { StackDialog } from '../stacks/StackPanel'
-import { readRoute } from '../../lib/routes'
+import type { PullStatusSection } from '../../components/PullStatusIcons'
+import type { PullStatus } from '../../../shared/domain/pullStatus'
+import type { PullStackSummary } from '../../../shared/domain/stacks'
+import type { PullFileContent } from '../../../shared/domain/fileContent'
 
 import { exportFeedback } from '../../../shared/domain/review'
 import type { ReviewLocation } from '../../../shared/domain/review'
@@ -59,6 +54,27 @@ export interface ReviewCompanionContext {
   openReview: () => void
   focusLine: (location: ReviewLocation | undefined) => void
 }
+interface SymbolMenuProps {
+  selection?: SymbolMenuSelection
+  source?: { pullId: string; side: DiffSide; path: string }
+  onNavigate: (kind: NavigationRequest['kind']) => void
+  onClose: () => void
+}
+interface SourceDialogProps {
+  pull: PullRequest
+  fileId?: string
+  content?: PullFileContent
+  contents: ReadonlyMap<string, PullFileContent>
+  loadContent: (fileId: string) => Promise<PullFileContent>
+  split: boolean
+  error?: string
+  initialRequest?: NavigationRequest
+  reference?: CodeReference
+  onRetry: () => void
+  onClose: () => void
+}
+const noStatus = { refresh: () => {} }
+const noUpdates = { hasUpdates: false }
 interface Props {
   pull: PullRequest
   onUpdate: (pull: PullRequest) => void
@@ -70,6 +86,17 @@ interface Props {
   titlebarTarget?: HTMLElement | null
   /** Actions beside the review controls. */
   reviewActions?: import('react').ReactNode
+  /** GitHub checks and reviews for the latest revision, which the app watches. */
+  pullStatus?: { status?: PullStatus; error?: string; refresh: () => void }
+  /** Whether GitHub has a revision newer than the one under review. */
+  updates?: { hasUpdates: boolean; error?: string }
+  stackSummary?: PullStackSummary | null
+  onStack?: () => void
+  onStatus?: (section?: PullStatusSection) => void
+  /** The menu for a symbol right-clicked in the diff. */
+  renderSymbolMenu?: (props: SymbolMenuProps) => ReactNode
+  /** The source viewer that symbol navigation and code references open. */
+  renderSourceDialog?: (props: SourceDialogProps) => ReactNode
 }
 export function ReviewWorkspace({
   pull,
@@ -81,6 +108,13 @@ export function ReviewWorkspace({
   titlebarTarget,
   renderCompanion,
   reviewActions,
+  pullStatus = noStatus,
+  updates = noUpdates,
+  stackSummary,
+  onStack,
+  onStatus = () => {},
+  renderSymbolMenu,
+  renderSourceDialog,
 }: Props) {
   const {
     draft,
@@ -111,17 +145,6 @@ export function ReviewWorkspace({
     fileSectionsViewed,
     syntheticItems,
   } = useReviewDiff(pull, draft, setDraft, changes)
-  const updates = usePullUpdates(pull)
-  const { stack, summary: stackSummary } = usePullStack(pull)
-  const [stackOpen, setStackOpen] = useState(false)
-  const pullStatus = usePullStatus(pull.url, pull.id)
-  const [statusOpen, setStatusOpen] = useState(false)
-  const [statusSection, setStatusSection] = useState<PullStatusSection>()
-  const inboxRoute = readRoute({
-    pathname: window.location.pathname,
-    search: window.location.search,
-  })
-  const inboxFilter = inboxRoute.kind === 'not-found' ? 'mine' : inboxRoute.filter
   const [symbolMenu, setSymbolMenu] = useState<
     SymbolMenuSelection & { fileId: string; side: DiffSide; path: string }
   >()
@@ -368,15 +391,10 @@ export function ReviewWorkspace({
             }
             updateCheckError={updates.error}
             stack={stackSummary}
-            onStack={() => {
-              setStackOpen(true)
-            }}
+            onStack={onStack}
             status={pullStatus.status}
             statusError={pullStatus.error}
-            onStatus={(section) => {
-              setStatusSection(section)
-              setStatusOpen(true)
-            }}
+            onStatus={onStatus}
             reloading={reloading}
             organizing={organizing || submitting}
             changes={grouped ? changes : undefined}
@@ -609,53 +627,35 @@ export function ReviewWorkspace({
         pull={pull}
         draft={draft}
       />
-      <StackDialog
-        url={stackOpen ? pull.url : undefined}
-        stack={stack ?? undefined}
-        currentNumber={pull.number}
-        filter={inboxFilter}
-        onClose={() => {
-          setStackOpen(false)
-        }}
-      />
-      <SymbolContextMenu
-        selection={symbolMenu}
-        source={
-          symbolMenu ? { pullId: pull.id, side: symbolMenu.side, path: symbolMenu.path } : undefined
-        }
-        onNavigate={navigateSymbol}
-        onClose={() => {
+      {renderSymbolMenu?.({
+        selection: symbolMenu,
+        source: symbolMenu
+          ? { pullId: pull.id, side: symbolMenu.side, path: symbolMenu.path }
+          : undefined,
+        onNavigate: navigateSymbol,
+        onClose: () => {
           setSymbolMenu(undefined)
-        }}
-      />
-      <SourceContextDialog
-        key={`${pull.id}/${JSON.stringify(sourceSelection)}`}
-        pull={pull}
-        fileId={sourceFileId}
-        initialRequest={sourceSelection?.request}
-        reference={sourceSelection?.reference}
-        content={sourceFileId ? fileContext.contents.get(sourceFileId) : undefined}
-        contents={fileContext.contents}
-        loadContent={fileContext.load}
-        split={split}
-        error={sourceFileId ? fileContext.error(sourceFileId) : undefined}
-        onRetry={() => {
-          if (sourceFileId) void fileContext.load(sourceFileId).catch(() => {})
-        }}
-        onClose={() => {
-          setSourceSelection(undefined)
-        }}
-      />
-      <PullStatusDialog
-        url={statusOpen ? pull.url : undefined}
-        status={pullStatus.status}
-        error={pullStatus.error}
-        section={statusSection}
-        snapshotHeadSha={pull.headSha}
-        onClose={() => {
-          setStatusOpen(false)
-        }}
-      />
+        },
+      })}
+      <Fragment key={`${pull.id}/${JSON.stringify(sourceSelection)}`}>
+        {renderSourceDialog?.({
+          pull,
+          fileId: sourceFileId,
+          initialRequest: sourceSelection?.request,
+          reference: sourceSelection?.reference,
+          content: sourceFileId ? fileContext.contents.get(sourceFileId) : undefined,
+          contents: fileContext.contents,
+          loadContent: fileContext.load,
+          split,
+          error: sourceFileId ? fileContext.error(sourceFileId) : undefined,
+          onRetry: () => {
+            if (sourceFileId) void fileContext.load(sourceFileId).catch(() => {})
+          },
+          onClose: () => {
+            setSourceSelection(undefined)
+          },
+        })}
+      </Fragment>
       <DescriptionDialog open={descriptionOpen} onOpenChange={setDescriptionOpen} pull={pull} />
     </div>
   )

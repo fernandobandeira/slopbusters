@@ -12,11 +12,10 @@ import {
 import { Link } from 'react-router'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { PullStack, PullStackResult, StackPull } from '../../../shared/domain/stacks'
-import type { InboxFilter } from '../inbox/inbox'
-import { reviewPath } from '../../lib/routes'
+import { reviewPath, type InboxFilter } from '../../lib/routes'
 import { call, message } from '../../lib/api'
-import { PullStatusPanel, readinessPresentation } from '../pull-status/PullStatusPanel'
-import { PullStatusIcons, type PullStatusSection } from '../pull-status/PullStatusIcons'
+import { PullStatusPanel, readinessPresentation } from '../../components/PullStatusPanel'
+import { PullStatusIcons, type PullStatusSection } from '../../components/PullStatusIcons'
 import { Button } from '~/components/ui/button'
 import {
   Dialog,

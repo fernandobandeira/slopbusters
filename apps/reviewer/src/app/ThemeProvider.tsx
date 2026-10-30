@@ -2,7 +2,7 @@ import { usePreferences } from '../lib/usePreferences'
 import { DiffRuntimeContext } from '~/hooks/useTheme'
 import DiffsWorker from '../features/review/diff/diff.worker.ts?worker'
 import { createResilientDiffWorker } from '../features/review/diff/resilientDiffWorker'
-import { contextMenuToken } from '../features/review/diff/codeSymbols'
+import { contextMenuToken } from '../lib/codeSymbols'
 
 import {
   createContext,

@@ -9,7 +9,7 @@ import { useApiQuery } from '../src/lib/useApiQuery'
 import { useBobSession } from '../src/features/bob/useBobSession'
 import { App } from '../src/app/App'
 import { call } from '../src/lib/api'
-import type { ReviewWorkspace } from '../src/features/review/ReviewWorkspace'
+import type { ReviewPage } from '../src/app/ReviewPage'
 import { fixturePull } from './fixtures/pull'
 
 const pull = fixturePull()
@@ -45,8 +45,8 @@ vi.mock('../src/features/bob/useBobSession', () => ({ useBobSession: vi.fn() }))
 vi.mock('../src/features/review/usePullReview', () => ({
   usePullReview: (route: { kind: string }) => ({ pull: route.kind === 'pull' ? pull : undefined }),
 }))
-vi.mock('../src/features/review/ReviewWorkspace', () => ({
-  ReviewWorkspace: (props: ComponentProps<typeof ReviewWorkspace>) =>
+vi.mock('../src/app/ReviewPage', () => ({
+  ReviewPage: (props: ComponentProps<typeof ReviewPage>) =>
     createElement(
       'div',
       null,

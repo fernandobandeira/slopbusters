@@ -5,7 +5,7 @@ import { Badge } from '~/components/ui/badge'
 import type { InboxPull } from '../../../shared/domain/types'
 import type { PullStatus } from '../../../shared/domain/pullStatus'
 import { reviewPath } from '../../lib/routes'
-import type { InboxFilter } from './inbox'
+import type { InboxFilter } from '../../lib/routes'
 
 interface Props {
   pull: InboxPull

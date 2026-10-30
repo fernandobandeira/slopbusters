@@ -1,6 +1,6 @@
 import { Layers } from 'lucide-react'
-import type { PullStackSummary } from '../../../shared/domain/stacks'
-import '../../stacks.css'
+import type { PullStackSummary } from '../../shared/domain/stacks'
+import '../stacks.css'
 
 interface Props {
   summary: PullStackSummary

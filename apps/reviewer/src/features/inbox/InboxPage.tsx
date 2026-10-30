@@ -2,7 +2,8 @@ import type { ReactNode } from 'react'
 import { Button } from '~/components/ui/button'
 import { Check, CheckSquare, LoaderCircle } from 'lucide-react'
 import type { RepositoryInbox, InboxPull } from '../../../shared/domain/types'
-import { inboxPulls, inboxFilters as filters, type InboxFilter } from './inbox'
+import { inboxPulls, inboxFilters as filters } from './inbox'
+import type { InboxFilter } from '../../lib/routes'
 import {
   byOpenedDate,
   chipCount,

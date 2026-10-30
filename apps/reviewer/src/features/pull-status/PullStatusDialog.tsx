@@ -1,7 +1,7 @@
 import type { PullStatus } from '../../../shared/domain/pullStatus'
 import { usePullStatus } from './usePullStatus'
-import { PullStatusPanel } from './PullStatusPanel'
-import type { PullStatusSection } from './PullStatusIcons'
+import { PullStatusPanel } from '../../components/PullStatusPanel'
+import type { PullStatusSection } from '../../components/PullStatusIcons'
 import { Button } from '~/components/ui/button'
 import {
   Dialog,
