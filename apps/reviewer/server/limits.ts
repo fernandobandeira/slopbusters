@@ -16,8 +16,5 @@ export const PROCESS_TERMINATION_MS = 1000
 export const MAX_STDERR_CHARS = 4000
 export const MAX_SYMBOL_SOURCE_CHARS = 500_000
 export const SOURCE_WORKSPACE_TIMEOUT_MS = 60_000
-/** Review checkouts unused this long are removed; they can be downloaded again. */
-export const REVIEW_CHECKOUT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
-export const REVIEW_CHECKOUT_PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000
 export const MAX_SOURCE_TREE_CACHE_ENTRIES = 20
 export const MAX_WORKSPACE_STATUS_OUTPUT_BYTES = 1024 * 1024

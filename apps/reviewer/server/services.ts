@@ -31,7 +31,6 @@ import { createGitIdentity } from './adapters/gitIdentity'
 import { createSplitJobs } from './features/split/createSplitJobs'
 import type { BranchDependencies, JobDependencies } from './features/jobDependencies'
 import { logError, UserError } from './errors'
-import { REVIEW_CHECKOUT_PRUNE_INTERVAL_MS, REVIEW_CHECKOUT_RETENTION_MS } from './limits'
 import { fetchDiscussions, fetchReviewBodies } from './features/pulls/discussions'
 import { createMergeBaseLookup } from './features/pulls/mergeBase'
 import type { PullRequest } from '../shared/domain/types'
@@ -312,6 +311,10 @@ const withoutEngine: StructuredTurns = {
       ),
     ),
 }
+
+/** Review checkouts unused this long are removed; they can be downloaded again. */
+const REVIEW_CHECKOUT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+const REVIEW_CHECKOUT_PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 /**
  * Remove review checkouts unused for a week, at startup and every few hours. A checkout in use
