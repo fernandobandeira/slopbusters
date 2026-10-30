@@ -42,4 +42,5 @@ export default tseslint.config(
       ],
     },
   },
+  { files: ['test/**'], rules: { '@typescript-eslint/no-non-null-assertion': 'off' } },
 )
