@@ -16,6 +16,7 @@ import { jobsRouter } from './http/jobsRouter'
 import { chatRouter } from './http/chatRouter'
 import { teammatesRouter } from './http/teammatesRouter'
 import { panelRouter } from './http/panelRouter'
+import { splitRouter } from './http/splitRouter'
 
 export type { ReviewerServerOptions } from './services'
 
@@ -41,6 +42,7 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
     chatRouter(services),
     teammatesRouter(services),
     panelRouter(services),
+    splitRouter(services),
     sourceRouter(services),
     settingsRouter(services),
   )

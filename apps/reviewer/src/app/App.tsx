@@ -18,6 +18,8 @@ import { AppSidebar } from './AppSidebar'
 import { InboxPullActions } from './InboxPullActions'
 import { useReviewLaunch } from './useReviewLaunch'
 import { AskLinusButton } from '../features/linus/AskLinusButton'
+import { SplitCompanion } from '../features/split/SplitCompanion'
+import type { LinusResult } from '../../shared/domain/linus'
 import { PullReviewActions } from './PullReviewActions'
 import { IssueRoute, IssuesRoute, LinkedTicketLink } from './IssueRoutes'
 import { useApiQuery } from '../lib/useApiQuery'
@@ -44,7 +46,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '~/components/ui/dialog'
-import { message } from '../lib/api'
+import { call, message } from '../lib/api'
 import { inboxPulls } from '../features/inbox/inbox'
 import { ReviewWorkspace } from '../features/review/ReviewWorkspace'
 import { SettingsPage } from '../features/settings/SettingsPage'
@@ -96,6 +98,10 @@ export function App() {
     setGandalf(undefined)
   }, [])
   const [selection, setSelection] = useState<{ repository: string; urls: string[] }>()
+  const [split, setSplit] = useState<{ repository: string; id: string }>()
+  const closeSplit = useCallback(() => {
+    setSplit(undefined)
+  }, [])
   const [linusRefresh, setLinusRefresh] = useState(0)
   const [linusReplay, setLinusReplay] = useState<LinusReplayRequest & { repository: string }>()
   const savedLinus = useLinusRecommendations(repository, refresh + linusRefresh)
@@ -135,6 +141,23 @@ export function App() {
   async function askLinus(urls: string[]) {
     setLinusReplay(undefined)
     if (await reviewLaunch.start(urls)) setSelection(undefined)
+  }
+  function openSplit(id: string) {
+    setSplit({ repository, id })
+    setLinusReplay(undefined)
+    reviewLaunch.closeLinus()
+  }
+  async function startSplit(result: LinusResult, linusSessionId: string) {
+    setError('')
+    try {
+      const session = await call(routes.startSplit, {
+        body: { repository, url: result.pull.url, linusSessionId },
+      })
+      refreshLinus()
+      openSplit(session.id)
+    } catch (cause) {
+      setError(message(cause))
+    }
   }
   function openGandalf(task: GandalfTask) {
     setGandalf({ repository, task })
@@ -601,6 +624,17 @@ export function App() {
               activePanels.reload()
               openPanel(url, id)
             }}
+            onSplit={(result, linusSessionId) => void startSplit(result, linusSessionId)}
+            onOpenSplit={openSplit}
+          />
+        )}
+        {repository && split?.repository === repository && route.kind !== 'sessions' && (
+          <SplitCompanion
+            key={split.id}
+            sessionId={split.id}
+            renderSessionCard={renderSessionCard}
+            onClose={closeSplit}
+            onSettled={refreshAfterGandalf}
           />
         )}
         {repository && gandalf?.repository === repository && route.kind === 'inbox' && (

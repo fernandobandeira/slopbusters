@@ -26,11 +26,9 @@ import { BobJobs } from './features/bob/bobJobs'
 import { LinusJobs } from './features/linus/linusJobs'
 import { OrganizationJobs } from './features/organizationJobs'
 import { savedModels } from './features/models'
-import { GandalfJobs } from './features/gandalf/gandalfJobs'
-import { createGandalfPlanner } from './features/gandalf/gandalfPlan'
-import { openConflictWorkspace } from './adapters/conflictWorkspace'
-import { loadCiFailures } from './adapters/ciFailures'
+import { createGandalfJobs } from './features/gandalf/createGandalfJobs'
 import { createGitIdentity } from './adapters/gitIdentity'
+import { createSplitJobs } from './features/split/createSplitJobs'
 import { logError, UserError } from './errors'
 import { REVIEW_CHECKOUT_PRUNE_INTERVAL_MS, REVIEW_CHECKOUT_RETENTION_MS } from './limits'
 import { fetchDiscussions, fetchReviewBodies } from './features/pulls/discussions'
@@ -153,31 +151,30 @@ export function createServices(options: ReviewerServerOptions) {
     openSource: async (name, signal) =>
       openRepository(await defaultBranchSnapshot(github, name, signal), signal),
   })
-  const conflictRemote = options.sourceRemoteUrl
+  const remoteUrl = sourceRemote(options.sourceRemoteUrl)
   const gitIdentity = createGitIdentity(github)
-  const gandalfJobs = new GandalfJobs({
+  const gandalfJobs = createGandalfJobs({
     store,
     turns,
     sessions: agentSessions,
+    github,
+    identity: gitIdentity,
+    dataDirectory: options.dataDirectory,
     loadPull: pulls.fetchPull,
-    plan: createGandalfPlanner(stacks.getStackMetadata),
-    loadFailures: (pull, signal) => loadCiFailures(github, pull, signal),
-    openWorkspace: (pull, signal, task) =>
-      openConflictWorkspace({
-        dataDirectory: options.dataDirectory,
-        pull,
-        github,
-        signal,
-        task,
-        identity: gitIdentity,
-        remoteUrl: conflictRemote
-          ? (name) => {
-              const [owner, repo] = name.split('/')
-              if (!owner || !repo) throw new Error('Invalid source repository.')
-              return conflictRemote(owner, repo)
-            }
-          : undefined,
-      }),
+    getStack: stacks.getStackMetadata,
+    remoteUrl,
+  })
+  const splitJobs = createSplitJobs({
+    store,
+    turns: new RetryingTurns(turns),
+    sessions: agentSessions,
+    github,
+    identity: gitIdentity,
+    staticDirectory: options.staticDirectory,
+    skillDirectory: options.linusSkillDirectory,
+    dataDirectory: options.dataDirectory,
+    loadPull: pulls.fetchPull,
+    remoteUrl,
   })
   const organizationJobs = new OrganizationJobs(store, turns, agentSessions)
   const teammates = new Teammates(
@@ -267,6 +264,7 @@ export function createServices(options: ReviewerServerOptions) {
     linusJobs,
     bobJobs,
     gandalfJobs,
+    splitJobs,
     agentSessions,
     organizationJobs,
     linearAuth,
@@ -322,6 +320,7 @@ export function createServices(options: ReviewerServerOptions) {
         linusJobs.close(),
         bobJobs.close(),
         gandalfJobs.close(),
+        splitJobs.close(),
         jobs.close(),
         panelJobs.close(),
       ])
@@ -334,6 +333,17 @@ export function createServices(options: ReviewerServerOptions) {
       agentSessions.store.close()
       store.close()
     },
+  }
+}
+/** Where a repository's Git remote is, for tests that point workspaces at a local one. */
+function sourceRemote(
+  sourceRemoteUrl?: (owner: string, repo: string) => string,
+): ((repository: string) => string) | undefined {
+  if (!sourceRemoteUrl) return undefined
+  return (name) => {
+    const [owner, repo] = name.split('/')
+    if (!owner || !repo) throw new Error('Invalid source repository.')
+    return sourceRemoteUrl(owner, repo)
   }
 }
 export type Services = ReturnType<typeof createServices>

@@ -19,6 +19,7 @@ import {
 import type { PullRequest, ReviewDraft } from '../../shared/domain/types'
 import { withFixedModels, type Preferences } from '../../shared/domain/preferences'
 import { gandalfSessionSchema, type GandalfSession } from '../../shared/domain/gandalf'
+import { splitSessionSchema, type SplitSession } from '../../shared/domain/split'
 import type { BobSession } from '../../shared/domain/bob'
 import { readSavedBobReviews } from './savedBobReviews'
 import { migrateTicketStore, TicketStore } from './ticketStore'
@@ -52,7 +53,7 @@ export class ReviewerStore {
       'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;',
     )
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
-    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6, 7, 8].includes(version)) {
+    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9].includes(version)) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
     }
@@ -90,7 +91,7 @@ export class ReviewerStore {
       ); PRAGMA user_version = 5; COMMIT;`)
     if (version < 6) migrateReviewProgress(this.database)
     if (version < 7) migrateTicketStore(this.database)
-    if (version < 8) migratePanelSessions(this.database)
+    migrateAgentSessions(this.database, version)
     this.tickets = new TicketStore(this.database)
     this.engine = new EngineCredentialStore(this.database)
     this.panel = new PanelSessionStore(this.database)
@@ -308,6 +309,35 @@ export class ReviewerStore {
       .get(repository)
     return row ? gandalfSessionSchema.parse(JSON.parse(String(row.session))) : undefined
   }
+  saveSplitSession(session: SplitSession): void {
+    this.database
+      .prepare(
+        `INSERT INTO split_sessions (id, repository, url, created_at, session)
+      VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET session = excluded.session`,
+      )
+      .run(session.id, session.repository, session.url, session.createdAt, JSON.stringify(session))
+  }
+  getSplitSession(id: string): SplitSession | undefined {
+    const row = this.database.prepare('SELECT session FROM split_sessions WHERE id = ?').get(id)
+    return row ? splitSessionSchema.parse(JSON.parse(String(row.session))) : undefined
+  }
+  /** The newest split in the repository, or of one PR. */
+  latestSplitSession(repository: string, url?: string): SplitSession | undefined {
+    const row = url
+      ? this.database
+          .prepare(
+            `SELECT session FROM split_sessions WHERE repository = ? AND url = ?
+          ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+          )
+          .get(repository, url)
+      : this.database
+          .prepare(
+            `SELECT session FROM split_sessions WHERE repository = ?
+          ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+          )
+          .get(repository)
+    return row ? splitSessionSchema.parse(JSON.parse(String(row.session))) : undefined
+  }
   pendingGandalfSessions(): GandalfSession[] {
     return this.database
       .prepare(
@@ -351,4 +381,14 @@ export class ReviewerStore {
       }
     }
   }
+}
+
+/** Panel sessions at version 8, then Linus's splits of one PR into a stack at version 9. */
+function migrateAgentSessions(database: DatabaseSync, version: number) {
+  if (version < 8) migratePanelSessions(database)
+  if (version < 9)
+    database.exec(`BEGIN IMMEDIATE;
+    CREATE TABLE IF NOT EXISTS split_sessions (
+      id TEXT PRIMARY KEY, repository TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL
+    ); PRAGMA user_version = 9; COMMIT;`)
 }

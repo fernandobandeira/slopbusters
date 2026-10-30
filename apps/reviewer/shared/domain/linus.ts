@@ -50,6 +50,8 @@ export interface LinusResult extends ReviewResult<LinusAdvice> {
   panelSessionId?: string
   /** Why the panel did not start after Linus would keep the PR as one. */
   panelError?: string
+  /** The split Linus started on this PR from his layers. */
+  splitSessionId?: string
 }
 export type LinusPending = PendingReview<LinusAdvice>
 /** The panel to start on each PR after Linus reviews it, when he is asked to go first. */

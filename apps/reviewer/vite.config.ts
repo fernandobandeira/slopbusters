@@ -32,6 +32,15 @@ export default defineConfig({
         })
         this.emitFile({
           type: 'asset',
+          fileName: 'linus-split-skill.md',
+          source: ['SKILL.md', 'references/splitting.md']
+            .map((file) =>
+              readFileSync(new URL(`../../skills/linus/${file}`, import.meta.url), 'utf8'),
+            )
+            .join('\n\n'),
+        })
+        this.emitFile({
+          type: 'asset',
           fileName: 'jobs-skill.md',
           source: ['SKILL.md', 'references/review-only.md']
             .map((file) =>

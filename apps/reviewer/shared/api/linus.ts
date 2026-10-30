@@ -27,6 +27,7 @@ const session = z.object({
       reviewers: z.array(organizationSchema),
       panelSessionId: z.string().optional(),
       panelError: z.string().optional(),
+      splitSessionId: z.string().optional(),
     }),
   ),
   pending: z

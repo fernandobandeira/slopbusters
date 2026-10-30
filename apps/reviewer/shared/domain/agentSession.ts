@@ -1,7 +1,15 @@
 import { z } from 'zod'
 import { organizationSchema } from './preferences'
 
-export const agentKindSchema = z.enum(['gandalf', 'bob', 'linus', 'grouping', 'jobs', 'panel'])
+export const agentKindSchema = z.enum([
+  'gandalf',
+  'bob',
+  'linus',
+  'grouping',
+  'jobs',
+  'panel',
+  'split',
+])
 export const agentStateSchema = z.enum(['running', 'partial', 'complete', 'failed', 'cancelled'])
 export const agentEventSchema = z.object({
   id: z.string(),

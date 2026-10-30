@@ -94,6 +94,16 @@ export class LinusJobs extends DualReviewJobs<LinusAdvice, LinusSession> {
     return session
   }
 
+  /** Remember the split started from this PR's layers, so its review can open it. */
+  recordSplit(id: string, url: string, splitSessionId: string): LinusSession {
+    const session = this.get(id)
+    const result = session.results.find((item) => item.pull.url === url)
+    if (!result) throw new UserError('Linus did not review this PR in that session.')
+    result.splitSessionId = splitSessionId
+    this.saveSession(session)
+    return session
+  }
+
   /** A PR Linus would keep as one goes on to the panel; one he would split waits for the author. */
   private async sendOn(session: LinusSession, result: LinusResult): Promise<void> {
     if (!session.thenPanel || !panelProceeds(result.advice)) return

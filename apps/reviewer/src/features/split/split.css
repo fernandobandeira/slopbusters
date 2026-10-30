@@ -1,0 +1,45 @@
+.split-progress {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.split-progress svg {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.split-layers {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.split-layers a {
+  color: var(--primary);
+}
+.split-layers a svg {
+  display: inline;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+.split-verified {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+.split-turns ul {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.split-turns p {
+  margin: 2px 0 0;
+}
+.split-actions {
+  margin-top: 12px;
+}

@@ -36,7 +36,7 @@ import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { diffItems } from '../review/diff/diffItems'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { linusReviewTurns } from './linusReviewTurns'
-import { LinusPanelDecision } from './LinusPanelDecision'
+import { LinusNextStep } from './LinusNextStep'
 import { useLinusSession } from './useLinusSession'
 import { call, message } from '../../lib/api'
 import { reviewPath } from '../../lib/routes'
@@ -204,6 +204,8 @@ export function LinusCompanion({
   onSessionUpdate,
   onSessionStarted,
   onOpenPanel,
+  onSplit,
+  onOpenSplit,
   sessionId,
   renderSessionCard,
   onClose,
@@ -217,6 +219,10 @@ export function LinusCompanion({
   onSessionStarted?: (sessionId: string) => void
   /** Open the panel that followed Linus on a PR. */
   onOpenPanel?: (url: string, sessionId: string) => void
+  /** Split a PR into the stack Linus proposed in the review `sessionId`. */
+  onSplit?: (result: LinusResult, sessionId: string) => void
+  /** Open the split Linus started from a review. */
+  onOpenSplit?: (sessionId: string) => void
   sessionId?: string
   renderSessionCard?: (sessionId: string) => ReactNode
   onClose?: () => void
@@ -504,17 +510,23 @@ export function LinusCompanion({
                       </Button>
                     </div>
                   </div>
-                  {thenPanel && (
-                    <LinusPanelDecision
-                      key={`${decisionSessionId ?? ''}:${turn.result.pull.url}`}
-                      result={turn.result}
-                      thenPanel={thenPanel}
-                      busy={busy}
-                      onOpenPanel={(panelId) => onOpenPanel?.(turn.result.pull.url, panelId)}
-                      onSendOn={() => void sendOn(turn.result)}
-                      onAskAgain={(guidance) => void askLinusAgain(turn.result, guidance)}
-                    />
-                  )}
+                  <LinusNextStep
+                    key={`${decisionSessionId ?? ''}:${turn.result.pull.url}`}
+                    result={turn.result}
+                    thenPanel={thenPanel}
+                    busy={busy}
+                    onOpenPanel={(panelId) => onOpenPanel?.(turn.result.pull.url, panelId)}
+                    onOpenSplit={(splitId) => onOpenSplit?.(splitId)}
+                    onSendOn={() => void sendOn(turn.result)}
+                    onAskAgain={(guidance) => void askLinusAgain(turn.result, guidance)}
+                    onSplit={
+                      onSplit && decisionSessionId
+                        ? () => {
+                            onSplit(turn.result, decisionSessionId)
+                          }
+                        : undefined
+                    }
+                  />
                   <div className="linus-actions linus-continue">
                     <ContinueLinus sessionId={activitySessionId} url={turn.result.pull.url} />
                   </div>

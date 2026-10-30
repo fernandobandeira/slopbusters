@@ -126,6 +126,14 @@ export const MAX_GANDALF_CHANGED_FILES = 100
 /** Commits on each side of the merge named in the prompt for the conflicted files. */
 export const MAX_GANDALF_CONFLICT_COMMITS = 20
 
+/** The largest PR diff a split cuts into units; bigger PRs are split in T3 Code instead. */
+export const MAX_SPLIT_DIFF_BYTES = 4 * 1024 * 1024
+/** How much of the units' patches the split prompt carries; the models read the rest with Git. */
+export const MAX_SPLIT_PROMPT_PATCH_CHARS = 240_000
+/** Turns the two models take cutting and reviewing a stack before the split stops. */
+export const MAX_SPLIT_TURNS = 8
+export const SPLIT_PROVIDER_TIMEOUT_MS = 15 * 60 * 1000
+
 export const MAX_AGENT_EVENT_CHARS = 128 * 1024
 export const MAX_AGENT_EVENT_PAGE = 200
 export const MAX_AGENT_SESSIONS = 100

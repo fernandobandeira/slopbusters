@@ -9,6 +9,7 @@ export const agentNames: Record<AgentSession['kind'], string> = {
   grouping: 'Diff organization',
   jobs: 'Steve Jobs',
   panel: 'Review panel',
+  split: 'Linus split',
 }
 /** The model's short name, such as "Astra 6"; a model the app no longer runs shows its id. */
 export function modelName(model: OrganizationPreferences) {

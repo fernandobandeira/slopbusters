@@ -27,7 +27,13 @@ export class BaseAdvancedError extends UserError {
 }
 
 /** PR base.sha can lag behind a branch update, especially for native stacks. */
-export async function readConflictRevision(github: GitHub, pull: PullRequest, signal: AbortSignal) {
+export async function readConflictRevision(
+  github: GitHub,
+  pull: PullRequest,
+  signal: AbortSignal,
+  /** What the PR changed during, for the error. */
+  purpose = 'conflict resolution',
+) {
   const metadata = metadataSchema.parse(
     await github.rest(`repos/${pull.owner}/${pull.repo}/pulls/${pull.number}`, { signal }),
   )
@@ -36,7 +42,7 @@ export async function readConflictRevision(github: GitHub, pull: PullRequest, si
     metadata.head.ref !== pull.headBranch ||
     metadata.base.ref !== pull.baseBranch
   )
-    throw new UserError('This PR changed during conflict resolution. Refresh it and retry.')
+    throw new UserError(`This PR changed during ${purpose}. Refresh it and retry.`)
   const headRepository = repositoryName(metadata.head)
   const baseRepository = repositoryName(metadata.base)
   const [headSha, baseSha] = await Promise.all([

@@ -19,10 +19,66 @@ interface DecisionProps {
 }
 
 /**
+ * What comes after Linus's review of this PR: the split he is building from his layers, the
+ * panel that was to follow him, or the offer to split a PR he would cut.
+ */
+export function LinusNextStep({
+  result,
+  thenPanel,
+  busy,
+  onOpenPanel,
+  onOpenSplit,
+  onSendOn,
+  onAskAgain,
+  onSplit,
+}: Omit<DecisionProps, 'thenPanel'> & {
+  thenPanel?: LinusThenPanel
+  onOpenSplit: (sessionId: string) => void
+}) {
+  if (result.splitSessionId) {
+    const sessionId = result.splitSessionId
+    return (
+      <div className="linus-notice linus-panel-decision" role="status">
+        <p>Linus is splitting PR #{String(result.pull.number)} into a stack from these layers.</p>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            onOpenSplit(sessionId)
+          }}
+        >
+          Open the split
+        </Button>
+      </div>
+    )
+  }
+  if (thenPanel)
+    return (
+      <LinusPanelDecision
+        result={result}
+        thenPanel={thenPanel}
+        busy={busy}
+        onOpenPanel={onOpenPanel}
+        onSendOn={onSendOn}
+        onAskAgain={onAskAgain}
+        onSplit={onSplit}
+      />
+    )
+  if (!onSplit || panelProceeds(result.advice) || result.advice.verdict === 'uncertain') return null
+  return (
+    <div className="linus-actions linus-split-offer">
+      <Button size="sm" variant="outline" disabled={busy} onClick={onSplit}>
+        Split this PR
+      </Button>
+    </div>
+  )
+}
+
+/**
  * What the panel that was to follow Linus is doing on this PR: reviewing it, or waiting for the
  * author to split the PR, send it on as one, or ask Linus again with more to go on.
  */
-export function LinusPanelDecision(props: DecisionProps) {
+function LinusPanelDecision(props: DecisionProps) {
   const { result, busy, onOpenPanel, onSendOn } = props
   const number = String(result.pull.number)
   if (result.panelSessionId) {
