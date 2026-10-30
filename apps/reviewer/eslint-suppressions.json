@@ -441,47 +441,6 @@
       "count": 4
     }
   },
-  "test/discussions.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 7
-    },
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 7
-    },
-    "max-lines": {
-      "count": 1
-    },
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/display-context.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 16
-    }
-  },
-  "test/file-content.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 14
-    },
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
-      "count": 6
-    },
-    "@typescript-eslint/require-await": {
-      "count": 2
-    },
-    "max-lines-per-function": {
-      "count": 4
-    }
-  },
-  "test/fixtures/language-server.mjs": {
-    "no-redeclare": {
-      "count": 1
-    }
-  },
   "test/fixtures/pull.ts": {
     "max-lines-per-function": {
       "count": 1
@@ -490,7 +449,12 @@
       "count": 1
     }
   },
-  "test/installed-navigation.test.ts": {
+  "test/server/adapters/fixtures/language-server.mjs": {
+    "no-redeclare": {
+      "count": 1
+    }
+  },
+  "test/server/adapters/installed-navigation.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 4
     },
@@ -501,53 +465,7 @@
       "count": 1
     }
   },
-  "test/linus-api.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
-      "count": 5
-    },
-    "@typescript-eslint/require-await": {
-      "count": 1
-    },
-    "max-lines-per-function": {
-      "count": 2
-    }
-  },
-  "test/linus-jobs.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 9
-    },
-    "@typescript-eslint/require-await": {
-      "count": 2
-    },
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/linus-model.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 3
-    }
-  },
-  "test/linus-review-turns.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 5
-    }
-  },
-  "test/linus.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 13
-    },
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/lsp-navigation.test.ts": {
+  "test/server/adapters/lsp-navigation.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 1
     },
@@ -567,7 +485,74 @@
       "count": 1
     }
   },
-  "test/navigation.test.ts": {
+  "test/server/adapters/review-workspaces.test.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "test/server/adapters/source-repository.test.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "test/server/adapters/store.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 7
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "test/server/adapters/tool-status.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 3
+    },
+    "@typescript-eslint/require-await": {
+      "count": 3
+    }
+  },
+  "test/server/features/linus/linus-jobs.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 9
+    },
+    "@typescript-eslint/require-await": {
+      "count": 2
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "test/server/features/linus/linus-model.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 3
+    }
+  },
+  "test/server/features/linus/linus.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 13
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "test/server/features/navigation/file-content.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 14
+    },
+    "@typescript-eslint/no-unsafe-assignment": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unsafe-member-access": {
+      "count": 6
+    },
+    "@typescript-eslint/require-await": {
+      "count": 2
+    },
+    "max-lines-per-function": {
+      "count": 4
+    }
+  },
+  "test/server/features/navigation/navigation.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 2
     },
@@ -578,23 +563,15 @@
       "count": 1
     }
   },
-  "test/organization-api.test.ts": {
-    "@typescript-eslint/no-unsafe-assignment": {
+  "test/server/features/navigation/semantic-navigation.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
       "count": 1
     },
     "max-lines-per-function": {
       "count": 1
     }
   },
-  "test/persistence-lifecycle.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 3
-    },
-    "@typescript-eslint/require-await": {
-      "count": 1
-    }
-  },
-  "test/progress.test.ts": {
+  "test/server/features/progress.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 6
     },
@@ -602,12 +579,7 @@
       "count": 1
     }
   },
-  "test/pull-status-ui.test.ts": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/pull-status.test.ts": {
+  "test/server/features/pulls/pull-status.test.ts": {
     "@typescript-eslint/no-non-null-asserted-optional-chain": {
       "count": 1
     },
@@ -627,35 +599,7 @@
       "count": 2
     }
   },
-  "test/review-progress.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 3
-    }
-  },
-  "test/review-workspaces.test.ts": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/review.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 2
-    }
-  },
-  "test/routes.test.ts": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/semantic-navigation.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    },
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/server-discussions.test.ts": {
+  "test/server/features/pulls/server-discussions.test.ts": {
     "@typescript-eslint/no-non-null-asserted-optional-chain": {
       "count": 1
     },
@@ -666,17 +610,7 @@
       "count": 1
     }
   },
-  "test/source-navigation-history.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    }
-  },
-  "test/source-repository.test.ts": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/stacks.test.ts": {
+  "test/server/features/pulls/stacks.test.ts": {
     "@typescript-eslint/no-non-null-asserted-optional-chain": {
       "count": 2
     },
@@ -693,20 +627,65 @@
       "count": 1
     }
   },
-  "test/store.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 7
+  "test/server/features/pulls/updates.test.ts": {
+    "@typescript-eslint/require-await": {
+      "count": 2
     },
     "max-lines-per-function": {
       "count": 1
     }
   },
-  "test/submission-state.test.ts": {
+  "test/server/features/review.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 2
+    }
+  },
+  "test/server/http/linus-api.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 3
+    },
+    "@typescript-eslint/no-unsafe-assignment": {
+      "count": 3
+    },
+    "@typescript-eslint/no-unsafe-member-access": {
+      "count": 5
+    },
+    "@typescript-eslint/require-await": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 2
+    }
+  },
+  "test/server/http/organization-api.test.ts": {
+    "@typescript-eslint/no-unsafe-assignment": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "test/shared/domain/submission-state.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 3
     }
   },
-  "test/syntax-context.test.ts": {
+  "test/src/components/pull-status-ui.test.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "test/src/features/linus/linus-review-turns.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 5
+    }
+  },
+  "test/src/features/review/diff/display-context.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 16
+    }
+  },
+  "test/src/features/review/diff/syntax-context.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 10
     },
@@ -714,27 +693,48 @@
       "count": 1
     }
   },
-  "test/themes.test.ts": {
+  "test/src/features/review/discussions/discussions.test.ts": {
     "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
+      "count": 7
     },
-    "@typescript-eslint/require-await": {
-      "count": 1
-    }
-  },
-  "test/tool-status.test.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 3
+    "@typescript-eslint/no-unnecessary-condition": {
+      "count": 7
     },
-    "@typescript-eslint/require-await": {
-      "count": 3
-    }
-  },
-  "test/updates.test.ts": {
-    "@typescript-eslint/require-await": {
-      "count": 2
+    "max-lines": {
+      "count": 1
     },
     "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "test/src/features/review/review-progress.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 3
+    }
+  },
+  "test/src/features/source-navigation/source-navigation-history.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    }
+  },
+  "test/src/lib/persistence-lifecycle.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 3
+    },
+    "@typescript-eslint/require-await": {
+      "count": 1
+    }
+  },
+  "test/src/lib/routes.test.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "test/src/lib/themes.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    },
+    "@typescript-eslint/require-await": {
       "count": 1
     }
   }
