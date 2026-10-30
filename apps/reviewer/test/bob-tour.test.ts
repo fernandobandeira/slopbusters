@@ -40,15 +40,15 @@ describe('Bob portrait emotions', () => {
     const review = { ...session, results: [{ ...required(session.results[0]), advice }] }
     const { result } = renderHook(() => useBobTour(pull, review))
 
-    expect(result.current.emotion).toBe('neutral')
+    expect(result.current.emotion).toBe('angry')
     act(() => {
       result.current.advance(1)
     })
-    expect(result.current.emotion).toBe('angry')
+    expect(result.current.emotion).toBe('neutral')
     act(() => {
       result.current.advance(0)
     })
-    expect(result.current.emotion).toBe('neutral')
+    expect(result.current.emotion).toBe('angry')
   })
 
   it('is happy for a clean review and neutral before a review', () => {

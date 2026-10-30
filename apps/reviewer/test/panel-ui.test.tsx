@@ -111,21 +111,13 @@ describe('the review panel companion', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: 'Changes to make' })).toBeTruthy()
-    expect(screen.getByText('Set aside by the judge · 1')).toBeTruthy()
-    expect(screen.getByText('Set aside: Taste with no rule behind it.')).toBeTruthy()
-    expect(screen.getByText('Not placed in this snapshot · 1')).toBeTruthy()
     expect(
-      screen.getByText('src/gone.ts is not in the snapshot or the reviewed source.'),
+      await screen.findByRole('heading', { name: 'Who may edit archived projects?' }),
     ).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
-
-    expect(screen.getByRole('heading', { name: 'Who may edit archived projects?' })).toBeTruthy()
     expect(screen.getByText('Should fix · Question for the author')).toBeTruthy()
     expect(screen.getByRole('img', { name: 'Raised by Avery, Uncle Bob' })).toBeTruthy()
     expect(screen.queryByText('Block archived projects.')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Add review comment' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save to review draft' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
 
     expect(draft.comments).toEqual([
       expect.objectContaining({
@@ -133,6 +125,16 @@ describe('the review panel companion', () => {
         path: anchorPath(fixturePanelFinding()),
       }),
     ])
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
+
+    expect(screen.getByRole('heading', { name: 'Changes to make' })).toBeTruthy()
+    expect(screen.getByText('Set aside by the judge · 1')).toBeTruthy()
+    expect(screen.getByText('Set aside: Taste with no rule behind it.')).toBeTruthy()
+    expect(screen.getByText('Not placed in this snapshot · 1')).toBeTruthy()
+    expect(
+      screen.getByText('src/gone.ts is not in the snapshot or the reviewed source.'),
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy review' })).toBeTruthy()
   })
 })
 
@@ -164,11 +166,7 @@ describe('a review of commits the PR has moved past', () => {
     )
 
     expect(await screen.findByText('New commits since this review.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
-    expect(screen.getByRole('button', { name: 'Add review comment' })).toHaveProperty(
-      'disabled',
-      true,
-    )
+    expect(screen.getByRole('button', { name: 'Accept' })).toHaveProperty('disabled', true)
     expect(focusLine).not.toHaveBeenCalledWith(expect.anything())
     fireEvent.click(screen.getByRole('button', { name: 'Review the current PR' }))
 
@@ -216,13 +214,10 @@ describe('a finding without a line', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Changes to make' })
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
+    await screen.findByRole('heading', { name: 'Who may edit archived projects?' })
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     expect(screen.getByText('PR description')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Add review comment' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Add to review summary' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save to review draft' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
 
     expect(draft.comments).toEqual([])
     expect(draft.summary).toMatch(

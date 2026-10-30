@@ -47,10 +47,10 @@ interface TourProps {
   context: PanelDraftContext
 }
 
-/** The grounded review: a summary, then one step per finding, each a possible draft comment. */
+/** The grounded review: one step per finding, each a possible draft comment, then the summary. */
 export function PanelTour(props: TourProps) {
   const { result, index, advance, context } = props
-  const finding = result.advice.findings[index - 1]
+  const finding = result.advice.findings[index]
   const stale = !snapshotMatches(context.pull, result.pull)
   const count = result.advice.findings.length + 1
   return (

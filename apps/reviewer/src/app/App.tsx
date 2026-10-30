@@ -1,6 +1,6 @@
 import { AgentSessionCard } from '../features/agent-sessions/AgentSessionCard'
 import { SessionsPage } from '../features/agent-sessions/SessionsPage'
-import type { Repository } from '../../shared/domain/types'
+import type { InboxPull, Repository } from '../../shared/domain/types'
 import { GandalfCompanion } from '../features/gandalf/GandalfCompanion'
 import type { GandalfTask } from '../../shared/domain/gandalf'
 import { pullStatusGroup } from '../features/inbox/inboxStatus'
@@ -17,7 +17,7 @@ import { usePanelReview } from './usePanelReview'
 import { AppSidebar } from './AppSidebar'
 import { InboxPullActions } from './InboxPullActions'
 import { useReviewLaunch } from './useReviewLaunch'
-import type { ReviewCompanion } from '../components/StartReviewButton'
+import { AskLinusButton } from '../features/linus/AskLinusButton'
 import { PullReviewActions } from './PullReviewActions'
 import { IssueRoute, IssuesRoute, LinkedTicketLink } from './IssueRoutes'
 import { useApiQuery } from '../lib/useApiQuery'
@@ -61,6 +61,7 @@ import { useLinusRecommendations } from '../features/linus/useLinusRecommendatio
 import type { LinusReplayRequest } from '../../shared/domain/linus'
 
 const emptyRepositories: Repository[] = []
+const emptyPulls: InboxPull[] = []
 
 export function App() {
   const [titlebarTarget, setTitlebarTarget] = useState<HTMLDivElement | null>(null)
@@ -94,8 +95,7 @@ export function App() {
   const closeGandalf = useCallback(() => {
     setGandalf(undefined)
   }, [])
-  const [linusSelection, setLinusSelection] = useState<{ repository: string; urls: string[] }>()
-  const [panelSelection, setPanelSelection] = useState<{ repository: string; urls: string[] }>()
+  const [selection, setSelection] = useState<{ repository: string; urls: string[] }>()
   const [linusRefresh, setLinusRefresh] = useState(0)
   const [linusReplay, setLinusReplay] = useState<LinusReplayRequest & { repository: string }>()
   const savedLinus = useLinusRecommendations(repository, refresh + linusRefresh)
@@ -127,27 +127,18 @@ export function App() {
     target.searchParams.set('panel', sessionId)
     void navigate(target.pathname + target.search)
   }
-  function askPanel(url: string) {
-    const target = new URL(reviewPath({ url, filter }), window.location.origin)
-    target.searchParams.set('ask', 'panel')
-    void navigate(target.pathname + target.search)
-  }
   const reviewLaunch = useReviewLaunch({
     repository,
     restore: route.kind === 'inbox' || route.kind === 'pull',
-    onAskPanel: askPanel,
     onError: setError,
   })
-  function startReview(companion: ReviewCompanion, url: string) {
-    if (companion === 'linus') {
-      setLinusReplay(undefined)
-      setLinusSelection(undefined)
-    }
-    void reviewLaunch.start(companion, url)
+  async function askLinus(urls: string[]) {
+    setLinusReplay(undefined)
+    if (await reviewLaunch.start(urls)) setSelection(undefined)
   }
   function openGandalf(task: GandalfTask) {
     setGandalf({ repository, task })
-    setLinusSelection(undefined)
+    setSelection(undefined)
     setLinusReplay(undefined)
     reviewLaunch.closeLinus()
   }
@@ -166,8 +157,6 @@ export function App() {
   const refreshLinus = useCallback(() => {
     setLinusRefresh((value) => value + 1)
   }, [])
-  const selectingForLinus =
-    route.kind === 'inbox' && filter === 'mine' && linusSelection?.repository === repository
   const {
     preferences,
     preferencesError,
@@ -230,47 +219,42 @@ export function App() {
     return <AgentSessionCard sessionId={sessionId} repository={repository} />
   }
   const myPulls = inbox ? inboxPulls(inbox, 'mine') : []
-  const selectedLinusUrls =
-    linusSelection?.repository === repository
-      ? linusSelection.urls.filter((url) => myPulls.some((pr) => pr.url === url))
-      : []
   const chips = route.kind === 'inbox' ? readInboxChips(location.search) : []
-  const selectedPanelUrls =
-    panelSelection?.repository === repository
-      ? panelSelection.urls.filter((url) => inbox?.pulls.some((pr) => pr.url === url))
+  const selectedUrls =
+    selection?.repository === repository
+      ? selection.urls.filter((url) => inbox?.pulls.some((pr) => pr.url === url))
       : []
-  const closePanelSelection = () => {
-    setPanelSelection(undefined)
+  const closeSelection = () => {
+    setSelection(undefined)
   }
-  const inboxSelection: PullSelection | undefined = selectingForLinus
-    ? {
-        purpose: 'Linus',
-        urls: selectedLinusUrls,
-        max: 20,
-        onChange: (urls) => {
-          setLinusSelection({ repository, urls })
-        },
-      }
-    : panelSelection?.repository === repository && route.kind === 'inbox'
+  const inboxSelection: PullSelection | undefined =
+    selection?.repository === repository && route.kind === 'inbox'
       ? {
-          purpose: 'the panel',
-          urls: selectedPanelUrls,
+          purpose: 'review',
+          urls: selectedUrls,
           max: MAX_PANEL_BATCH_PULLS,
           onChange: (urls) => {
-            setPanelSelection({ repository, urls })
+            setSelection({ repository, urls })
           },
-          onCancel: closePanelSelection,
+          onCancel: closeSelection,
           actions: (
-            <PanelBatchPicker
-              repository={repository}
-              urls={selectedPanelUrls}
-              provider={preferences?.organization?.provider}
-              onStarted={({ skipped }) => {
-                closePanelSelection()
-                activePanels.reload()
-                setError(skipped.map((item) => item.reason).join(' '))
-              }}
-            />
+            <>
+              <AskLinusButton
+                urls={selectedUrls}
+                busy={reviewLaunch.starting}
+                onStart={(urls) => void askLinus(urls)}
+              />
+              <PanelBatchPicker
+                repository={repository}
+                urls={selectedUrls}
+                provider={preferences?.organization?.provider}
+                onStarted={({ skipped }) => {
+                  closeSelection()
+                  activePanels.reload()
+                  setError(skipped.map((item) => item.reason).join(' '))
+                }}
+              />
+            </>
           ),
         }
       : undefined
@@ -291,8 +275,7 @@ export function App() {
       onChips={(next) => void navigate(inboxPath(repository, filter, next), { replace: true })}
       selection={inboxSelection}
       onSelect={() => {
-        setLinusSelection(undefined)
-        setPanelSelection({ repository, urls: [] })
+        setSelection({ repository, urls: [] })
       }}
       onFilter={(next) => void navigate(inboxPath(repository, next, chips))}
       onResolveConflicts={() => {
@@ -306,15 +289,6 @@ export function App() {
           pull={pr}
           recommendation={recommendations.get(pr.url)}
           bobReview={bobReviews.get(pr.url)}
-          onStartReview={
-            filter === 'mine'
-              ? (companion) => {
-                  startReview(companion, pr.url)
-                }
-              : undefined
-          }
-          reviewStarting={reviewLaunch.starting === pr.url}
-          reviewStartDisabled={Boolean(reviewLaunch.starting)}
           onBobReplay={(review) => {
             openBob(pr.url, review.sessionId)
           }}
@@ -327,7 +301,6 @@ export function App() {
             openPanel(pr.url, active.sessionId)
           }}
           onReplay={(recommendation) => {
-            setLinusSelection(undefined)
             setLinusReplay({ repository, sessionId: recommendation.sessionId, url: pr.url })
           }}
           onStack={() => {
@@ -528,7 +501,6 @@ export function App() {
                             openBob(pull.url, review.sessionId)
                           }}
                           onReplay={(recommendation) => {
-                            setLinusSelection(undefined)
                             setLinusReplay({
                               repository,
                               sessionId: recommendation.sessionId,
@@ -607,43 +579,22 @@ export function App() {
             />
           </Routes>
         </main>
-        {repository &&
-          route.kind !== 'sessions' &&
-          (activeLinusReplay || linusSessionId || selectingForLinus) && (
-            <LinusCompanion
-              renderSessionCard={renderSessionCard}
-              key={`${repository}:${activeLinusReplay ? 'replay' : linusSessionId}`}
-              sessionId={activeLinusReplay ? undefined : linusSessionId}
-              onClose={() => {
-                setLinusReplay(undefined)
-                setLinusSelection(undefined)
-                reviewLaunch.closeLinus()
-              }}
-              repository={repository}
-              pulls={myPulls}
-              available={route.kind === 'inbox' && filter === 'mine'}
-              preferences={preferences}
-              currentPull={pull}
-              replayRequest={activeLinusReplay}
-              onSessionUpdate={refreshLinus}
-              selection={{
-                active: selectingForLinus,
-                urls: selectedLinusUrls,
-                onChoose: () => {
-                  setLinusReplay(undefined)
-                  setPanelSelection(undefined)
-                  setLinusSelection({ repository, urls: [] })
-                  void navigate(inboxPath(repository, 'mine'))
-                },
-                onChange: (urls) => {
-                  setLinusSelection({ repository, urls })
-                },
-                onCancel: () => {
-                  setLinusSelection(undefined)
-                },
-              }}
-            />
-          )}
+        {repository && route.kind !== 'sessions' && (activeLinusReplay || linusSessionId) && (
+          <LinusCompanion
+            renderSessionCard={renderSessionCard}
+            key={`${repository}:${activeLinusReplay ? 'replay' : linusSessionId}`}
+            sessionId={activeLinusReplay ? undefined : linusSessionId}
+            onClose={() => {
+              setLinusReplay(undefined)
+              reviewLaunch.closeLinus()
+            }}
+            repository={repository}
+            pulls={inbox?.pulls ?? emptyPulls}
+            currentPull={pull}
+            replayRequest={activeLinusReplay}
+            onSessionUpdate={refreshLinus}
+          />
+        )}
         {repository && gandalf?.repository === repository && route.kind === 'inbox' && (
           <GandalfCompanion
             renderSessionCard={renderSessionCard}

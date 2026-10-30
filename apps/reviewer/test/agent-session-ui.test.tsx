@@ -250,7 +250,6 @@ it.each(['gandalf', 'bob', 'linus'] as const)(
         <LinusCompanion
           repository={root.repository}
           pulls={[]}
-          available={false}
           sessionId={root.id}
           renderSessionCard={renderSessionCard}
         />

@@ -1,0 +1,4 @@
+.chat-error {
+  color: var(--destructive-foreground);
+  font-size: 12px;
+}

@@ -17,9 +17,6 @@ export function InboxPullActions({
   onActivePanel,
   onStack,
   onStatus,
-  onStartReview,
-  reviewStarting,
-  reviewStartDisabled,
 }: PullReviewActionsProps & {
   pull: InboxPull
   /** The PR's panel that has not finished, shown until its result takes the place. */
@@ -46,9 +43,6 @@ export function InboxPullActions({
         onBobReplay={onBobReplay}
         panelReview={panelReview}
         onPanelReplay={onPanelReplay}
-        onStartReview={onStartReview}
-        reviewStarting={reviewStarting}
-        reviewStartDisabled={reviewStartDisabled}
       />
       {pull.stack && <StackBadge summary={pull.stack} onClick={onStack} />}
       {pull.status ? (

@@ -36,7 +36,7 @@ function portraitEmotion(
 ): Mood {
   if (session?.status === 'running') return 'thinking'
   if (session?.status === 'failed') return 'resigned'
-  if (result?.advice.findings[index - 1]?.severity === 'must-fix') return 'angry'
+  if (result?.advice.findings[index]?.severity === 'must-fix') return 'angry'
   if (result?.advice.verdict === 'clean') return 'happy'
   return 'neutral'
 }

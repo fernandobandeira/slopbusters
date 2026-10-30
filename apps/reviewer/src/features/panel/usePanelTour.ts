@@ -4,7 +4,7 @@ import type { PanelResult, PanelSession } from '../../../shared/domain/panelSess
 import type { Mood } from '../../../shared/domain/teammates'
 import type { PullRequest } from '../../../shared/domain/types'
 
-/** Where the user is in a panel result: the summary at 0, then one step per finding. */
+/** Where the user is in a panel result: one step per finding, then the summary last. */
 export function usePanelTour(pull: PullRequest, session?: PanelSession) {
   const [cursor, setCursor] = useState<{ fingerprint: string; index: number }>()
   const result = session?.results.find((item) => item.pull.url === pull.url)
@@ -21,7 +21,7 @@ export function usePanelTour(pull: PullRequest, session?: PanelSession) {
       /* The tour still works without browser storage. */
     }
   }
-  const finding = result?.advice.findings[index - 1]
+  const finding = result?.advice.findings[index]
   return { result, index, advance, finding, mood: tourMood(session, result, finding) }
 }
 

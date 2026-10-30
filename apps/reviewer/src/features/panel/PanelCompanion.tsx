@@ -119,7 +119,7 @@ function PanelBody({
           onOpen={context.onOpen}
         />
       )}
-      {session && tour.index === 0 && (
+      {session && !tour.finding && (
         <ContinueWith session={session} url={context.pull.url} teammates={teammates} />
       )}
       {session && !blocking(session) && (

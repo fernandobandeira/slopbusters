@@ -27,7 +27,6 @@ import {
   type InboxPull,
   type PullRequest,
 } from '../../../shared/domain/types'
-import type { Preferences } from '../../../shared/domain/preferences'
 import { reviewedPullsLabel } from '../../../shared/domain/reviewSession'
 import { Button } from '~/components/ui/button'
 import { PullDescription } from '../review/PullDescription'
@@ -36,7 +35,6 @@ import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { diffItems } from '../review/diff/diffItems'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { linusReviewTurns } from './linusReviewTurns'
-import { LinusPullSelection, type LinusPullSelectionState } from './LinusPullSelection'
 import { useLinusSession } from './useLinusSession'
 import { call, message } from '../../lib/api'
 import { reviewPath } from '../../lib/routes'
@@ -199,10 +197,7 @@ function ContinueLinus({ sessionId, url }: { sessionId?: string; url?: string })
 export function LinusCompanion({
   repository,
   pulls,
-  available,
-  preferences,
   currentPull,
-  selection,
   replayRequest,
   onSessionUpdate,
   sessionId,
@@ -211,10 +206,7 @@ export function LinusCompanion({
 }: {
   repository: string
   pulls: InboxPull[]
-  available: boolean
-  preferences?: Preferences
   currentPull?: PullRequest
-  selection?: LinusPullSelectionState
   replayRequest?: LinusReplayRequest
   onSessionUpdate?: () => void
   sessionId?: string
@@ -222,9 +214,7 @@ export function LinusCompanion({
   onClose?: () => void
 }) {
   const { session, loading, busy, error, act, reload } = useLinusSession(repository, sessionId)
-  const [open, setOpen] = useState(Boolean(sessionId || replayRequest || selection?.active))
-  const [mode, setMode] = useState<'intro' | 'review'>(sessionId ? 'review' : 'intro')
-  const selecting = selection?.active ?? false
+  const [open, setOpen] = useState(Boolean(sessionId || replayRequest))
   const [cursor, setCursor] = useState<{ sessionId: string; index: number }>()
   const [hiddenEvidenceTurn, setHiddenEvidenceTurn] = useState<string>()
   const { state: clipboardState, copy: copyClipboard, reset: resetClipboard } = useClipboard()
@@ -264,7 +254,7 @@ export function LinusCompanion({
   const evidence = Boolean(turnKey && hiddenEvidenceTurn !== turnKey)
   const activitySessionId = replayRequest?.sessionId ?? session?.id
   const active = session?.status === 'running'
-  const reviewMode = mode === 'review' && !selecting && !replayLoading
+  const reviewMode = !replayLoading
   const emotion =
     active && !turn
       ? 'thinking'
@@ -305,7 +295,6 @@ export function LinusCompanion({
         setHiddenEvidenceTurn(undefined)
         setCopyFallback(false)
         resetClipboard()
-        setMode('review')
         setOpen(true)
       })
       .catch((cause) => {
@@ -325,7 +314,6 @@ export function LinusCompanion({
       if (event.key === 'Escape') {
         setOpen(false)
         setHiddenEvidenceTurn(turnKey)
-        selection?.onCancel()
         onClose?.()
       }
     }
@@ -333,19 +321,13 @@ export function LinusCompanion({
     return () => {
       window.removeEventListener('keydown', escape)
     }
-  }, [open, turnKey, selection, onClose])
+  }, [open, turnKey, onClose])
 
   if (!repository || !open) return null
   function close() {
     setOpen(false)
     setHiddenEvidenceTurn(turnKey)
-    selection?.onCancel()
     onClose?.()
-  }
-  function resume() {
-    setMode('review')
-    setHiddenEvidenceTurn(undefined)
-    setOpen(true)
   }
   function advance(next: number) {
     if (!reviewId) return
@@ -357,13 +339,6 @@ export function LinusCompanion({
     const text = recommendationsPrompt(completed ? [completed] : results)
     setCopyText(text)
     setCopyFallback(!(await copyClipboard(text)))
-  }
-  const canSelect = available && !active && session?.status !== 'partial'
-  function choosePulls() {
-    setHiddenEvidenceTurn(turnKey)
-    setCopyFallback(false)
-    resetClipboard()
-    selection?.onChoose()
   }
   return (
     <>
@@ -384,57 +359,7 @@ export function LinusCompanion({
               <X size={16} />
             </button>
           </header>
-          {!selecting && activitySessionId && renderSessionCard?.(activitySessionId)}
-          {mode === 'intro' && !selecting && !replayLoading && (
-            <>
-              <p className="linus-speech">
-                {active
-                  ? 'I’m still looking. You can carry on while I compile my opinions.'
-                  : session?.results.length
-                    ? 'I’ve got some thoughts on your PRs. Want to walk through them?'
-                    : 'Want me to look over your PRs? Let’s see whether the descriptions earn their keep.'}
-              </p>
-              <div className="linus-actions">
-                {session && (
-                  <Button size="sm" onClick={resume}>
-                    {session.results.length ? 'Resume review' : 'Show review'}
-                  </Button>
-                )}
-                {canSelect && (
-                  <Button
-                    size="sm"
-                    variant={session ? 'outline' : 'default'}
-                    disabled={loading}
-                    onClick={choosePulls}
-                  >
-                    Choose PRs
-                  </Button>
-                )}
-                <Button size="sm" variant="ghost" onClick={close}>
-                  Later
-                </Button>
-              </div>
-            </>
-          )}
-          {selecting && selection && (
-            <LinusPullSelection
-              pulls={pulls}
-              selected={selection.urls}
-              ready={Boolean(preferences?.organization)}
-              busy={busy}
-              onChange={selection.onChange}
-              onCancel={selection.onCancel}
-              onStart={() => {
-                setMode('review')
-                setHiddenEvidenceTurn(turnKey)
-                selection.onCancel()
-                void act(
-                  'start',
-                  selection.urls.filter((url) => pulls.some((pull) => pull.url === url)),
-                )
-              }}
-            />
-          )}
+          {activitySessionId && renderSessionCard?.(activitySessionId)}
           {reviewMode && (
             <>
               {active && !savedResult && (
@@ -559,7 +484,9 @@ export function LinusCompanion({
               {!turn && session?.status === 'complete' && (
                 <p className="linus-speech">The review is complete.</p>
               )}
-              {!turn && !session && !busy && <p className="muted">Choose PRs to start a review.</p>}
+              {!turn && !session && !busy && !loading && (
+                <p className="muted">Select PRs in the list and ask Linus to start a review.</p>
+              )}
               <div className="linus-footer">
                 {turn && results.length > 1 && (
                   <button onClick={() => void copy()}>
@@ -571,7 +498,6 @@ export function LinusCompanion({
                     Cancel review
                   </button>
                 )}
-                {canSelect && <button onClick={choosePulls}>Review other PRs</button>}
               </div>
             </>
           )}

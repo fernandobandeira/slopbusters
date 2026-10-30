@@ -42,7 +42,7 @@ export function BobTour({
   context: BobDraftContext
 }) {
   const { advice } = result
-  const finding = advice.findings[index - 1]
+  const finding = advice.findings[index]
   const stale = !bobSnapshotMatches(context.pull, result.pull)
   return (
     <div className="finding-tour">

@@ -23,7 +23,7 @@ const result: BobResult = {
   fingerprint: 'saved',
   reviewers: [],
 }
-function Tour({ stale = false, index = 1 }: { stale?: boolean; index?: number }) {
+function Tour({ stale = false, index = 0 }: { stale?: boolean; index?: number }) {
   const [draft, setDraft] = useState<ReviewDraft>({
     comments: [],
     summary: 'Existing summary',
@@ -76,7 +76,6 @@ describe('Uncle Bob tour navigation and readability', () => {
         focusLine,
       }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(focusLine).toHaveBeenLastCalledWith(result.advice.findings[0])
     expect(screen.queryByRole('button', { name: 'Show code' })).toBeNull()
@@ -154,18 +153,14 @@ describe('Uncle Bob comment collection during the tour', () => {
     expect(act).toHaveBeenCalledWith('start', [result.pull.url])
     expect(screen.getByRole('img').getAttribute('src')).toBe('/unclebob/neutral.png')
   })
-  it('saves user wording, edits the same comment without duplication and removes it', () => {
+  it('accepts the finding as a comment, edits the same comment without duplication and removes it', () => {
     render(createElement(Tour))
-    fireEvent.click(screen.getByRole('button', { name: 'Add review comment' }))
-    fireEvent.change(screen.getByRole('textbox'), {
-      target: { value: 'Use our existing audit helper, please.' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save to review draft' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
     expect(screen.getByRole('status').textContent).toContain('saved')
     expect(screen.getByRole('button', { name: 'Review draft · 1 comment' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Edit draft comment' }))
-    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe(
-      'Use our existing audit helper, please.',
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toContain(
+      required(result.advice.findings[0]).title,
     )
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'My revised comment' } })
@@ -173,7 +168,7 @@ describe('Uncle Bob comment collection during the tour', () => {
     expect(screen.getByRole('button', { name: 'Review draft · 1 comment' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Remove comment' }))
     expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Add review comment' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
   })
   it('copies the finding and the whole review as Markdown, even when the review is stale', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
@@ -190,7 +185,7 @@ describe('Uncle Bob comment collection during the tour', () => {
     expect(copied).toContain(finding.suggestion)
 
     cleanup()
-    render(createElement(Tour, { index: 0 }))
+    render(createElement(Tour, { index: 1 }))
     fireEvent.click(screen.getByRole('button', { name: 'Copy review' }))
 
     await waitFor(() => screen.getByRole('button', { name: 'Copied' }))
@@ -200,9 +195,7 @@ describe('Uncle Bob comment collection during the tour', () => {
   it('blocks annotations when the current PR base differs from the saved review', () => {
     render(createElement(Tour, { stale: true }))
 
-    expect(
-      screen.getByRole<HTMLButtonElement>('button', { name: 'Add review comment' }).disabled,
-    ).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Accept' }).disabled).toBe(true)
     expect(screen.getByText(/changed after Uncle Bob/)).toBeTruthy()
   })
 })

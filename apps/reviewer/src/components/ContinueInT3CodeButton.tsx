@@ -4,7 +4,7 @@ import * as routes from '../../shared/api/chat'
 import type { ContinueChatRequest } from '../../shared/domain/chat'
 import { call } from '../lib/api'
 import { chatDetail, chatPlace, useChatStart } from '../lib/useChatStart'
-import './startReview.css'
+import './chatError.css'
 
 /**
  * Carries a finished review on as a T3 Code thread whose first message is that review, in the

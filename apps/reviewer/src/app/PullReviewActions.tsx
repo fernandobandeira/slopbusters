@@ -1,4 +1,3 @@
-import { StartReviewButton, type ReviewCompanion } from '../components/StartReviewButton'
 import { LinusRecommendationBadge } from '../features/linus/LinusRecommendationBadge'
 import { BobReviewBadge } from '../features/bob/BobReviewBadge'
 import type { BobReviewSummary } from '../../shared/domain/bob'
@@ -16,9 +15,6 @@ export interface PullReviewActionsProps {
   /** The latest panel result; the PR page shows it with the panel picker instead. */
   panelReview?: PanelReviewSummary
   onPanelReplay?: (review: PanelReviewSummary) => void
-  onStartReview?: (companion: ReviewCompanion) => void
-  reviewStarting?: boolean
-  reviewStartDisabled?: boolean
 }
 
 export function PullReviewActions({
@@ -29,9 +25,6 @@ export function PullReviewActions({
   onBobReplay,
   panelReview,
   onPanelReplay,
-  onStartReview,
-  reviewStarting,
-  reviewStartDisabled,
 }: PullReviewActionsProps) {
   return (
     <>
@@ -60,14 +53,6 @@ export function PullReviewActions({
           onOpen={() => {
             onReplay(recommendation)
           }}
-        />
-      )}
-      {onStartReview && (
-        <StartReviewButton
-          number={pull.number}
-          busy={reviewStarting}
-          disabled={reviewStartDisabled}
-          onStart={onStartReview}
         />
       )}
     </>

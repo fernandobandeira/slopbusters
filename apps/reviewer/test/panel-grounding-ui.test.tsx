@@ -137,7 +137,15 @@ describe('a grounded panel result', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: 'Changes to make' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Reuse the audit helper' })).toBeTruthy()
+    expect(
+      screen.getByText('Worth fixing · Both models agree · Caused by this change'),
+    ).toBeTruthy()
+    expect(screen.getByText('Call writeAudit instead of the inline insert.')).toBeTruthy()
+    expect(screen.getByText('src/audit.ts:4')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
+
+    expect(screen.getByRole('heading', { name: 'Changes to make' })).toBeTruthy()
     expect(screen.getByText('3 returned · 2 grounded · 1 deferred · 2 agreed')).toBeTruthy()
     expect(screen.getByText('Worth fixing 1 · Not true 1')).toBeTruthy()
     expect(screen.getByText('Rejected by both models · 1')).toBeTruthy()
@@ -146,14 +154,6 @@ describe('a grounded panel result', () => {
     ).toBeTruthy()
     expect(screen.getByText('Deferred to a later round · 1')).toBeTruthy()
     expect(screen.getByText('Rename the guard')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
-
-    expect(screen.getByRole('heading', { name: 'Reuse the audit helper' })).toBeTruthy()
-    expect(
-      screen.getByText('Worth fixing · Both models agree · Caused by this change'),
-    ).toBeTruthy()
-    expect(screen.getByText('Call writeAudit instead of the inline insert.')).toBeTruthy()
-    expect(screen.getByText('src/audit.ts:4')).toBeTruthy()
   })
 })
 
@@ -180,10 +180,7 @@ describe('a problem that was there before this PR', () => {
       </MemoryRouter>,
     )
 
-    expect(
-      await screen.findByText('Worth fixing 1 · Not true 1 · 1 already there, follow-up'),
-    ).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Choose fixes' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose fixes' }))
 
     expect(screen.getByText('Already there · follow-ups · 1')).toBeTruthy()
     expect(screen.queryByText(/^Worth fixing · \d/)).toBeNull()

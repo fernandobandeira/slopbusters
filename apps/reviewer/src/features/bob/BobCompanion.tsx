@@ -23,7 +23,7 @@ export function BobCompanion(
   const job = useBobSession(`${pull.owner}/${pull.repo}`, pull.url, context.replaySessionId)
   const tour = useBobTour(pull, job.session)
   const [open, setOpen] = useState(Boolean(context.replaySessionId))
-  const finding = tour.result?.advice.findings[tour.index - 1]
+  const finding = tour.result?.advice.findings[tour.index]
   const current = tour.result && bobSnapshotMatches(pull, tour.result.pull)
   const focusLine = useEffectEvent(context.focusLine)
   const onSessionUpdate = useEffectEvent(() => context.onSessionUpdate?.())

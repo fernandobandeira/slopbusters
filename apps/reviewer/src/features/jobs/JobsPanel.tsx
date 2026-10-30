@@ -19,7 +19,7 @@ import { useJobsSession } from './useJobsSession'
 import { ReviewerFace } from '../../components/ReviewerFace'
 import { personaFaceSrc } from '../../lib/reviewerFaces'
 import '../../linus.css'
-import '../../components/startReview.css'
+import '../../components/chatError.css'
 import './jobs.css'
 
 type Tab = 'questions' | 'findings' | 'proposal'

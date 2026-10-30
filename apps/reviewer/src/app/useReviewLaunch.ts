@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import * as routes from '../../shared/api'
 import { blocksNewReview, reviewedPullsLabel } from '../../shared/domain/reviewSession'
-import type { ReviewCompanion } from '../components/StartReviewButton'
 import { call, message } from '../lib/api'
 import { useApiQuery } from '../lib/useApiQuery'
 
@@ -12,47 +11,43 @@ interface LaunchedSession {
 }
 
 /**
- * Starts Linus and keeps the review that blocks a new one reachable: a running or partial Linus
- * review reopens after a reload, and a refused start opens the review in the way. The review
- * panel never starts from here: it opens the PR with its picker, so the user confirms who runs.
+ * Starts Linus on the picked PRs and keeps the review that blocks a new one reachable: a running
+ * or partial Linus review reopens after a reload, and a refused start opens the review in the way.
  */
 export function useReviewLaunch({
   repository,
   restore,
-  onAskPanel,
   onError,
 }: {
   repository: string
   restore: boolean
-  onAskPanel: (url: string) => void
   onError: (error: string) => void
 }) {
   const pending = useRef(false)
-  const [starting, setStarting] = useState<string>()
+  const [starting, setStarting] = useState(false)
   const [launched, setLaunched] = useState<{ repository: string; id: string }>()
   const restored = useRestoredLinus(repository, restore)
 
-  async function start(companion: ReviewCompanion, url: string) {
-    if (companion === 'panel') {
-      onAskPanel(url)
-      return
-    }
-    if (pending.current) return
+  /** Whether Linus started; a refused start opens the review in the way instead. */
+  async function start(urls: string[]): Promise<boolean> {
+    if (pending.current || !urls.length) return false
     pending.current = true
-    setStarting(url)
+    setStarting(true)
     onError('')
     try {
-      const session = await call(routes.startLinus, { body: { repository, urls: [url] } })
+      const session = await call(routes.startLinus, { body: { repository, urls } })
       setLaunched({ repository, id: session.id })
+      return true
     } catch (cause) {
       const blocking = await blockingLinus(repository)
       if (blocking) {
         setLaunched({ repository, id: blocking.id })
         onError(blockedMessage(blocking))
       } else onError(message(cause))
+      return false
     } finally {
       pending.current = false
-      setStarting(undefined)
+      setStarting(false)
     }
   }
   return {

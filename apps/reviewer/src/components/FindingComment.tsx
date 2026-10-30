@@ -17,7 +17,10 @@ interface FindingCommentProps {
   actions?: ReactNode
 }
 
-/** Turns a reviewer's finding into an editable comment in the user's review draft. */
+/**
+ * Turns a reviewer's finding into a comment in the user's review draft: accepting saves the
+ * finding as written in one click, and the saved comment can still be edited or removed.
+ */
 export function FindingComment({
   commentId,
   comments,
@@ -73,14 +76,14 @@ export function FindingSummaryEntry({
 
 const commentLabels = {
   saved: 'Comment saved in your review draft',
-  add: 'Add review comment',
+  add: 'Accept',
   edit: 'Edit draft comment',
   remove: 'Remove comment',
   form: 'Review comment',
 }
 const summaryLabels = {
   saved: 'Saved in your review summary',
-  add: 'Add to review summary',
+  add: 'Accept',
   edit: 'Edit in review summary',
   remove: 'Remove from summary',
   form: 'Review summary',
@@ -119,9 +122,22 @@ function FindingDraftEntry({
             {labels.saved}
           </p>
         )}
-        <Button size="sm" variant="outline" disabled={disabled} onClick={edit}>
-          {saved === undefined ? labels.add : labels.edit}
-        </Button>
+        {saved === undefined ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={disabled}
+            onClick={() => {
+              onSave(initialBody)
+            }}
+          >
+            {labels.add}
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" disabled={disabled} onClick={edit}>
+            {labels.edit}
+          </Button>
+        )}
         {saved !== undefined && (
           <Button size="sm" variant="ghost" disabled={disabled} onClick={onRemove}>
             {labels.remove}

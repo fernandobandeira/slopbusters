@@ -106,9 +106,11 @@ function openPage(path = `/repos/${repository}/pulls?inbox=mine`) {
     ),
   )
 }
-async function choose(companion: 'Linus') {
-  fireEvent.click(screen.getByRole('button', { name: `Start review of PR #${pull.number}` }))
-  fireEvent.click(await screen.findByRole('menuitem', { name: new RegExp(companion) }))
+/** Pick the PR in the list and ask Linus about it. */
+async function askLinus() {
+  fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: `Select PR #${pull.number} for review` }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Ask Linus about 1 PR' }))
 }
 
 beforeEach(() => {
@@ -145,7 +147,7 @@ describe('A Linus review that blocks a new one', () => {
     openPage()
     expect(screen.queryByRole('complementary', { name: 'Linus PR companion' })).toBeNull()
 
-    await choose('Linus')
+    await askLinus()
 
     const companion = await screen.findByRole('complementary', { name: 'Linus PR companion' })
     expect(await screen.findByRole('button', { name: 'Retry both' })).toBeTruthy()
@@ -197,7 +199,7 @@ describe('A Linus review that blocks a new one', () => {
     )
     openPage()
 
-    await choose('Linus')
+    await askLinus()
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain(

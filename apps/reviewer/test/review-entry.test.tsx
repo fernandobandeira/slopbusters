@@ -129,9 +129,11 @@ afterEach(() => {
 function openPage(path = `/repos/${repository}/pulls?inbox=mine`) {
   return render(createElement(MemoryRouter, { initialEntries: [path] }, createElement(App)))
 }
-async function choose(companion: 'Review panel' | 'Linus') {
-  fireEvent.click(screen.getByRole('button', { name: `Start review of PR #${pull.number}` }))
-  fireEvent.click(await screen.findByRole('menuitem', { name: new RegExp(companion) }))
+/** Pick the PR in the list and ask Linus about it. */
+async function askLinus() {
+  fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: `Select PR #${pull.number} for review` }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Ask Linus about 1 PR' }))
 }
 
 describe('Review entry points', () => {
@@ -139,12 +141,13 @@ describe('Review entry points', () => {
     openPage(`/repos/${repository}/pulls?inbox=${filter}`)
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
     expect(call).not.toHaveBeenCalled()
-    expect(Boolean(screen.queryByRole('button', { name: /Start review/ }))).toBe(filter === 'mine')
+    expect(screen.queryByRole('button', { name: /Start review/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Select' })).toBeTruthy()
   })
 
-  it('starts Linus on the selected PR from My PRs', async () => {
+  it('starts Linus on the selected PRs and closes the selection', async () => {
     openPage()
-    await choose('Linus')
+    await askLinus()
     await waitFor(() => {
       expect(call).toHaveBeenCalledWith(routes.startLinus, {
         body: { repository, urls: [pull.url] },
@@ -152,17 +155,22 @@ describe('Review entry points', () => {
     })
     expect(await screen.findByRole('complementary', { name: 'Linus PR companion' })).toBeTruthy()
     expect(useLinusSession).toHaveBeenCalledWith(repository, 'new-review')
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected PRs' })).toBeNull()
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Close Linus' }))
     await waitFor(() => {
       expect(screen.queryByRole('complementary', { name: 'Linus PR companion' })).toBeNull()
     })
   })
 
-  it('opens the PR with the panel picker instead of starting a panel review', async () => {
+  it('offers the review panel beside Linus on the same selection', () => {
     openPage()
-    await choose('Review panel')
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: `Select PR #${pull.number} for review` }))
 
-    expect(await screen.findByText(`Who should review PR #${String(pull.number)}?`)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ask the review panel about 1 PR' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ask Linus about 1 PR' })).toBeTruthy()
     expect(call).not.toHaveBeenCalledWith(routes.startPanel, expect.anything())
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
   })
@@ -180,14 +188,14 @@ describe('Review entry points', () => {
     expect(call).not.toHaveBeenCalledWith(routes.startBob, expect.anything())
   })
 
-  it('reports a failed start without opening a companion and allows retry', async () => {
+  it('reports a failed start without opening a companion and keeps the selection for a retry', async () => {
     vi.mocked(call).mockRejectedValueOnce(new Error('Choose a primary model first.'))
     openPage()
-    await choose('Linus')
+    await askLinus()
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByText('Choose a primary model first.')).toBeTruthy()
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
-    await choose('Linus')
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask Linus about 1 PR' }))
     expect(await screen.findByRole('button', { name: 'Close Linus' })).toBeTruthy()
   })
 })
