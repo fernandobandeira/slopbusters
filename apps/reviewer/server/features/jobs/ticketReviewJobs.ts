@@ -10,21 +10,18 @@ import {
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import type { Ticket } from '../../../shared/domain/tickets'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
-import type { ReviewerStore } from '../../adapters/store'
-import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { publicError, UserError } from '../../errors'
-import type { AgentSessions } from '../agent-sessions/agentSessions'
+import type { JobDependencies } from '../jobDependencies'
 import { savedModels } from '../models'
 import { FlowJobs } from '../flows/flowJobs'
 import { failedSeats, reviewSeats } from '../flows/panel'
 import type { TicketService } from '../tickets/tickets'
 import { foldAnswers, loadJobsSkill, reconcileTicket, reviewTicket } from './ticketReview'
 
-export interface TicketReviewOptions {
-  store: ReviewerStore
-  turns: StructuredTurns
-  sessions?: AgentSessions
-  staticDirectory: string
+export interface TicketReviewOptions extends Pick<
+  JobDependencies,
+  'store' | 'turns' | 'sessions' | 'staticDirectory'
+> {
   skillDirectory?: string
   tickets: Pick<TicketService, 'get' | 'update'>
   evidence: (ticket: Ticket, signal: AbortSignal) => Promise<string>

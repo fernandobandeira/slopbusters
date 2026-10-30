@@ -1,4 +1,3 @@
-import type { AgentSessions } from '../agent-sessions/agentSessions'
 import {
   panelProceeds,
   type LinusAdvice,
@@ -9,14 +8,10 @@ import {
 import type { PanelSession } from '../../../shared/domain/panelSession'
 import type { PanelSeatRequest } from '../../../shared/domain/panel'
 import { savedModels } from '../models'
-import type { PullRequest } from '../../../shared/domain/types'
 import { fetchPull } from '../pulls/github'
-import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
-import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { publicError, UserError } from '../../errors'
 import { loadLinusSkill, reconcileWithLinus, reviewWithLinus } from './linusReview'
-import { DualReviewJobs } from '../dualReviewJobs'
-import type { ReviewerStore } from '../../adapters/store'
+import { DualReviewJobs, type DualReviewDependencies } from '../dualReviewJobs'
 
 /** The panel Linus hands a PR on to; only what starting one needs. */
 export interface LinusPanels {
@@ -35,17 +30,7 @@ export interface LinusStartOptions {
 
 export class LinusJobs extends DualReviewJobs<LinusAdvice, LinusSession> {
   private readonly panels?: LinusPanels
-  constructor(options: {
-    store: ReviewerStore
-    turns: StructuredTurns
-    sessions?: AgentSessions
-    staticDirectory: string
-    skillDirectory?: string
-    openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
-    loadPull?: typeof fetchPull
-    context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
-    panels?: LinusPanels
-  }) {
+  constructor(options: DualReviewDependencies & { panels?: LinusPanels }) {
     const { store, turns, staticDirectory, skillDirectory, loadPull = fetchPull } = options
     super({
       name: 'Linus',

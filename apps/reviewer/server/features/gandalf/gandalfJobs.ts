@@ -2,14 +2,12 @@ import { randomUUID } from 'node:crypto'
 import type { GandalfSession, GandalfTask } from '../../../shared/domain/gandalf'
 import { savedModels } from '../models'
 import type { PullRequest } from '../../../shared/domain/types'
-import type { ReviewerStore } from '../../adapters/store'
-import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import type { ConflictWorkspace } from '../../adapters/conflictWorkspace'
 import type { CiFailure } from '../../adapters/ciFailures'
 import { CommandTimeoutError } from '../../adapters/process'
 import { UserError, publicError } from '../../errors'
 import { GANDALF_NETWORK_RETRY_DELAYS_MS, MAX_GANDALF_TURNS } from './limits'
-import type { AgentSessions } from '../agent-sessions/agentSessions'
+import type { JobDependencies } from '../jobDependencies'
 import { debate, unanimousApproval, type DebateMove } from '../flows/debate'
 import { FlowJobs } from '../flows/flowJobs'
 import { approvesTurn, resolveWithGandalf } from './gandalfResolution'
@@ -23,11 +21,7 @@ import {
   unchangedResult,
 } from './gandalfResults'
 
-interface Options {
-  store: ReviewerStore
-  turns: StructuredTurns
-  sessions?: AgentSessions
-  loadPull: (url: string) => Promise<PullRequest>
+interface Options extends Pick<JobDependencies, 'store' | 'turns' | 'sessions' | 'loadPull'> {
   openWorkspace: (
     pull: PullRequest,
     signal: AbortSignal,

@@ -15,6 +15,14 @@ import type { ReviewCheckout } from '../adapters/reviewWorkspaces'
 import { pullFingerprint } from '../reviewSnapshot'
 import { FlowJobs } from './flows/flowJobs'
 import { failedSeats, reviewSeats } from './flows/panel'
+import type { JobDependencies } from './jobDependencies'
+
+/** What a dual review takes to start; PRs load from GitHub unless `loadPull` says otherwise. */
+export type DualReviewDependencies = Pick<
+  JobDependencies,
+  'store' | 'turns' | 'sessions' | 'staticDirectory' | 'openRepository' | 'context'
+> &
+  Partial<Pick<JobDependencies, 'loadPull'>> & { skillDirectory?: string }
 
 interface ReviewStrategy<
   Advice extends { limitations: string[] },

@@ -5,6 +5,7 @@ import type { ReviewerStore } from '../adapters/store'
 import type { StructuredTurns } from '../adapters/t3Engine/engineTurns'
 import { organizePull } from './organization/organize'
 import { savedModels } from './models'
+import type { JobDependencies } from './jobDependencies'
 import { JOB_RETENTION_MS } from '../limits'
 import { UserError, publicError } from '../errors'
 
@@ -20,11 +21,14 @@ export class OrganizationJobs {
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
   private readonly pending = new Set<Promise<void>>()
   private stopped = false
-  constructor(
-    private readonly store: ReviewerStore,
-    private readonly turns: StructuredTurns,
-    private readonly sessions?: AgentSessions,
-  ) {}
+  private readonly store: ReviewerStore
+  private readonly turns: StructuredTurns
+  private readonly sessions?: AgentSessions
+  constructor({ store, turns, sessions }: Pick<JobDependencies, 'store' | 'turns' | 'sessions'>) {
+    this.store = store
+    this.turns = turns
+    this.sessions = sessions
+  }
 
   start(pullId: string, force: boolean) {
     if (this.stopped) throw new UserError('The reviewer is shutting down.', 503)

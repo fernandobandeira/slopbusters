@@ -10,23 +10,17 @@ import {
 import type { PullRequest } from '../../../shared/domain/types'
 import type { GitIdentity } from '../../adapters/gitIdentity'
 import { LayerBuildError, type SplitWorkspace } from '../../adapters/splitWorkspace'
-import type { ReviewerStore } from '../../adapters/store'
-import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
 import { MAX_SPLIT_TURNS } from './limits'
-import type { AgentSessions } from '../agent-sessions/agentSessions'
+import type { JobDependencies } from '../jobDependencies'
 import { debate, unanimousApproval, type DebateMove } from '../flows/debate'
 import { FlowJobs } from '../flows/flowJobs'
 import { savedModels } from '../models'
 import type { SplitPulls } from './splitPulls'
 import { cutWithLinus } from './splitTurns'
 
-interface Options {
-  store: ReviewerStore
-  turns: StructuredTurns
-  sessions?: AgentSessions
+interface Options extends Pick<JobDependencies, 'store' | 'turns' | 'sessions' | 'loadPull'> {
   skill: () => Promise<string>
-  loadPull: (url: string) => Promise<PullRequest>
   openWorkspace: (pull: PullRequest, signal: AbortSignal) => Promise<SplitWorkspace>
   identity: (signal: AbortSignal) => Promise<GitIdentity>
   pulls: SplitPulls

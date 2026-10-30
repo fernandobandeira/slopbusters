@@ -1,26 +1,14 @@
 import { loadCiFailures } from '../../adapters/ciFailures'
 import { openConflictWorkspace } from '../../adapters/conflictWorkspace'
-import type { GitHub } from '../../adapters/github'
-import type { GitIdentity } from '../../adapters/gitIdentity'
-import type { ReviewerStore } from '../../adapters/store'
-import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
-import type { PullRequest } from '../../../shared/domain/types'
-import type { AgentSessions } from '../agent-sessions/agentSessions'
+import type { BranchDependencies, JobDependencies } from '../jobDependencies'
 import { GandalfJobs } from './gandalfJobs'
 import { createGandalfPlanner } from './gandalfPlan'
 
 /** Gandalf on the real GitHub, with the app's data directory and Git identity. */
-export function createGandalfJobs(options: {
-  store: ReviewerStore
-  turns: StructuredTurns
-  sessions: AgentSessions
-  github: GitHub
-  identity: (signal: AbortSignal) => Promise<GitIdentity>
-  dataDirectory: string
-  loadPull: (url: string) => Promise<PullRequest>
-  getStack: Parameters<typeof createGandalfPlanner>[0]
-  remoteUrl?: (repository: string) => string
-}): GandalfJobs {
+export function createGandalfJobs(
+  options: Pick<JobDependencies, 'store' | 'turns' | 'sessions' | 'loadPull'> &
+    BranchDependencies & { getStack: Parameters<typeof createGandalfPlanner>[0] },
+): GandalfJobs {
   const { github } = options
   return new GandalfJobs({
     store: options.store,

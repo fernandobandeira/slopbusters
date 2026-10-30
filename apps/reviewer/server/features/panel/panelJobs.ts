@@ -19,7 +19,7 @@ import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
 import { PANEL_PULL_CONCURRENCY, PANEL_REVIEWER_CONCURRENCY } from './limits'
-import type { AgentSessions } from '../agent-sessions/agentSessions'
+import type { JobDependencies } from '../jobDependencies'
 import { FlowJobs } from '../flows/flowJobs'
 import { failedSeats, reviewSeats } from '../flows/panel'
 import { queuedNotice, Slots } from '../flows/slots'
@@ -29,7 +29,10 @@ import { layersOf, openSource, preparePanelRound } from './panelPreparation'
 import { groundPanel } from './groundingDebate'
 import { reviewAsPanelist } from './panelReview'
 
-interface Options {
+interface Options extends Pick<
+  JobDependencies,
+  'sessions' | 'loadPull' | 'openRepository' | 'context'
+> {
   store: PanelSessionStore
   turns: StructuredTurns
   members: PanelMembers
@@ -37,17 +40,12 @@ interface Options {
   models: () => ModelPair
   /** The stronger models that ground the seats' findings; no companion when only one provider runs. */
   judges: () => Pick<ModelPair, 'primary'> & Partial<Pick<ModelPair, 'companion'>>
-  loadPull: (url: string) => Promise<PullRequest>
   /** The PR as a local round's fix commits leave it. */
   loadLocal?: (local: LocalRound) => Promise<PullRequest>
   /** What reviewers already said on a PR, which every seat reads. */
   history?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewHistory>
   /** The PR's stack, so seats see its other open layers. */
   stack?: (url: string) => Promise<PullStackResult>
-  sessions?: AgentSessions
-  openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
-  /** Evidence about what the PR is meant to do, such as its linked ticket. */
-  context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
   /** How many panels review at the same time; the rest wait their turn. */
   concurrency?: number
 }

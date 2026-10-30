@@ -29,6 +29,7 @@ import { savedModels } from './features/models'
 import { createGandalfJobs } from './features/gandalf/createGandalfJobs'
 import { createGitIdentity } from './adapters/gitIdentity'
 import { createSplitJobs } from './features/split/createSplitJobs'
+import type { BranchDependencies, JobDependencies } from './features/jobDependencies'
 import { logError, UserError } from './errors'
 import { REVIEW_CHECKOUT_PRUNE_INTERVAL_MS, REVIEW_CHECKOUT_RETENTION_MS } from './limits'
 import { fetchDiscussions, fetchReviewBodies } from './features/pulls/discussions'
@@ -116,67 +117,25 @@ export function createServices(options: ReviewerServerOptions) {
   })
   const linear = options.linear ?? createLinear({ authorization: linearAuth })
   const tickets = createTicketService(linear, github)
-  const linusJobs = new LinusJobs({
+  const dependencies: JobDependencies = {
     store,
     turns,
     sessions: agentSessions,
     staticDirectory: options.staticDirectory,
-    skillDirectory: options.linusSkillDirectory,
+    loadPull: pulls.fetchPull,
     openRepository,
-    loadPull: pulls.fetchPull,
     context: tickets.contextForPull,
-    // The panel is composed below; Linus only starts one once a review has run.
-    panels: {
-      start: (repository, urls, reviewers) => panelJobs.start(repository, urls, reviewers),
-    },
-  })
-  const bobJobs = new BobJobs({
-    store,
-    turns,
-    sessions: agentSessions,
-    staticDirectory: options.staticDirectory,
-    skillDirectory: options.bobSkillDirectory,
-    openRepository,
-    loadPull: pulls.fetchPull,
-    context: tickets.contextForPull,
-  })
-  const jobs = new TicketReviewJobs({
-    store,
-    turns,
-    sessions: agentSessions,
-    staticDirectory: options.staticDirectory,
-    skillDirectory: options.jobsSkillDirectory,
-    tickets,
-    evidence: (ticket, signal) => ticketEvidence(github, ticket, signal),
-    openSource: async (name, signal) =>
-      openRepository(await defaultBranchSnapshot(github, name, signal), signal),
-  })
-  const remoteUrl = sourceRemote(options.sourceRemoteUrl)
-  const gitIdentity = createGitIdentity(github)
-  const gandalfJobs = createGandalfJobs({
-    store,
-    turns,
-    sessions: agentSessions,
+  }
+  const branches: BranchDependencies = {
     github,
-    identity: gitIdentity,
+    identity: createGitIdentity(github),
     dataDirectory: options.dataDirectory,
-    loadPull: pulls.fetchPull,
-    getStack: stacks.getStackMetadata,
-    remoteUrl,
-  })
-  const splitJobs = createSplitJobs({
-    store,
-    turns: new RetryingTurns(turns),
-    sessions: agentSessions,
-    github,
-    identity: gitIdentity,
-    staticDirectory: options.staticDirectory,
-    skillDirectory: options.linusSkillDirectory,
-    dataDirectory: options.dataDirectory,
-    loadPull: pulls.fetchPull,
-    remoteUrl,
-  })
-  const organizationJobs = new OrganizationJobs(store, turns, agentSessions)
+    remoteUrl: sourceRemote(options.sourceRemoteUrl),
+  }
+  // A batch of panels or splits outlasts an engine restart or a busy provider; retry those turns.
+  const retryingTurns = new RetryingTurns(turns)
+  const models = () => savedModels(store.getPreferences())
+  const judges = () => savedModels(store.getPreferences(), 'judge')
   const teammates = new Teammates(
     new TeammateStore(options.dataDirectory),
     new InstalledSkills(options.skillRoots ?? defaultSkillRoots()),
@@ -186,15 +145,13 @@ export function createServices(options: ReviewerServerOptions) {
     builtIn: (reviewer) => loadBuiltInSkill(reviewer, options),
   })
   const loadLocal = localSnapshotLoader(repository, pulls.fetchPull)
+  const panel = { ...dependencies, store: store.panel, judges }
+  // Built before Linus, who sends a reviewed PR on to the panel.
   const panelJobs = new PanelJobs({
-    store: store.panel,
-    // A batch of panels outlasts an engine restart or a busy provider; retry those turns first.
-    turns: new RetryingTurns(turns),
-    sessions: agentSessions,
+    ...panel,
+    turns: retryingTurns,
     members: panelMembers,
-    models: () => savedModels(store.getPreferences()),
-    judges: () => savedModels(store.getPreferences(), 'judge'),
-    loadPull: pulls.fetchPull,
+    models,
     loadLocal,
     stack: (url) => stacks.getStackMetadata(url),
     history: async (pull) => {
@@ -204,36 +161,40 @@ export function createServices(options: ReviewerServerOptions) {
       ])
       return { threads: discussions.threads, reviews }
     },
-    openRepository,
-    context: tickets.contextForPull,
   })
-  const panelGates = new PanelGates({
-    store: store.panel,
-    turns,
-    judges: () => savedModels(store.getPreferences(), 'judge'),
-    sessions: agentSessions,
-    openRepository,
+  const linusJobs = new LinusJobs({
+    ...dependencies,
+    skillDirectory: options.linusSkillDirectory,
+    panels: panelJobs,
   })
-  const panelRoutes = new PanelRoutes({
-    store: store.panel,
-    turns,
-    jobs: panelJobs,
-    judges: () => savedModels(store.getPreferences(), 'judge'),
-    sessions: agentSessions,
+  const bobJobs = new BobJobs({ ...dependencies, skillDirectory: options.bobSkillDirectory })
+  const jobs = new TicketReviewJobs({
+    ...dependencies,
+    skillDirectory: options.jobsSkillDirectory,
+    tickets,
+    evidence: (ticket, signal) => ticketEvidence(github, ticket, signal),
+    openSource: async (name, signal) =>
+      openRepository(await defaultBranchSnapshot(github, name, signal), signal),
   })
-  const fixChecks = new FixChecks({
-    store: store.panel,
-    turns,
-    checker: () => savedModels(store.getPreferences()).companion,
-    loadLocal,
-    openRepository,
-    sessions: agentSessions,
+  const gandalfJobs = createGandalfJobs({
+    ...dependencies,
+    ...branches,
+    getStack: stacks.getStackMetadata,
   })
-  const chatModel = () => savedModels(store.getPreferences()).primary
+  const splitJobs = createSplitJobs({
+    ...dependencies,
+    ...branches,
+    turns: retryingTurns,
+    skillDirectory: options.linusSkillDirectory,
+  })
+  const organizationJobs = new OrganizationJobs(dependencies)
+  const panelGates = new PanelGates(panel)
+  const panelRoutes = new PanelRoutes({ ...panel, jobs: panelJobs })
+  const fixChecks = new FixChecks({ ...panel, checker: () => models().companion, loadLocal })
+  const chatModel = () => models().primary
   const panelFixes = new PanelFixes({
-    store: store.panel,
+    ...panel,
     hosts: chatHosts,
-    loadPull: pulls.fetchPull,
     model: chatModel,
     jobs: panelJobs,
     prepareWorktree: (checkout, pull, sha) =>
@@ -241,7 +202,6 @@ export function createServices(options: ReviewerServerOptions) {
         root: join(options.dataDirectory, 'fix-worktrees'),
         remoteUrl: options.sourceRemoteUrl,
       }),
-    sessions: agentSessions,
   })
   const removeWorkspace = async (identity: { owner: string; repo: string; sha: string }) => {
     await typeScriptNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
@@ -316,14 +276,9 @@ export function createServices(options: ReviewerServerOptions) {
     async close() {
       await organizationJobs.close()
       linearAuth.close()
-      await Promise.all([
-        linusJobs.close(),
-        bobJobs.close(),
-        gandalfJobs.close(),
-        splitJobs.close(),
-        jobs.close(),
-        panelJobs.close(),
-      ])
+      await Promise.all(
+        [linusJobs, bobJobs, gandalfJobs, splitJobs, jobs, panelJobs].map((job) => job.close()),
+      )
       await pruning.stop()
       await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])
       navigator.close()
