@@ -83,6 +83,8 @@ const statusSchema = z.object({
   baseRefOid: z.string(),
   state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
   isDraft: z.boolean(),
+  additions: z.number().optional(),
+  deletions: z.number().optional(),
   mergeStateStatus: z.string(),
   mergeable: z.enum(['MERGEABLE', 'CONFLICTING', 'UNKNOWN']),
   reviewDecision: z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED']).nullable(),
@@ -134,7 +136,7 @@ const protectionFields =
   'requiredApprovingReviewCount requiresApprovingReviews requiresCodeOwnerReviews requiredStatusCheckContexts'
 function fields(number?: number): string {
   const required = number == null ? '' : `required:isRequired(pullRequestNumber:${number})`
-  return `number headRefOid baseRefOid state isDraft mergeStateStatus mergeable reviewDecision
+  return `number headRefOid baseRefOid state isDraft additions deletions mergeStateStatus mergeable reviewDecision
     stack { baseRefName }
     baseRef { name branchProtectionRule { ${protectionFields} } ${refRulesFields} }
     commits(last:1) { nodes { commit { statusCheckRollup { state contexts(first:100) {
@@ -277,6 +279,8 @@ export function normalizePullStatus(value: unknown, defaultBranch: unknown = nul
     baseSha: pull.baseRefOid,
     state: pull.state.toLowerCase() as PullStatus['state'],
     isDraft: pull.isDraft,
+    additions: pull.additions,
+    deletions: pull.deletions,
     mergeState: pull.mergeStateStatus,
     mergeable: pull.mergeable,
     reviewDecision: pull.reviewDecision,
@@ -355,7 +359,7 @@ export function createPullStatusService(github: GitHub = createGitHub()) {
     const [owner, name] = repository.split('/')
     const query = `query($owner:String!,$name:String!,$endCursor:String) { repository(owner:$owner,name:$name) {
     pullRequests(first:50,states:OPEN,after:$endCursor,orderBy:{field:UPDATED_AT,direction:DESC}) { pageInfo {hasNextPage endCursor} nodes {
-      number headRefOid baseRefOid state isDraft mergeStateStatus mergeable reviewDecision stack{baseRefName} baseRef{name}
+      number headRefOid baseRefOid state isDraft additions deletions mergeStateStatus mergeable reviewDecision stack{baseRefName} baseRef{name}
       commits(last:1){nodes{commit{statusCheckRollup{state}}}}
     } }
   } }`

@@ -18,6 +18,8 @@ export function graphPull(number = 1) {
     baseRefOid: 'base',
     state: 'OPEN',
     isDraft: false,
+    additions: 12,
+    deletions: 3,
     mergeStateStatus: 'CLEAN',
     mergeable: 'MERGEABLE',
     reviewDecision: 'APPROVED',

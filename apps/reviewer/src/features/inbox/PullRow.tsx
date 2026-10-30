@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { ArrowUpRight, GitPullRequest, GitPullRequestDraft } from 'lucide-react'
 import { Badge } from '~/components/ui/badge'
 import type { InboxPull } from '../../../shared/domain/types'
+import type { PullStatus } from '../../../shared/domain/pullStatus'
 import { reviewPath } from '../../lib/routes'
 import type { InboxFilter } from './inbox'
 
@@ -53,6 +54,7 @@ export function PullRow({ pull: pr, filter, selection, actions }: Props) {
           <span className="muted">
             #{pr.number} opened by {pr.author} · updated{' '}
             {new Date(pr.updatedAt).toLocaleDateString()}
+            <DiffStat status={pr.status} />
           </span>
         </div>
         {pr.reviewRequested && <Badge variant="info">Your review requested</Badge>}
@@ -69,5 +71,20 @@ export function PullRow({ pull: pr, filter, selection, actions }: Props) {
         <ArrowUpRight size={16} aria-hidden="true" />
       </a>
     </div>
+  )
+}
+
+/** Changed line counts arrive with the PR's status, so the row shows them once status loads. */
+function DiffStat({ status }: { status?: PullStatus }) {
+  if (status?.additions == null || status.deletions == null) return null
+  return (
+    <span
+      className="pr-diff-stat"
+      aria-label={`${status.additions} additions, ${status.deletions} deletions`}
+    >
+      {' · '}
+      <span className="green">+{status.additions.toLocaleString()}</span>{' '}
+      <span className="red">−{status.deletions.toLocaleString()}</span>
+    </span>
   )
 }

@@ -24,6 +24,8 @@ export const pullStatusSchema = z.object({
   baseSha: z.string(),
   state: z.enum(['open', 'closed', 'merged']),
   isDraft: z.boolean(),
+  additions: z.number().optional(),
+  deletions: z.number().optional(),
   readiness: z.enum(['ready', 'not-ready', 'checking', 'unknown', 'merged', 'closed']),
   reasons: z.array(z.string()),
   mergeState: z.string(),

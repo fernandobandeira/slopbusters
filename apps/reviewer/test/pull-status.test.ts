@@ -60,6 +60,14 @@ describe('GitHub merge readiness', () => {
     pending.commits.nodes[0]!.commit.statusCheckRollup.state = 'FAILURE'
     expect(normalizePullStatus(pending).readiness).toBe('not-ready')
   })
+  it('carries the changed line counts GitHub reports', () => {
+    expect(normalizePullStatus(graphPull())).toMatchObject({ additions: 12, deletions: 3 })
+    const { additions: _a, deletions: _d, ...unsized } = graphPull()
+    expect(normalizePullStatus(unsized)).toMatchObject({
+      additions: undefined,
+      deletions: undefined,
+    })
+  })
   it('does not report ready when known required reviews have no confirmed review decision', () => {
     expect(normalizePullStatus({ ...graphPull(), reviewDecision: null })).toMatchObject({
       readiness: 'not-ready',

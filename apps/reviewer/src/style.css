@@ -484,6 +484,10 @@ pre {
 .pr-row .muted {
   font-size: 11px;
 }
+.pr-diff-stat {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
 .empty-state {
   display: flex;
   flex-direction: column;

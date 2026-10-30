@@ -31,6 +31,9 @@ export interface PullStatus {
   baseSha: string
   state: 'open' | 'closed' | 'merged'
   isDraft: boolean
+  /** Changed line counts, when the status source reports them. */
+  additions?: number
+  deletions?: number
   readiness: 'ready' | 'not-ready' | 'checking' | 'unknown' | 'merged' | 'closed'
   reasons: string[]
   mergeState: string

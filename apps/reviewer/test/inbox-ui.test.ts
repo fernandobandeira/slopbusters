@@ -165,4 +165,18 @@ describe('the PR list', () => {
     view.rerender(createElement(Inbox, { pulls: [pull(1)] }))
     expect(screen.queryByRole('status')).toBeNull()
   })
+
+  it('shows the added and removed line counts once status carries them', () => {
+    const sized = pull(1, { additions: 1234, deletions: 56 })
+    const unsized = { ...pull(2), status: undefined }
+    const view = render(createElement(Inbox, { pulls: [sized, unsized] }))
+
+    const stat = screen.getByLabelText('1234 additions, 56 deletions')
+    expect(stat.textContent).toContain('+1,234')
+    expect(stat.textContent).toContain('−56')
+    expect(screen.getAllByLabelText(/additions, \d+ deletions/)).toHaveLength(1)
+
+    view.rerender(createElement(Inbox, { pulls: [sized, pull(2, { additions: 0, deletions: 0 })] }))
+    expect(screen.getByLabelText('0 additions, 0 deletions').textContent).toContain('+0')
+  })
 })
