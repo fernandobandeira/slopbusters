@@ -39,10 +39,10 @@ export class LinusJobs extends DualReviewJobs<LinusAdvice, LinusSession> {
       models: () => savedModels(store.getPreferences()),
       skill: () => loadLinusSkill(staticDirectory, skillDirectory),
       save: (session) => {
-        store.saveLinusSession(session)
+        store.linus.save(session)
       },
-      get: (id) => store.getLinusSession(id),
-      latest: (repository) => store.latestLinusSession(repository),
+      get: (id) => store.linus.get(id),
+      latest: (repository) => store.linus.latest(repository),
       loadPull,
       openRepository: options.openRepository,
       context: options.context,

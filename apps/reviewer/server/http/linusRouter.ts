@@ -11,7 +11,7 @@ export function linusRouter({ linusJobs, store }: Services) {
     session: linusJobs.latest(query.repository) ?? null,
   }))
   handle(router, routes.linusRecommendations, ({ query }) => ({
-    recommendations: store.linusRecommendations(query.repository),
+    recommendations: store.linus.recommendations(query.repository),
   }))
   handle(router, routes.startLinus, ({ body }, _request, response) => {
     for (const url of body.urls) {

@@ -92,12 +92,12 @@ export class SplitJobs {
     return session
   }
   get(id: string): SplitSession {
-    const session = this.jobs.session(id) ?? this.options.store.getSplitSession(id)
+    const session = this.jobs.session(id) ?? this.options.store.split.get(id)
     if (!session) throw new UserError('This split is no longer available.', 404)
     return this.jobs.recover(session, 'Split interrupted when the app stopped. Retry it.')
   }
   latest(repository: string, url?: string): SplitSession | undefined {
-    const session = this.options.store.latestSplitSession(repository, url)
+    const session = this.options.store.split.latest(repository, url)
     return (
       session && this.jobs.recover(session, 'Split interrupted when the app stopped. Retry it.')
     )
@@ -327,7 +327,7 @@ export class SplitJobs {
     this.save(session)
   }
   private save(session: SplitSession) {
-    this.options.store.saveSplitSession(session)
+    this.options.store.split.save(session)
     this.options.sessions?.sync('split', { ...session, urls: [session.url] })
   }
   private progress(session: SplitSession, progress: string) {

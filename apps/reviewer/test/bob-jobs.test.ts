@@ -141,12 +141,12 @@ describe('Bob settings and saved reviews', () => {
       expect(jobs.get(session.id).status).toBe('complete')
     })
     const saved = jobs.get(session.id)
-    store.saveBobSession({ ...saved, id: 'interrupted', status: 'running', results: [] })
+    store.bob.save({ ...saved, id: 'interrupted', status: 'running', results: [] })
     expect(jobs.get('interrupted').status).toBe('cancelled')
     const reopened = new ReviewerStore({ dataDirectory: directory })
     try {
-      expect(reopened.getBobSession(session.id)).toEqual(saved)
-      expect(reopened.latestBobSession(repository, fixturePull().url)?.id).toBe('interrupted')
+      expect(reopened.bob.get(session.id)).toEqual(saved)
+      expect(reopened.bob.latest(repository, fixturePull().url)?.id).toBe('interrupted')
     } finally {
       reopened.close()
     }

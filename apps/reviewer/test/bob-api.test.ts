@@ -127,7 +127,7 @@ describe('Bob API contracts and persistent tours', () => {
 function saveFailedRetry(directory: string, completed: BobSession) {
   const store = new ReviewerStore({ dataDirectory: directory })
   try {
-    store.saveBobSession({
+    store.bob.save({
       ...completed,
       id: 'later-failed',
       createdAt: '2099-01-01T00:00:00Z',

@@ -84,12 +84,12 @@ export class GandalfJobs {
     return session
   }
   get(id: string): GandalfSession {
-    const session = this.options.store.getGandalfSession(id)
+    const session = this.options.store.gandalf.get(id)
     if (!session) throw new UserError('This Gandalf session is no longer available.', 404)
     return session
   }
   latest(repository: string): GandalfSession | undefined {
-    const session = this.options.store.latestGandalfSession(repository)
+    const session = this.options.store.gandalf.latest(repository)
     return session
   }
   retry(id: string): GandalfSession {
@@ -131,7 +131,7 @@ export class GandalfJobs {
     this.suspended = false
     await this.jobs.settleAborted()
     if (!this.isAwake()) return
-    for (const session of this.options.store.pendingGandalfSessions()) {
+    for (const session of this.options.store.gandalf.pending()) {
       if (this.busy(session.repository)) continue
       this.progress(session, 'Resuming resolution. Rechecking the current stack…')
       this.launch(session)
@@ -388,7 +388,7 @@ export class GandalfJobs {
       : await execute()
   }
   private save(session: GandalfSession) {
-    this.options.store.saveGandalfSession(session)
+    this.options.store.gandalf.save(session)
     this.options.sessions?.sync('gandalf', session)
   }
   private progress(session: GandalfSession, progress: string) {

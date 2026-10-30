@@ -42,7 +42,7 @@ async function serverWith(chatHosts: ChatHosts, organization?: Provider) {
   directories.push(directory)
   const store = new ReviewerStore({ dataDirectory: directory })
   const pull = fixturePull()
-  store.saveBobSession({
+  store.bob.save({
     id: 'bob-1',
     repository: 'review-room/example',
     urls: [pull.url],

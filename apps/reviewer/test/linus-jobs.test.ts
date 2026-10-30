@@ -238,7 +238,7 @@ describe('dual Linus review sessions', () => {
     expect(reconcileWithLinus).not.toHaveBeenCalled()
   })
   it('recovers an interrupted saved session without claiming a review is still running', () => {
-    store.saveLinusSession({
+    store.linus.save({
       id: 'interrupted',
       repository,
       urls: [fixturePull().url],
@@ -250,7 +250,7 @@ describe('dual Linus review sessions', () => {
       createdAt: new Date().toISOString(),
     })
     expect(jobs.latest(repository)?.status).toBe('cancelled')
-    expect(store.getLinusSession('interrupted')?.status).toBe('cancelled')
+    expect(store.linus.get('interrupted')?.status).toBe('cancelled')
   })
 })
 
@@ -295,7 +295,7 @@ describe('the panel that follows Linus', () => {
 
     expect(start).toHaveBeenCalledWith(repository, [fixturePull().url], reviewers)
     expect(done.results[0]).toMatchObject({ panelSessionId: 'panel-1' })
-    expect(store.linusRecommendations(repository)[0]).toMatchObject({ panel: 'started' })
+    expect(store.linus.recommendations(repository)[0]).toMatchObject({ panel: 'started' })
   })
 
   it('holds a PR Linus would split until the author sends it on anyway', async () => {
@@ -305,14 +305,14 @@ describe('the panel that follows Linus', () => {
     const done = await completed(session)
     expect(start).not.toHaveBeenCalled()
     expect(done.results[0]?.panelSessionId).toBeUndefined()
-    expect(store.linusRecommendations(repository)[0]).toMatchObject({ panel: 'waiting' })
+    expect(store.linus.recommendations(repository)[0]).toMatchObject({ panel: 'waiting' })
 
     const sent = await jobs.startPanel(session.id, fixturePull().url)
 
     expect(start).toHaveBeenCalledWith(repository, [fixturePull().url], reviewers)
     expect(sent.results[0]?.panelSessionId).toBe('panel-1')
-    expect(store.getLinusSession(session.id)?.results[0]?.panelSessionId).toBe('panel-1')
-    expect(store.linusRecommendations(repository)[0]).toMatchObject({ panel: 'started' })
+    expect(store.linus.get(session.id)?.results[0]?.panelSessionId).toBe('panel-1')
+    expect(store.linus.recommendations(repository)[0]).toMatchObject({ panel: 'started' })
   })
 
   it('keeps a panel that would not start as the result’s error, for the author to retry', async () => {
@@ -327,7 +327,7 @@ describe('the panel that follows Linus', () => {
     expect(done.results[0]).toMatchObject({
       panelError: 'Finish or cancel the current panel review first.',
     })
-    expect(store.linusRecommendations(repository)[0]).toMatchObject({ panel: 'waiting' })
+    expect(store.linus.recommendations(repository)[0]).toMatchObject({ panel: 'waiting' })
     await expect(jobs.startPanel(session.id, fixturePull().url)).resolves.toMatchObject({
       results: [expect.objectContaining({ panelSessionId: 'panel-1' })],
     })

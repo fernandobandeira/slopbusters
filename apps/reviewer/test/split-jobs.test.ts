@@ -176,7 +176,7 @@ describe('splitting a PR into a stack', () => {
     expect(done).toMatchObject({ verified: true, published: true, linusSessionId: 'linus-1' })
     expect(done.progress).toContain('Split PR #')
     expect(close).toHaveBeenCalledOnce()
-    expect(store.getSplitSession(session.id)?.status).toBe('complete')
+    expect(store.split.get(session.id)?.status).toBe('complete')
   })
 })
 
@@ -242,7 +242,7 @@ describe('a split that cannot run', () => {
     const done = await finished(session.id, 'failed')
     expect(done.error).toBe('Only an open PR can be split.')
 
-    store.saveSplitSession({ ...done, id: 'interrupted', status: 'running' })
+    store.split.save({ ...done, id: 'interrupted', status: 'running' })
     expect(jobs.get('interrupted').status).toBe('cancelled')
   })
 

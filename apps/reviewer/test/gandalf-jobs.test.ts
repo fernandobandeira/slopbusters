@@ -234,7 +234,7 @@ describe('Gandalf session lifecycle', () => {
   it('recovers interrupted sessions and preserves completed results across restarts', async () => {
     const session = jobs.start('review-room/example', [fixturePull().url])
     await completed(session.id)
-    store.saveGandalfSession({
+    store.gandalf.save({
       ...jobs.get(session.id),
       status: 'running',
       id: 'interrupted',
@@ -311,7 +311,7 @@ describe('Gandalf automatic recovery', () => {
       expect(resolve).toHaveBeenCalledTimes(1)
     })
     await jobs.close()
-    expect(store.getGandalfSession(session.id)?.status).toBe('running')
+    expect(store.gandalf.get(session.id)?.status).toBe('running')
     store.close()
     store = new ReviewerStore({ dataDirectory: directory })
     jobs = new GandalfJobs({ store, turns, loadPull, openWorkspace, resolve })
@@ -330,7 +330,7 @@ describe('Gandalf recovery intent', () => {
     await completed(complete.id)
     await jobs.suspend()
     // This running record simulates work saved before sleep.
-    store.saveGandalfSession({
+    store.gandalf.save({
       ...failed,
       id: 'cancelled',
       repository: 'review-room/cancelled',
@@ -338,14 +338,14 @@ describe('Gandalf recovery intent', () => {
     })
     jobs.cancel('cancelled')
     await jobs.resume()
-    expect(store.pendingGandalfSessions()).toEqual([])
+    expect(store.gandalf.pending()).toEqual([])
     expect(resolve).toHaveBeenCalledTimes(4)
     expect(jobs.get('cancelled').status).toBe('cancelled')
   })
   it('does not revive an older interrupted session superseded by a newer session', async () => {
     const session = jobs.start('review-room/example', [fixturePull().url])
     await completed(session.id)
-    store.saveGandalfSession({
+    store.gandalf.save({
       ...session,
       id: 'older-interrupted',
       createdAt: '2000-01-01',
@@ -353,7 +353,7 @@ describe('Gandalf recovery intent', () => {
     })
     await jobs.resume()
     expect(publish).toHaveBeenCalledTimes(1)
-    expect(store.pendingGandalfSessions()).toEqual([])
+    expect(store.gandalf.pending()).toEqual([])
   })
 })
 

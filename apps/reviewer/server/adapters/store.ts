@@ -18,14 +18,13 @@ import {
 } from './reviewProgressStore'
 import type { PullRequest, ReviewDraft } from '../../shared/domain/types'
 import { withFixedModels, type Preferences } from '../../shared/domain/preferences'
-import { gandalfSessionSchema, type GandalfSession } from '../../shared/domain/gandalf'
-import { splitSessionSchema, type SplitSession } from '../../shared/domain/split'
-import type { BobSession } from '../../shared/domain/bob'
-import { readSavedBobReviews } from './savedBobReviews'
 import { migrateTicketStore, TicketStore } from './ticketStore'
 import { EngineCredentialStore } from './t3Engine/engineCredentials'
 import { migratePanelSessions, PanelSessionStore } from './panelSessionStore'
-import type { LinusRecommendation, LinusSession } from '../../shared/domain/linus'
+import { LinusSessionStore, migrateLinusSessions } from './linusSessionStore'
+import { BobSessionStore, migrateBobSessions } from './bobSessionStore'
+import { GandalfSessionStore, migrateGandalfSessions } from './gandalfSessionStore'
+import { migrateSplitSessions, SplitSessionStore } from './splitSessionStore'
 
 export class ReviewNotFoundError extends UserError {
   constructor() {
@@ -44,6 +43,10 @@ export class ReviewerStore {
   readonly tickets: TicketStore
   readonly engine: EngineCredentialStore
   readonly panel: PanelSessionStore
+  readonly linus: LinusSessionStore
+  readonly bob: BobSessionStore
+  readonly gandalf: GandalfSessionStore
+  readonly split: SplitSessionStore
   constructor({ dataDirectory }: { dataDirectory: string }) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 })
     const filename = join(dataDirectory, 'reviewer.sqlite')
@@ -74,27 +77,21 @@ export class ReviewerStore {
         CREATE TABLE draft_writers (snapshot_id TEXT NOT NULL REFERENCES snapshots(id), writer_id TEXT NOT NULL, sequence INTEGER NOT NULL, PRIMARY KEY(snapshot_id, writer_id));
         PRAGMA user_version = 2; COMMIT;`)
     }
-    if (version === 0 || version === 1 || version === 2) {
-      this.database.exec(`BEGIN IMMEDIATE;
-        CREATE TABLE linus_sessions (id TEXT PRIMARY KEY, repository TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL);
-        PRAGMA user_version = 3; COMMIT;`)
-    }
-    if (version < 4) {
-      this.database.exec(`BEGIN IMMEDIATE;
-        CREATE TABLE IF NOT EXISTS bob_sessions (id TEXT PRIMARY KEY, repository TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL);
-        PRAGMA user_version = 4; COMMIT;`)
-    }
-    if (version < 5)
-      this.database.exec(`BEGIN IMMEDIATE;
-      CREATE TABLE IF NOT EXISTS gandalf_sessions (
-        id TEXT PRIMARY KEY, repository TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL
-      ); PRAGMA user_version = 5; COMMIT;`)
+    // Each step sets the next version; their order is the schema's history and must not change.
+    if (version < 3) migrateLinusSessions(this.database)
+    if (version < 4) migrateBobSessions(this.database)
+    if (version < 5) migrateGandalfSessions(this.database)
     if (version < 6) migrateReviewProgress(this.database)
     if (version < 7) migrateTicketStore(this.database)
-    migrateAgentSessions(this.database, version)
+    if (version < 8) migratePanelSessions(this.database)
+    if (version < 9) migrateSplitSessions(this.database)
     this.tickets = new TicketStore(this.database)
     this.engine = new EngineCredentialStore(this.database)
     this.panel = new PanelSessionStore(this.database)
+    this.linus = new LinusSessionStore(this.database)
+    this.bob = new BobSessionStore(this.database)
+    this.gandalf = new GandalfSessionStore(this.database)
+    this.split = new SplitSessionStore(this.database)
   }
   savePull(pull: PullRequest): void {
     this.database
@@ -202,154 +199,6 @@ export class ReviewerStore {
     const row = this.database.prepare('SELECT value FROM preferences WHERE id = 1').get()
     return row ? withFixedModels(JSON.parse(String(row.value)) as Preferences) : {}
   }
-  saveLinusSession(session: LinusSession): void {
-    this.database
-      .prepare(
-        `INSERT INTO linus_sessions (id, repository, created_at, session) VALUES (?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET session = excluded.session`,
-      )
-      .run(session.id, session.repository, session.createdAt, JSON.stringify(session))
-  }
-  getLinusSession(id: string): LinusSession | undefined {
-    const row = this.database.prepare('SELECT session FROM linus_sessions WHERE id = ?').get(id)
-    return row ? (JSON.parse(String(row.session)) as LinusSession) : undefined
-  }
-  latestLinusSession(repository: string): LinusSession | undefined {
-    const row = this.database
-      .prepare(
-        'SELECT session FROM linus_sessions WHERE repository = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
-      )
-      .get(repository)
-    return row ? (JSON.parse(String(row.session)) as LinusSession) : undefined
-  }
-  linusRecommendations(repository: string): LinusRecommendation[] {
-    const rows = this.database
-      .prepare(
-        `
-      SELECT sessions.id AS session_id, sessions.created_at,
-        json_extract(result.value, '$.pull.url') AS url,
-        json_extract(result.value, '$.pull.number') AS number,
-        json_extract(result.value, '$.pull.headSha') AS head_sha,
-        json_extract(result.value, '$.advice.verdict') AS verdict,
-        json_array_length(result.value, '$.advice.steps') AS recommendation_count,
-        json_type(sessions.session, '$.thenPanel') IS NOT NULL AS then_panel,
-        json_extract(result.value, '$.panelSessionId') AS panel_session_id
-      FROM linus_sessions AS sessions, json_each(sessions.session, '$.results') AS result
-      WHERE sessions.repository = ?
-      ORDER BY sessions.created_at DESC, sessions.rowid DESC
-    `,
-      )
-      .all(repository)
-    const latest = new Map<string, LinusRecommendation>()
-    for (const row of rows) {
-      const url = String(row.url)
-      if (!latest.has(url))
-        latest.set(url, {
-          sessionId: String(row.session_id),
-          createdAt: String(row.created_at),
-          url,
-          number: Number(row.number),
-          headSha: String(row.head_sha),
-          verdict: String(row.verdict) as LinusRecommendation['verdict'],
-          recommendationCount: Number(row.recommendation_count),
-          ...(row.then_panel ? { panel: row.panel_session_id ? 'started' : 'waiting' } : {}),
-        })
-    }
-    return [...latest.values()]
-  }
-  saveBobSession(session: BobSession): void {
-    this.database
-      .prepare(
-        `INSERT INTO bob_sessions (id, repository, created_at, session) VALUES (?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET session = excluded.session`,
-      )
-      .run(session.id, session.repository, session.createdAt, JSON.stringify(session))
-  }
-  bobReviews(repository: string) {
-    return readSavedBobReviews(this.database, repository)
-  }
-  getBobSession(id: string): BobSession | undefined {
-    const row = this.database.prepare('SELECT session FROM bob_sessions WHERE id = ?').get(id)
-    return row ? (JSON.parse(String(row.session)) as BobSession) : undefined
-  }
-  latestBobSession(repository: string, url?: string): BobSession | undefined {
-    const row = url
-      ? this.database
-          .prepare(
-            `SELECT session FROM bob_sessions
-          WHERE repository = ? AND EXISTS (SELECT 1 FROM json_each(session, '$.urls') WHERE value = ?)
-          ORDER BY created_at DESC, rowid DESC LIMIT 1`,
-          )
-          .get(repository, url)
-      : this.database
-          .prepare(
-            'SELECT session FROM bob_sessions WHERE repository = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
-          )
-          .get(repository)
-    return row ? (JSON.parse(String(row.session)) as BobSession) : undefined
-  }
-  saveGandalfSession(session: GandalfSession): void {
-    this.database
-      .prepare(
-        `INSERT INTO gandalf_sessions (id, repository, created_at, session)
-      VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET session = excluded.session`,
-      )
-      .run(session.id, session.repository, session.createdAt, JSON.stringify(session))
-  }
-  getGandalfSession(id: string): GandalfSession | undefined {
-    const row = this.database.prepare('SELECT session FROM gandalf_sessions WHERE id = ?').get(id)
-    return row ? gandalfSessionSchema.parse(JSON.parse(String(row.session))) : undefined
-  }
-  latestGandalfSession(repository: string): GandalfSession | undefined {
-    const row = this.database
-      .prepare(
-        `SELECT session FROM gandalf_sessions WHERE repository = ?
-      ORDER BY created_at DESC, rowid DESC LIMIT 1`,
-      )
-      .get(repository)
-    return row ? gandalfSessionSchema.parse(JSON.parse(String(row.session))) : undefined
-  }
-  saveSplitSession(session: SplitSession): void {
-    this.database
-      .prepare(
-        `INSERT INTO split_sessions (id, repository, url, created_at, session)
-      VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET session = excluded.session`,
-      )
-      .run(session.id, session.repository, session.url, session.createdAt, JSON.stringify(session))
-  }
-  getSplitSession(id: string): SplitSession | undefined {
-    const row = this.database.prepare('SELECT session FROM split_sessions WHERE id = ?').get(id)
-    return row ? splitSessionSchema.parse(JSON.parse(String(row.session))) : undefined
-  }
-  /** The newest split in the repository, or of one PR. */
-  latestSplitSession(repository: string, url?: string): SplitSession | undefined {
-    const row = url
-      ? this.database
-          .prepare(
-            `SELECT session FROM split_sessions WHERE repository = ? AND url = ?
-          ORDER BY created_at DESC, rowid DESC LIMIT 1`,
-          )
-          .get(repository, url)
-      : this.database
-          .prepare(
-            `SELECT session FROM split_sessions WHERE repository = ?
-          ORDER BY created_at DESC, rowid DESC LIMIT 1`,
-          )
-          .get(repository)
-    return row ? splitSessionSchema.parse(JSON.parse(String(row.session))) : undefined
-  }
-  pendingGandalfSessions(): GandalfSession[] {
-    return this.database
-      .prepare(
-        `SELECT session FROM (
-          SELECT session, ROW_NUMBER() OVER (
-            PARTITION BY repository ORDER BY created_at DESC, rowid DESC
-          ) AS position FROM gandalf_sessions
-        ) WHERE position = 1 AND json_extract(session, '$.status') = 'running'`,
-      )
-      .all()
-      .map((row) => gandalfSessionSchema.parse(JSON.parse(String(row.session))))
-  }
   savePreferences(preferences: Preferences): Preferences {
     const value = { ...this.getPreferences(), ...preferences }
     this.database
@@ -381,14 +230,4 @@ export class ReviewerStore {
       }
     }
   }
-}
-
-/** Panel sessions at version 8, then Linus's splits of one PR into a stack at version 9. */
-function migrateAgentSessions(database: DatabaseSync, version: number) {
-  if (version < 8) migratePanelSessions(database)
-  if (version < 9)
-    database.exec(`BEGIN IMMEDIATE;
-    CREATE TABLE IF NOT EXISTS split_sessions (
-      id TEXT PRIMARY KEY, repository TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL
-    ); PRAGMA user_version = 9; COMMIT;`)
 }

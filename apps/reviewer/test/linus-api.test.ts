@@ -96,8 +96,8 @@ describe('Linus review API and persistence', () => {
       })),
     }
     const store = new ReviewerStore({ dataDirectory: path })
-    store.saveLinusSession(old)
-    store.saveLinusSession({
+    store.linus.save(old)
+    store.linus.save({
       ...old,
       id: 'new-review',
       createdAt: '2026-01-02T00:00:00Z',
@@ -110,13 +110,13 @@ describe('Linus review API and persistence', () => {
         },
       ],
     })
-    store.saveLinusSession({
+    store.linus.save({
       ...old,
       id: 'unfinished-review',
       createdAt: '2026-01-03T00:00:00Z',
       results: [],
     })
-    store.saveLinusSession({
+    store.linus.save({
       ...old,
       id: 'other-repository',
       repository: 'someone/else',
@@ -257,7 +257,7 @@ describe('Linus review API and persistence', () => {
     try {
       expect(store.getPreferences().organization).toEqual(primary)
       expect(store.getPull(fixturePull().id).description).toBe(fixturePull().description)
-      expect(store.latestLinusSession('review-room/example')).toBeUndefined()
+      expect(store.linus.latest('review-room/example')).toBeUndefined()
     } finally {
       store.close()
     }

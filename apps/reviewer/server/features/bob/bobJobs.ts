@@ -21,10 +21,10 @@ export class BobJobs extends DualReviewJobs<BobAdvice> {
       models: () => savedModels(store.getPreferences()),
       skill: () => loadBobSkill(staticDirectory, skillDirectory),
       save: (session) => {
-        store.saveBobSession(session)
+        store.bob.save(session)
       },
-      get: (id) => store.getBobSession(id),
-      latest: (repository) => store.latestBobSession(repository),
+      get: (id) => store.bob.get(id),
+      latest: (repository) => store.bob.latest(repository),
       loadPull,
       openRepository,
       context: options.context,
