@@ -142,17 +142,22 @@ describe('an engine that stops on its own', () => {
       .fn()
       .mockReturnValueOnce(first.child)
       .mockReturnValueOnce(fakeChild(52).child)
-    let pid = 51
+    const notRunning = new UserError('T3 Code is not running.')
+    // Each start first looks for a leftover and finds none, then waits for its own engine.
     const locate = vi
       .fn()
-      .mockRejectedValueOnce(new UserError('T3 Code is not running.'))
-      .mockImplementation(() => Promise.resolve(engineAt(pid)))
+      .mockRejectedValueOnce(notRunning)
+      .mockResolvedValueOnce(engineAt(51))
+      .mockRejectedValueOnce(notRunning)
+      .mockResolvedValueOnce(engineAt(52))
+    const stopLeftover = vi.fn(() => Promise.resolve())
     const onUnexpectedExit = vi.fn()
     const bundled = new BundledEngine({
       executable,
       home,
       locate,
       spawnEngine,
+      stopLeftover,
       onUnexpectedExit,
       freePort: () => Promise.resolve(1),
     })
@@ -161,13 +166,13 @@ describe('an engine that stops on its own', () => {
     first.child.stderr?.emit('data', Buffer.from('fatal: out of memory'))
     Object.assign(first.child, { signalCode: 'SIGKILL' })
     first.child.emit('exit', null, 'SIGKILL')
-    pid = 52
     const replaced = await bundled.ensureRunning()
 
     expect(onUnexpectedExit).toHaveBeenCalledWith(
       expect.stringMatching(/exit code null, signal SIGKILL\nfatal: out of memory/),
     )
     expect(replaced.pid).toBe(52)
+    expect(stopLeftover).not.toHaveBeenCalled()
     await bundled.close()
     expect(onUnexpectedExit).toHaveBeenCalledOnce()
   })
