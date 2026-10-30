@@ -10,12 +10,113 @@
       "path": "packages/contracts/package.json"
     },
     {
-      "path": "packages/contracts/src",
-      "directory": true,
-      "exclude": [
-        ".test.ts"
-      ]
+      "path": "packages/contracts/src/acpRegistry.ts"
+    },
+    {
+      "path": "packages/contracts/src/auth.ts"
+    },
+    {
+      "path": "packages/contracts/src/baseSchemas.ts"
+    },
+    {
+      "path": "packages/contracts/src/browserProfile.ts"
+    },
+    {
+      "path": "packages/contracts/src/chatAttachment.ts"
+    },
+    {
+      "path": "packages/contracts/src/checkpointDiff.ts"
+    },
+    {
+      "path": "packages/contracts/src/composerContext.ts"
+    },
+    {
+      "path": "packages/contracts/src/device.ts"
+    },
+    {
+      "path": "packages/contracts/src/editor.ts"
+    },
+    {
+      "path": "packages/contracts/src/environment.ts"
+    },
+    {
+      "path": "packages/contracts/src/git.ts"
+    },
+    {
+      "path": "packages/contracts/src/keybindings.ts"
+    },
+    {
+      "path": "packages/contracts/src/model.ts"
+    },
+    {
+      "path": "packages/contracts/src/modelSelection.ts"
+    },
+    {
+      "path": "packages/contracts/src/orchestrationDispatch.ts"
+    },
+    {
+      "path": "packages/contracts/src/orchestrationProject.ts"
+    },
+    {
+      "path": "packages/contracts/src/orchestrationV2.ts"
+    },
+    {
+      "path": "packages/contracts/src/preview.ts"
+    },
+    {
+      "path": "packages/contracts/src/project.ts"
+    },
+    {
+      "path": "packages/contracts/src/projectClone.ts"
+    },
+    {
+      "path": "packages/contracts/src/providerInstance.ts"
+    },
+    {
+      "path": "packages/contracts/src/providerPolicy.ts"
+    },
+    {
+      "path": "packages/contracts/src/providerRuntime.ts"
+    },
+    {
+      "path": "packages/contracts/src/providerUsageLimits.ts"
+    },
+    {
+      "path": "packages/contracts/src/pullRequest.ts"
+    },
+    {
+      "path": "packages/contracts/src/server.ts"
+    },
+    {
+      "path": "packages/contracts/src/settings.ts"
+    },
+    {
+      "path": "packages/contracts/src/sourceControl.ts"
+    },
+    {
+      "path": "packages/contracts/src/threadPullRequest.ts"
+    },
+    {
+      "path": "packages/contracts/src/usageLimitSourceId.ts"
+    },
+    {
+      "path": "packages/contracts/src/vcs.ts"
     }
   ],
-  "shims": []
+  "shims": [
+    {
+      "path": "packages/contracts/src/index.ts",
+      "replaces": "packages/contracts/src/index.ts",
+      "note": "Upstream re-exports every contracts module. The shim re-exports only the modules the reviewer imports from, plus the narrowed rpc.ts."
+    },
+    {
+      "path": "packages/contracts/src/rpc.ts",
+      "replaces": "packages/contracts/src/rpc.ts",
+      "verbatimDeclarations": true,
+      "ownDeclarations": [
+        "WsRpcGroup"
+      ],
+      "note": "Upstream WsRpcGroup lists every RPC the engine serves and imports the whole package. The shim copies upstream declarations of only the RPCs the reviewer calls, verbatim, and groups them; Effect RPC matches methods by tag, so the narrowed client speaks the same protocol."
+    }
+  ]
 }

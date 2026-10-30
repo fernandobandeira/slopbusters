@@ -3,11 +3,19 @@
 //
 // Each tree mirrors upstream paths. Every tracked file is a verbatim copy of upstream at the
 // tree's pinned commit, plus an optional patch recorded under its patches/ directory. Shims are
-// local files that stand in for upstream modules we cannot import.
+// local files that stand in for upstream modules we cannot import, or would rather not import
+// whole. Any other file in a tree fails the check.
+//
+// A shim marked `verbatimDeclarations` copies some of the top-level declarations of the module
+// it replaces: each must stay identical to upstream's, except those listed in its
+// `ownDeclarations`. `check` fails when a copy differs and `sync` rewrites the copies from the new
+// upstream, so a narrowed module still picks up upstream's changes to what it keeps.
 //
 //   ui      apps/reviewer/src/vendor/t3       browser components, synced from main
-//   engine  apps/reviewer/vendor/t3-engine    the engine's API contracts, pinned to the release
-//                                            tag of the T3 Code engine the app talks to
+//   engine  apps/reviewer/vendor/t3-engine    the engine's API contracts the app uses, pinned to
+//                                            the release tag of the T3 Code engine it talks to.
+//                                            Its relative imports must all resolve inside the
+//                                            tree, so `add` any module a synced file starts using.
 //
 //   node scripts/sync-t3.mjs check                  verify every tree == upstream(pin) + patches
 //   node scripts/sync-t3.mjs patch                  regenerate patches from the current trees
@@ -45,6 +53,7 @@ const TREES = {
     },
     matchesEffect: true,
     matchesEngineBuild: true,
+    selfContained: true,
   },
 }
 
@@ -99,8 +108,11 @@ function checkTree(tree) {
     failures.push(`${tree.name}: ${relative(tree.vendor, stray)}: patch has no tracked file or no remaining changes`)
   }
   for (const shim of manifest.shims ?? []) {
-    if (readLocal(tree, shim.path) === null) failures.push(`${tree.name}: ${shim.path}: shim is missing`)
+    const local = readLocal(tree, shim.path)
+    if (local === null) failures.push(`${tree.name}: ${shim.path}: shim is missing`)
+    else if (shim.verbatimDeclarations) failures.push(...copiedDeclarationFailures(tree, shim, local))
   }
+  if (tree.selfContained) failures.push(...unresolvedImports(tree))
   if (tree.matchesEffect) {
     const required = upstreamEffectVersion(manifest.commit)
     const installed = reviewerEffectVersion()
@@ -186,6 +198,12 @@ async function sync([ref]) {
     if (merged.conflicts) conflicts.push(path)
   }
   for (const shim of manifest.shims ?? []) {
+    if (shim.verbatimDeclarations) {
+      const { refreshed, removed } = refreshCopiedDeclarations(tree, shim, target)
+      if (refreshed.length > 0) console.log(`shim ${shim.path}: refreshed ${refreshed.join(', ')} from upstream`)
+      missing.push(...removed.map((name) => `${shim.path}: ${name} (copied declaration)`))
+      continue
+    }
     const stat = git(['diff', '--stat', manifest.commit, target, '--', shim.replaces])
     if (stat) console.log(`shim ${shim.path} replaces a module that changed upstream:\n${stat}`)
   }
@@ -301,14 +319,98 @@ function trackedPaths(tree, commit) {
   })
 }
 
-/** Local files under a tracked directory that the manifest does not account for. */
+/** Local files in the tree, other than its manifest and patches, that the manifest does not account for. */
 function untrackedFiles(tree, commit) {
-  const tracked = new Set(trackedPaths(tree, commit))
-  const shims = new Set((tree.manifest.shims ?? []).map((shim) => shim.path))
-  return tree.manifest.files
-    .filter((entry) => entry.directory)
-    .flatMap((entry) => listFiles(join(tree.vendor, entry.path)).map((full) => relative(tree.vendor, full)))
-    .filter((path) => !tracked.has(path) && !shims.has(path))
+  const accounted = new Set([...trackedPaths(tree, commit), ...shimPaths(tree)])
+  return listFiles(tree.vendor)
+    .filter((full) => full !== tree.manifestPath && !full.startsWith(tree.patchesDir + '/'))
+    .map((full) => relative(tree.vendor, full))
+    .filter((path) => !accounted.has(path))
+}
+
+function shimPaths(tree) {
+  return (tree.manifest.shims ?? []).map((shim) => shim.path)
+}
+
+/** Relative imports in the tree's modules that do not resolve to a tracked file or shim. */
+function unresolvedImports(tree) {
+  const present = new Set([...trackedPaths(tree, tree.manifest.commit), ...shimPaths(tree)])
+  const failures = []
+  for (const path of present) {
+    if (!/\.[cm]?tsx?$/.test(path)) continue
+    const source = readLocal(tree, path) ?? ''
+    for (const [, specifier] of source.matchAll(/(?:\bfrom|\bimport)\s*["'](\.{1,2}\/[^"']+)["']/g)) {
+      const target = join(dirname(path), specifier)
+      if (!present.has(target)) {
+        failures.push(`${tree.name}: ${path}: imports ${specifier}, which the tree does not track; run "pnpm t3:add --tree ${tree.name} ${target}"`)
+      }
+    }
+  }
+  return failures
+}
+
+/**
+ * Top-level declarations of a module by name, as line ranges. A declaration runs from its keyword
+ * at column 0 to the end of that line if it ends there, or else to the next line that starts
+ * with a closing bracket, which is how prettier lays out upstream's modules.
+ */
+function topLevelDeclarations(source) {
+  const lines = source.split('\n')
+  const declarations = new Map()
+  const keyword = /^(?:export\s+)?(?:declare\s+)?(?:const|let|class|function|interface|type|enum)\s+([A-Za-z_$][\w$]*)/
+  for (let start = 0; start < lines.length; start += 1) {
+    const name = keyword.exec(lines[start])?.[1]
+    if (!name) continue
+    let end = start
+    if (!lines[start].trimEnd().endsWith(';')) {
+      end = start + 1
+      while (end < lines.length && !/^[)}\]]/.test(lines[end])) end += 1
+    }
+    declarations.set(name, { start, end, text: lines.slice(start, end + 1).join('\n') })
+    start = end
+  }
+  return declarations
+}
+
+/** How a shim's copied declarations differ from those of the upstream module it replaces. */
+function copiedDeclarationFailures(tree, shim, local) {
+  const upstream = topLevelDeclarations(upstreamFile(tree.manifest.commit, shim.replaces) ?? '')
+  const own = new Set(shim.ownDeclarations ?? [])
+  const copies = topLevelDeclarations(local)
+  const failures = []
+  for (const name of own) {
+    if (!copies.has(name)) failures.push(`${tree.name}: ${shim.path}: ${name} is listed in ownDeclarations but not declared`)
+  }
+  for (const [name, { text }] of copies) {
+    if (own.has(name)) continue
+    const original = upstream.get(name)
+    if (!original) {
+      failures.push(`${tree.name}: ${shim.path}: ${name} is not declared upstream; copy an upstream declaration or list it in ownDeclarations`)
+    } else if (original.text !== text) {
+      failures.push(`${tree.name}: ${shim.path}: ${name} differs from upstream's ${shim.replaces}`)
+    }
+  }
+  return failures
+}
+
+/** Rewrites a shim's copied declarations from upstream at `commit`; reports those upstream dropped. */
+function refreshCopiedDeclarations(tree, shim, commit) {
+  const upstream = topLevelDeclarations(upstreamFile(commit, shim.replaces) ?? '')
+  const own = new Set(shim.ownDeclarations ?? [])
+  const lines = (readLocal(tree, shim.path) ?? '').split('\n')
+  const copies = [...topLevelDeclarations(lines.join('\n'))].filter(([name]) => !own.has(name))
+  const refreshed = []
+  const removed = []
+  for (const [name, { start, end, text }] of copies.reverse()) {
+    const next = upstream.get(name)
+    if (!next) removed.push(name)
+    else if (next.text !== text) {
+      lines.splice(start, end - start + 1, ...next.text.split('\n'))
+      refreshed.push(name)
+    }
+  }
+  writeLocal(tree, shim.path, lines.join('\n'))
+  return { refreshed: refreshed.reverse(), removed: removed.reverse() }
 }
 
 function upstreamEffectVersion(commit) {
@@ -363,9 +465,13 @@ function hasCommit(ref) {
   return spawnSync('git', ['-C', cache, 'cat-file', '-e', `${ref}^{commit}`]).status === 0
 }
 
+/** A file's content at `commit`, or null when the commit has no such file. */
 function upstreamFile(commit, path) {
   const result = spawnSync('git', ['-C', cache, 'show', `${commit}:${path}`], { maxBuffer: 64 * 1024 * 1024 })
-  return result.status === 0 ? result.stdout.toString('utf8') : null
+  if (result.status === 0) return result.stdout.toString('utf8')
+  // The blobless clone fetches content on demand; a failed fetch must not read as a removed file.
+  if (!git(['ls-tree', '--name-only', commit, '--', path])) return null
+  throw new Error(`Could not read ${path} at ${short(commit)}: ${result.stderr}`)
 }
 
 function git(args) {

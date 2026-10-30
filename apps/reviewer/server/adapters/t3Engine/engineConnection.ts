@@ -27,7 +27,7 @@ import { EngineUnreachableError, findRunningEngine, type RunningEngine } from '.
 import { pairWithEngine, type EngineAccess } from './enginePairing'
 
 const makeClient = RpcClient.make(WsRpcGroup)
-/** The engine's typed WebSocket API: one method per RPC in T3 Code's contracts. */
+/** The engine's typed WebSocket API: one method per RPC in the vendored `WsRpcGroup`. */
 export type EngineClient = Effect.Success<typeof makeClient>
 
 export interface EngineCredentials {
