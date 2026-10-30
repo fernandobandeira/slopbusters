@@ -3,7 +3,7 @@ import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import type { Ticket } from '../../../shared/domain/tickets'
 import type { GitHub } from '../../adapters/github'
 import { logError } from '../../errors'
-import { MAX_TICKET_CONTEXT_CHARACTERS, MAX_TICKET_RELATIVE_CHARACTERS } from '../../limits'
+import { MAX_TICKET_CONTEXT_CHARACTERS, MAX_TICKET_RELATIVE_CHARACTERS } from '../tickets/limits'
 import { clip } from '../tickets/tickets'
 
 const pullBody = z.object({ body: z.string().nullable(), head: z.object({ ref: z.string() }) })

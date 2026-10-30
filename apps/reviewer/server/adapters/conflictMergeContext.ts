@@ -1,9 +1,12 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PullRequest } from '../../shared/domain/types'
-import { MAX_FILE_BYTES, MAX_GANDALF_CONFLICT_COMMITS } from '../limits'
+import { MAX_FILE_BYTES } from '../limits'
 import { OVERFLOW_DIRECTORY } from './t3Engine/structuredOutput'
 import { workspacePath } from './workspacePath'
+
+/** Commits on each side of the merge named in the prompt for the conflicted files. */
+const MAX_GANDALF_CONFLICT_COMMITS = 20
 
 /** What the merge brings together for the conflicted files, for the agents to study. */
 export interface MergeContext {

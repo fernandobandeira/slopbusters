@@ -12,7 +12,7 @@ import {
   type ProjectCloneSnapshot,
 } from '@t3tools/contracts'
 import { UserError } from '../../errors'
-import { T3_ENGINE_CLONE_TIMEOUT_MS } from '../../limits'
+import { T3_ENGINE_CLONE_TIMEOUT_MS } from './limits'
 import { checkedOutBranch } from '../git'
 import type { EngineConnection } from './engineConnection'
 

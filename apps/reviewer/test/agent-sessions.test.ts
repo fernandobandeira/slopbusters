@@ -3,9 +3,12 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { AgentSessionStore } from '../server/adapters/agentSessionStore'
+import {
+  AgentSessionStore,
+  MAX_AGENT_EVENT_CHARS,
+  MAX_AGENT_EVENT_PAGE,
+} from '../server/adapters/agentSessionStore'
 import { AgentSessions } from '../server/features/agent-sessions/agentSessions'
-import { MAX_AGENT_EVENT_CHARS, MAX_AGENT_EVENT_PAGE } from '../server/limits'
 import { Provider } from '../shared/domain/types'
 
 const id = 'a'.repeat(32)

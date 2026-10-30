@@ -6,7 +6,8 @@ import {
   type JobsReviewSummary,
   type JobsSession,
 } from '../../shared/domain/jobs'
-import { MAX_SAVED_JOBS_REVIEWS } from '../limits'
+
+const MAX_SAVED_JOBS_REVIEWS = 500
 
 export const linearCredentialsSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('key'), key: z.string().min(1) }),

@@ -7,7 +7,7 @@ import type { OrganizationPreferences } from '../../../shared/domain/preferences
 import type { PanelSessionStore } from '../../adapters/panelSessionStore'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
-import { PLANNING_TIMEOUT_MS } from '../../limits'
+import { PLANNING_TIMEOUT_MS } from './limits'
 import { reviewEvidence } from '../../reviewSnapshot'
 import { transferInstructions } from '../transferPrompt'
 import type { AgentSessions } from '../agent-sessions/agentSessions'

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { z } from 'zod'
 import { Provider } from '../shared/domain/types'
-import { MAX_T3_ENGINE_TURN_REATTACHES } from '../server/limits'
+import { MAX_T3_ENGINE_TURN_REATTACHES } from '../server/adapters/t3Engine/limits'
 import { fakeEngine } from './fixtures/fakeEngine'
 
 const filesSchema = z.object({ files: z.array(z.string()) })

@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises'
-import { TRANSIENT_TURN_RETRY_DELAYS_MS } from '../../limits'
+import { TRANSIENT_TURN_RETRY_DELAYS_MS } from './limits'
 import { EngineDisconnectedError } from './engineConnection'
 import { EngineUnreachableError } from './engineLocation'
 import {

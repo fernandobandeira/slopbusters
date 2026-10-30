@@ -1,8 +1,12 @@
 import { cp, readdir, rm } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
 import { logError } from '../errors'
-import { INSPECTION_COPY_TIMEOUT_MS, MAX_INSPECTION_LISTED_FILES } from '../limits'
 import { runCommand } from './process'
+
+/** Copying a review checkout for one structured turn; a clone on APFS takes moments. */
+const INSPECTION_COPY_TIMEOUT_MS = 120_000
+/** Claude has no file search tool in Claude Code 2.1, so its prompt lists the copy's files. */
+const MAX_INSPECTION_LISTED_FILES = 2000
 
 /**
  * Repository files that agents or editors act on when an agent starts in a directory, and that a

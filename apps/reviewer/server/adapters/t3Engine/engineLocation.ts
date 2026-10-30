@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { ORCHESTRATION_PROTOCOL_VERSION } from '@t3tools/contracts'
 import { UserError } from '../../errors'
-import { T3_ENGINE_REQUEST_TIMEOUT_MS } from '../../limits'
+import { T3_ENGINE_REQUEST_TIMEOUT_MS } from './limits'
 
 /** A T3 Code engine that is running on this machine and speaks the protocol we were built for. */
 export interface RunningEngine {

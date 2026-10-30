@@ -9,7 +9,7 @@ import { Provider } from '../shared/domain/types'
 import { CommandTimeoutError } from '../server/adapters/process'
 import type { StructuredTurnRequest } from '../server/adapters/t3Engine/engineTurns'
 import { UNATTENDED_ANSWER } from '../server/adapters/t3Engine/turnFollower'
-import { MAX_STRUCTURED_FOLLOW_UPS } from '../server/limits'
+import { MAX_STRUCTURED_FOLLOW_UPS } from '../server/adapters/t3Engine/limits'
 import { fakeEngine } from './fixtures/fakeEngine'
 
 const claude = { provider: Provider.claude, model: 'claude-haiku-5-5' }

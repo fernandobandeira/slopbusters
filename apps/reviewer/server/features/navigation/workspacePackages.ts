@@ -1,4 +1,4 @@
-import { VIRTUAL_ROOT } from '../../limits.ts'
+import { VIRTUAL_ROOT } from './limits.ts'
 import { posix } from 'node:path'
 import type ts from 'typescript'
 

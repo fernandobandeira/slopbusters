@@ -1,19 +1,11 @@
 export const DEFAULT_API_PORT = 4311
 export const HTTP_BODY_LIMIT = '1mb'
 export const MAX_FILE_BYTES = 512 * 1024
-export const MAX_FILE_CACHE_BYTES = 16 * 1024 * 1024
 export const MAX_SOURCE_CACHE_BYTES = 32 * 1024 * 1024
 export const MAX_GIT_OUTPUT_BYTES = 16 * 1024 * 1024
 export const GIT_TIMEOUT_MS = 120_000
-export const STATUS_TTL_MS = 10_000
-export const INBOX_TTL_MS = 15_000
-export const STACK_TTL_MS = 30_000
 export const JOB_RETENTION_MS = 60 * 60 * 1000
-export const VIRTUAL_ROOT = '/review'
 export const MAX_NAVIGATION_TARGETS = 500
-export const MAX_NAVIGATION_FILES = 120
-export const MAX_NAVIGATION_BYTES = 8 * 1024 * 1024
-export const NAVIGATION_TIMEOUT_MS = 30_000
 
 export const MAX_PROJECT_FILE_BYTES = 2 * 1024 * 1024
 
@@ -23,159 +15,9 @@ export const NETWORK_RETRY_DELAYS_MS = [1000, 3000]
 export const PROCESS_TERMINATION_MS = 1000
 export const MAX_STDERR_CHARS = 4000
 export const MAX_SYMBOL_SOURCE_CHARS = 500_000
-export const SYNTAX_TIMEOUT_MICROS = 100_000
-export const MAX_SYNTAX_DEPTH = 100
 export const SOURCE_WORKSPACE_TIMEOUT_MS = 60_000
 /** Review checkouts unused this long are removed; they can be downloaded again. */
 export const REVIEW_CHECKOUT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 export const REVIEW_CHECKOUT_PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000
-export const PROVIDER_TIMEOUT_MS = 300_000
-export const LSP_INITIALIZE_TIMEOUT_MS = 45_000
-export const LSP_INDEX_TIMEOUT_MS = 25_000
-export const LSP_INDEX_POLL_MS = 150
-export const LSP_IDLE_MS = 120_000
-export const MAX_IDLE_LANGUAGE_SESSIONS = 3
-export const TOOL_STATUS_TIMEOUT_MS = 10_000
-export const TOOL_VERSION_TIMEOUT_MS = 5000
-export const T3_ENGINE_REQUEST_TIMEOUT_MS = 10_000
-export const T3_ENGINE_PAIR_TIMEOUT_MS = 60_000
-/** Preparing a pull request worktree can fetch the PR head, so engine calls get longer. */
-export const T3_ENGINE_CALL_TIMEOUT_MS = 180_000
-export const T3_ENGINE_TOKEN_REFRESH_MARGIN_MS = 24 * 60 * 60 * 1000
-/**
- * The RPC client pings the engine every 5 seconds, and an engine busy for a few seconds stops
- * answering. Like T3 Code's own client, allow this long without any frame before dropping it.
- */
-export const T3_ENGINE_PING_TIMEOUT_MS = 15_000
-/** An engine socket no call has used for this long is closed; the next call opens another. */
-export const T3_ENGINE_IDLE_SOCKET_MS = 5 * 60_000
-/** The bundled engine runs its migrations on first start. */
-export const T3_ENGINE_START_TIMEOUT_MS = 60_000
-export const T3_ENGINE_START_POLL_MS = 250
-/** The bundled engine stops its provider sessions and flushes its database before exiting. */
-export const T3_ENGINE_STOP_TIMEOUT_MS = 10_000
-/** The bundled engine clones a repository the first time a chat needs it. */
-export const T3_ENGINE_CLONE_TIMEOUT_MS = 15 * 60_000
-/** A structured turn's engine call outlives the turn so the interrupt can still be sent. */
-export const T3_ENGINE_TURN_MARGIN_MS = 30_000
-/**
- * How long the engine may take to open a provider session for a turn it accepted. A turn that is
- * still not running by then never will be, so it fails now instead of at its full timeout.
- */
-export const T3_ENGINE_TURN_START_TIMEOUT_MS = 2 * 60_000
-/**
- * Times a structured turn follows its thread again on a new socket after the old one drops, as
- * when the computer sleeps through the ping timeout. The turn keeps running in the engine meanwhile.
- */
-export const MAX_T3_ENGINE_TURN_REATTACHES = 3
-/**
- * Pauses before a structured turn runs again after a transient failure, such as the engine
- * restarting under it or a provider at capacity; one more attempt per pause. The first gives a
- * restarted engine time to come up.
- */
-export const TRANSIENT_TURN_RETRY_DELAYS_MS: readonly number[] = [20_000, 60_000]
-/** Room left under the engine's message limit for anything it adds to a turn's input. */
-export const T3_ENGINE_TURN_INPUT_MARGIN_CHARS = 4000
-/** Copying a review checkout for one structured turn; a clone on APFS takes moments. */
-export const INSPECTION_COPY_TIMEOUT_MS = 120_000
-/** Claude has no file search tool in Claude Code 2.1, so its prompt lists the copy's files. */
-export const MAX_INSPECTION_LISTED_FILES = 2000
-/** How much of a schema validation failure is quoted back to the agent and in errors. */
-export const MAX_STRUCTURED_ERROR_CHARS = 2000
-/** Times a structured turn's caller may send problems it found in the copy back to the agent. */
-export const MAX_STRUCTURED_FOLLOW_UPS = 2
-/** How much of a persona's review the first message of a T3 Code chat carries over. */
-export const MAX_CHAT_REVIEW_CHARACTERS = 20_000
-/**
- * Line comparisons one pull request may spend matching moved and copied blocks that were edited on
- * the way. Past it, only blocks copied or moved unchanged are found.
- */
-export const MAX_TRANSFER_COMPARISONS = 4_000_000
-export const MAX_DIFF_FILE_CACHE_ENTRIES = 60
-export const MAX_SOURCE_FILE_CACHE_ENTRIES = 1000
 export const MAX_SOURCE_TREE_CACHE_ENTRIES = 20
-export const MAX_PULL_STATUS_CACHE_ENTRIES = 1000
-export const MAX_REPOSITORY_CACHE_ENTRIES = 30
-export const MAX_REVISION_CACHE_ENTRIES = 100
-export const MAX_NAVIGATION_CACHE_ENTRIES = 40
-export const MAX_GITHUB_BLOB_OUTPUT_BYTES = 4 * 1024 * 1024
-export const MAX_GITHUB_TREE_OUTPUT_BYTES = 8 * 1024 * 1024
-export const MAX_GITHUB_GRAPHQL_OUTPUT_BYTES = 16 * 1024 * 1024
 export const MAX_WORKSPACE_STATUS_OUTPUT_BYTES = 1024 * 1024
-
-export const MAX_SAVED_BOB_REVIEWS = 500
-
-export const LINEAR_TIMEOUT_MS = 30_000
-export const LINEAR_OAUTH_TIMEOUT_MS = 10 * 60 * 1000
-export const MAX_LINEAR_RESPONSE_BYTES = 8 * 1024 * 1024
-export const TICKET_TTL_MS = 30_000
-export const TICKET_LINK_TTL_MS = 5 * 60 * 1000
-export const MAX_TICKET_CACHE_ENTRIES = 200
-export const MAX_TICKET_CONTEXT_CHARACTERS = 24_000
-export const MAX_TICKET_RELATIVE_CHARACTERS = 8000
-export const MAX_SAVED_JOBS_REVIEWS = 500
-
-export const MAX_GANDALF_TURNS = 20
-export const GANDALF_PROVIDER_TIMEOUT_MS = 15 * 60 * 1000
-export const MAX_GANDALF_TIMEOUT_RETRIES = 1
-export const MAX_GANDALF_BASE_RETRIES = 3
-export const GANDALF_NETWORK_RETRY_DELAYS_MS = [15_000, 30_000, 60_000]
-export const MAX_GANDALF_PULLS = 20
-/** Files one turn may change; more means the agent rewrote the merge rather than resolving it. */
-export const MAX_GANDALF_CHANGED_FILES = 100
-/** Commits on each side of the merge named in the prompt for the conflicted files. */
-export const MAX_GANDALF_CONFLICT_COMMITS = 20
-
-/** The largest PR diff a split cuts into units; bigger PRs are split in T3 Code instead. */
-export const MAX_SPLIT_DIFF_BYTES = 4 * 1024 * 1024
-/** How much of the units' patches the split prompt carries; the models read the rest with Git. */
-export const MAX_SPLIT_PROMPT_PATCH_CHARS = 240_000
-/** Turns the two models take cutting and reviewing a stack before the split stops. */
-export const MAX_SPLIT_TURNS = 8
-export const SPLIT_PROVIDER_TIMEOUT_MS = 15 * 60 * 1000
-
-export const MAX_AGENT_EVENT_CHARS = 128 * 1024
-export const MAX_AGENT_EVENT_PAGE = 200
-export const MAX_AGENT_SESSIONS = 100
-
-/** The largest `SKILL.md` a teammate may have; bigger skills belong in its `references/`. */
-export const MAX_SKILL_FILE_BYTES = 256 * 1024
-/** How much of a skill folder its version digest reads, and how many of its files it counts. */
-export const MAX_SKILL_DIGEST_BYTES = 32 * 1024 * 1024
-export const MAX_SKILL_DIGEST_FILES = 2000
-/** Avatars arrive re-encoded by the browser as square PNGs; these bound what the server keeps. */
-export const MAX_AVATAR_BYTES = 512 * 1024
-export const MAX_AVATAR_DIMENSION = 1024
-export const MAX_PANEL_REVIEWERS = 8
-/** How many panel reviewers run at the same time on one PR. */
-export const PANEL_REVIEWER_CONCURRENCY = 3
-/**
- * How many PRs panels review at the same time. Each runs its own reviewers and grounding, so
- * more PRs queue until one finishes.
- */
-export const PANEL_PULL_CONCURRENCY = 2
-export const MAX_SAVED_PANEL_REVIEWS = 500
-/** How many PR snapshots a panel loads at the same time before its seats start. */
-export const PANEL_PREPARE_CONCURRENCY = 3
-/** The most other stack layers a panel loads as evidence; GitHub stacks rarely run longer. */
-export const MAX_PANEL_STACK_LAYERS = 12
-/** How much of the other layers' diffs a seat's prompt carries; past it, only their file lists. */
-export const MAX_PANEL_LAYER_EVIDENCE_CHARS = 300_000
-/** How much of a teammate's earlier comments on the PR its seat's prompt carries. */
-export const MAX_PANEL_HISTORY_CHARS = 60_000
-/**
- * How many seat findings one grounding round checks per PR, across every seat; the rest wait as
- * deferred. A starting value: lower it if a maximum-sized grounding reply does not fit a provider.
- */
-export const MAX_GROUNDING_SOURCES = 40
-/** Grounding turns before the debate stops and keeps what the two models did agree on. */
-export const MAX_GROUNDING_TURNS = 6
-/**
- * One grounding turn checks every selected source against the code, so a strong model reading a
- * large repository needs far longer than a single review pass.
- */
-export const GROUNDING_TURN_TIMEOUT_MS = 20 * 60 * 1000
-/** A panel seat reads a whole PR, and its skill may ask for a deep pass through the repository. */
-export const PANEL_REVIEW_TIMEOUT_MS = 15 * 60 * 1000
-/** A planning pass checks one finding. */
-export const PLANNING_TIMEOUT_MS = 10 * 60 * 1000

@@ -1,7 +1,7 @@
 import type { PullStack, PullStackResult } from '../../../shared/domain/stacks'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import { UserError } from '../../errors'
-import { MAX_GANDALF_PULLS } from '../../limits'
+import { MAX_GANDALF_PULLS } from './limits'
 
 /** Include every open layer so updates propagate through the entire selected stack. */
 export function createGandalfPlanner(

@@ -1,9 +1,8 @@
-import { MAX_REVISION_CACHE_ENTRIES } from '../../limits'
+import { INBOX_TTL_MS, MAX_REVISION_CACHE_ENTRIES } from './limits'
 import type { PullRequest } from '../../../shared/domain/types'
 import type { PullRevision } from '../../../shared/domain/updates'
 import { fetchPullRevision } from './github'
 import { createCache } from '../../cache'
-import { INBOX_TTL_MS } from '../../limits'
 
 /** Tabs share one short-lived metadata request for the same PR. */
 export function createRevisionChecker(

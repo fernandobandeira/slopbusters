@@ -1,11 +1,12 @@
+import { MAX_SOURCE_TREE_CACHE_ENTRIES } from '../../limits'
 import {
   MAX_DIFF_FILE_CACHE_ENTRIES,
-  MAX_SOURCE_TREE_CACHE_ENTRIES,
-  MAX_SOURCE_FILE_CACHE_ENTRIES,
-  MAX_GITHUB_TREE_OUTPUT_BYTES,
-  MAX_GITHUB_GRAPHQL_OUTPUT_BYTES,
+  MAX_FILE_CACHE_BYTES,
   MAX_GITHUB_BLOB_OUTPUT_BYTES,
-} from '../../limits'
+  MAX_GITHUB_GRAPHQL_OUTPUT_BYTES,
+  MAX_GITHUB_TREE_OUTPUT_BYTES,
+  MAX_SOURCE_FILE_CACHE_ENTRIES,
+} from './limits'
 import { z } from 'zod'
 import { DiffSide, type ChangedFile, type PullRequest } from '../../../shared/domain/types'
 import type {
@@ -17,7 +18,7 @@ import { createGitHub, type GitHub } from '../../adapters/github'
 import { createMergeBaseLookup } from '../pulls/mergeBase'
 import { createCache } from '../../cache'
 import { UserError, logError } from '../../errors'
-import { MAX_FILE_BYTES, MAX_FILE_CACHE_BYTES, MAX_SOURCE_CACHE_BYTES } from '../../limits'
+import { MAX_FILE_BYTES, MAX_SOURCE_CACHE_BYTES } from '../../limits'
 import { getRevisionSymbols } from '../../adapters/treeSymbols'
 import type { SourceRepository } from '../../adapters/sourceRepository'
 

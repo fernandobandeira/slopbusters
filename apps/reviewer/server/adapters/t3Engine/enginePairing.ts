@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { runCommand } from '../process'
 import { logError, UserError } from '../../errors'
-import { T3_ENGINE_PAIR_TIMEOUT_MS, T3_ENGINE_REQUEST_TIMEOUT_MS } from '../../limits'
+import { T3_ENGINE_PAIR_TIMEOUT_MS, T3_ENGINE_REQUEST_TIMEOUT_MS } from './limits'
 import type { RunningEngine } from './engineLocation'
 
 /** How Slopbusters appears in T3 Code's connections list. */

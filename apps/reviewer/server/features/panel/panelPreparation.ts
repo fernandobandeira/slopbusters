@@ -8,7 +8,7 @@ import type { PullStackResult } from '../../../shared/domain/stacks'
 import type { PullRequest } from '../../../shared/domain/types'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import { publicError, UserError } from '../../errors'
-import { MAX_PANEL_STACK_LAYERS, PANEL_PREPARE_CONCURRENCY } from '../../limits'
+import { MAX_PANEL_STACK_LAYERS, PANEL_PREPARE_CONCURRENCY } from './limits'
 import { pullFingerprint } from '../../reviewSnapshot'
 import { settleEach } from '../flows/panel'
 

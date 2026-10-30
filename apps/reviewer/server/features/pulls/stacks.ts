@@ -1,4 +1,4 @@
-import { MAX_REPOSITORY_CACHE_ENTRIES } from '../../limits'
+import { MAX_REPOSITORY_CACHE_ENTRIES, STACK_TTL_MS } from './limits'
 import { z } from 'zod'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import {
@@ -10,7 +10,6 @@ import {
 } from '../../../shared/domain/stacks'
 import { createGitHub, type GitHub } from '../../adapters/github'
 import { createCache } from '../../cache'
-import { STACK_TTL_MS } from '../../limits'
 import { logError } from '../../errors'
 import { createPullStatusService } from './pullStatus'
 

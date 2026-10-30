@@ -4,12 +4,12 @@ import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { setTimeout as delay } from 'node:timers/promises'
 import { logError, UserError } from '../../errors'
+import { MAX_STDERR_CHARS } from '../../limits'
 import {
-  MAX_STDERR_CHARS,
   T3_ENGINE_START_POLL_MS,
   T3_ENGINE_START_TIMEOUT_MS,
   T3_ENGINE_STOP_TIMEOUT_MS,
-} from '../../limits'
+} from './limits'
 import { findRunningEngine, isProcessAlive, type RunningEngine } from './engineLocation'
 import type { EngineCli } from './enginePairing'
 

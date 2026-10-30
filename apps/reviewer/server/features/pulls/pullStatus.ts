@@ -1,5 +1,9 @@
-import { MAX_REPOSITORY_CACHE_ENTRIES } from '../../limits'
-import { MAX_PULL_STATUS_CACHE_ENTRIES } from '../../limits'
+import {
+  INBOX_TTL_MS,
+  MAX_PULL_STATUS_CACHE_ENTRIES,
+  MAX_REPOSITORY_CACHE_ENTRIES,
+  STATUS_TTL_MS,
+} from './limits'
 import { z } from 'zod'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import {
@@ -10,7 +14,6 @@ import {
 } from '../../../shared/domain/pullStatus'
 import { createGitHub, type GitHub } from '../../adapters/github'
 import { createCache } from '../../cache'
-import { STATUS_TTL_MS, INBOX_TTL_MS } from '../../limits'
 
 const pageInfo = z.object({ hasNextPage: z.boolean(), endCursor: z.string().nullable().optional() })
 const actor = z

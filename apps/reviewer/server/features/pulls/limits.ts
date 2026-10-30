@@ -1,0 +1,6 @@
+export const STATUS_TTL_MS = 10_000
+export const INBOX_TTL_MS = 15_000
+export const STACK_TTL_MS = 30_000
+export const MAX_PULL_STATUS_CACHE_ENTRIES = 1000
+export const MAX_REPOSITORY_CACHE_ENTRIES = 30
+export const MAX_REVISION_CACHE_ENTRIES = 100

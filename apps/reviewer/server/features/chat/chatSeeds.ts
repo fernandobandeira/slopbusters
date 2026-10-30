@@ -1,6 +1,5 @@
 import type { PreparedPullRequest } from '../../adapters/t3Engine/engineThreads'
 import { UserError } from '../../errors'
-import { MAX_CHAT_REVIEW_CHARACTERS } from '../../limits'
 import { clip } from '../tickets/tickets'
 import { gandalfSessionMarkdown, jobsReviewMarkdown, linusReviewMarkdown } from './reviewMarkdown'
 import { bobReviewMarkdown, type BobSession } from '../../../shared/domain/bob'
@@ -14,6 +13,9 @@ import { reviewerTeammate, seatReviewer, type PanelReviewer } from '../../../sha
 import type { PanelSession } from '../../../shared/domain/panelSession'
 import { panelReviewerMarkdown } from '../../../shared/domain/panelMarkdown'
 import { Provider, type PullRequest } from '../../../shared/domain/types'
+
+/** How much of a persona's review the first message of a T3 Code chat carries over. */
+const MAX_CHAT_REVIEW_CHARACTERS = 20_000
 
 /** Where each persona keeps the sessions a chat can continue. */
 export interface ReviewSessions {

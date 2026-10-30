@@ -10,7 +10,7 @@ import {
 } from '../../../shared/domain/split'
 import { loadReviewSkill } from '../../adapters/reviewSkill'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
-import { MAX_SPLIT_PROMPT_PATCH_CHARS, SPLIT_PROVIDER_TIMEOUT_MS } from '../../limits'
+import { MAX_SPLIT_PROMPT_PATCH_CHARS, SPLIT_PROVIDER_TIMEOUT_MS } from './limits'
 
 export const linusSplitSkillFiles = ['SKILL.md', 'references/splitting.md']
 

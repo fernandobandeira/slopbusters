@@ -12,7 +12,7 @@ import type { ModelPair, OrganizationPreferences } from '../../../shared/domain/
 import { installedFor } from '../../../shared/domain/teammates'
 import { Provider } from '../../../shared/domain/types'
 import { UserError } from '../../errors'
-import { MAX_PANEL_REVIEWERS } from '../../limits'
+import { MAX_PANEL_REVIEWERS } from './limits'
 import type { Teammates } from '../teammates/teammates'
 import type { PanelMember } from './panelReview'
 

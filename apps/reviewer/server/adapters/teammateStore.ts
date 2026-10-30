@@ -8,7 +8,10 @@ import {
   type TeammateRecord,
 } from '../../shared/domain/teammates'
 import { logError, UserError } from '../errors'
-import { MAX_AVATAR_BYTES, MAX_AVATAR_DIMENSION } from '../limits'
+
+/** Avatars arrive re-encoded by the browser as square PNGs; these bound what the server keeps. */
+const MAX_AVATAR_BYTES = 512 * 1024
+const MAX_AVATAR_DIMENSION = 1024
 
 export type StoredTeammate = TeammateRecord & { avatars: Mood[] }
 

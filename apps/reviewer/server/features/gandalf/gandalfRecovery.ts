@@ -5,7 +5,7 @@ import { NetworkError } from '../../adapters/network'
 import { CommandTimeoutError } from '../../adapters/process'
 import { TurnNotStartedError } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
-import { MAX_GANDALF_BASE_RETRIES, MAX_GANDALF_TIMEOUT_RETRIES } from '../../limits'
+import { MAX_GANDALF_BASE_RETRIES, MAX_GANDALF_TIMEOUT_RETRIES } from './limits'
 
 /**
  * Whether a session that stopped on `cause` restarts on its own: once for a timeout, a few times

@@ -9,8 +9,11 @@ import {
   type AgentRun,
   type ProviderEvent,
 } from '../../shared/domain/agentSession'
-import { MAX_AGENT_EVENT_CHARS, MAX_AGENT_EVENT_PAGE, MAX_AGENT_SESSIONS } from '../limits'
 import { UserError } from '../errors'
+
+export const MAX_AGENT_EVENT_CHARS = 128 * 1024
+export const MAX_AGENT_EVENT_PAGE = 200
+const MAX_AGENT_SESSIONS = 100
 
 export class AgentSessionStore {
   private database: DatabaseSync

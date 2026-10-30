@@ -11,7 +11,7 @@ import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import type { ConflictWorkspace, ConflictSnapshot } from '../../adapters/conflictWorkspace'
 import { MERGE_VIEWS_PATH } from '../../adapters/conflictMergeContext'
 import type { CiFailure } from '../../adapters/ciFailures'
-import { GANDALF_PROVIDER_TIMEOUT_MS } from '../../limits'
+import { GANDALF_PROVIDER_TIMEOUT_MS } from './limits'
 
 interface ResolutionRequest {
   turns: StructuredTurns

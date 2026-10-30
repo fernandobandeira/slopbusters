@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { MAX_STRUCTURED_ERROR_CHARS } from '../../limits'
+import { MAX_STRUCTURED_ERROR_CHARS } from './limits'
 import { Provider } from '../../../shared/domain/types'
 
 export type StructuredReply<T> =

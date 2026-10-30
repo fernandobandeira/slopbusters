@@ -1,8 +1,10 @@
-import { TOOL_STATUS_TIMEOUT_MS, TOOL_VERSION_TIMEOUT_MS } from '../limits'
 import { z } from 'zod'
 import type { AppStatus, ToolStatus } from '../../shared/domain/types'
 import { runCommand } from './process'
 import { createGitHub, type GitHub } from './github'
+
+const TOOL_STATUS_TIMEOUT_MS = 10_000
+const TOOL_VERSION_TIMEOUT_MS = 5000
 
 const profileSchema = z.object({ login: z.string().min(1), avatarUrl: z.url(), url: z.url() })
 

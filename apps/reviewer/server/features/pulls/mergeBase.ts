@@ -1,4 +1,4 @@
-import { MAX_REVISION_CACHE_ENTRIES } from '../../limits'
+import { MAX_REVISION_CACHE_ENTRIES } from './limits'
 import { z } from 'zod'
 import type { PullRequest } from '../../../shared/domain/types'
 import type { GitHub } from '../../adapters/github'

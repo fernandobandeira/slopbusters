@@ -1,10 +1,10 @@
+import { MAX_NAVIGATION_TARGETS } from '../../limits'
 import {
-  MAX_NAVIGATION_TARGETS,
-  VIRTUAL_ROOT,
-  MAX_NAVIGATION_FILES,
   MAX_NAVIGATION_BYTES,
+  MAX_NAVIGATION_FILES,
   NAVIGATION_TIMEOUT_MS,
-} from '../../limits'
+  VIRTUAL_ROOT,
+} from './limits'
 import { UserError } from '../../errors'
 import ts from 'typescript'
 import { posix } from 'node:path'

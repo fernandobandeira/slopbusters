@@ -5,7 +5,12 @@ import { join, relative } from 'node:path'
 import { skillNameSchema, type InstalledSkill } from '../../shared/domain/teammates'
 import { Provider } from '../../shared/domain/types'
 import { logError, UserError } from '../errors'
-import { MAX_SKILL_DIGEST_BYTES, MAX_SKILL_DIGEST_FILES, MAX_SKILL_FILE_BYTES } from '../limits'
+
+/** The largest `SKILL.md` a teammate may have; bigger skills belong in its `references/`. */
+const MAX_SKILL_FILE_BYTES = 256 * 1024
+/** How much of a skill folder its version digest reads, and how many of its files it counts. */
+const MAX_SKILL_DIGEST_BYTES = 32 * 1024 * 1024
+const MAX_SKILL_DIGEST_FILES = 2000
 
 /** Where each agent looks for the user's own skills. */
 export interface SkillRoots {

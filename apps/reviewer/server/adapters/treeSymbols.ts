@@ -1,9 +1,4 @@
-import {
-  MAX_SYMBOL_SOURCE_CHARS,
-  SYNTAX_TIMEOUT_MICROS,
-  MAX_SYNTAX_DEPTH,
-  MAX_NAVIGATION_TARGETS,
-} from '../limits'
+import { MAX_SYMBOL_SOURCE_CHARS, MAX_NAVIGATION_TARGETS } from '../limits'
 import * as TreeSitter from '@vscode/tree-sitter-wasm'
 import type { Node } from '@vscode/tree-sitter-wasm'
 import { createRequire } from 'node:module'
@@ -13,6 +8,9 @@ import { getSourceSymbols } from '../features/navigation/sourceSymbols'
 import type { NavigationTarget } from '../../shared/domain/navigation'
 import { sourceLanguage } from '../../shared/domain/languages'
 export { sourceLanguage } from '../../shared/domain/languages'
+
+const SYNTAX_TIMEOUT_MICROS = 100_000
+const MAX_SYNTAX_DEPTH = 100
 
 // The package is CommonJS; native Node ESM exposes it through the default export.
 const { Parser, Language } = (

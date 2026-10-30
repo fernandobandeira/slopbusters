@@ -4,11 +4,13 @@ import type { SplitLayer, SplitLayerPlan, SplitUnit } from '../../shared/domain/
 import { byFile, filePatch, parseUnits, type PatchUnit } from '../../shared/domain/splitUnits'
 import type { PullRequest } from '../../shared/domain/types'
 import { UserError } from '../errors'
-import { MAX_SPLIT_DIFF_BYTES } from '../limits'
 import { readConflictRevision } from './conflictRevision'
 import { hardenedGit } from './git'
 import type { GitHub } from './github'
 import type { GitIdentity } from './gitIdentity'
+
+/** The largest PR diff a split cuts into units; bigger PRs are split in T3 Code instead. */
+const MAX_SPLIT_DIFF_BYTES = 4 * 1024 * 1024
 
 /** A layer as built: its commit on the one below, before any PR is opened for it. */
 export type BuiltLayer = Omit<SplitLayer, 'pullUrl' | 'pullNumber'>

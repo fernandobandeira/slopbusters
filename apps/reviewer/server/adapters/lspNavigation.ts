@@ -1,4 +1,3 @@
-import { LSP_IDLE_MS, MAX_IDLE_LANGUAGE_SESSIONS } from '../limits'
 import { logError } from '../errors'
 import type { NavigationRequest, NavigationResult } from '../../shared/domain/navigation'
 import type { PullRequest } from '../../shared/domain/types'
@@ -6,6 +5,9 @@ import { LanguageServers, findExecutable } from './languageServers'
 import { startLanguageServer } from './lspClient'
 import { createSourceWorkspace, projectRoot, type SourceProject } from './sourceWorkspace'
 import type { ReviewWorkspaces } from './reviewWorkspaces'
+
+const LSP_IDLE_MS = 120_000
+const MAX_IDLE_LANGUAGE_SESSIONS = 3
 
 type Session = Awaited<ReturnType<typeof startLanguageServer>>
 interface Entry {

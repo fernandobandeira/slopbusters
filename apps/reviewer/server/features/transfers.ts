@@ -6,9 +6,14 @@ import {
   type DiffLine,
   type TransferChange,
 } from '../../shared/domain/types'
-import { MAX_TRANSFER_COMPARISONS } from '../limits'
 import { digest } from './diff'
 import { alignLines, type Budget, type Line, type Pair } from './transferAlignment'
+
+/**
+ * Line comparisons one pull request may spend matching moved and copied blocks that were edited on
+ * the way. Past it, only blocks copied or moved unchanged are found.
+ */
+const MAX_TRANSFER_COMPARISONS = 4_000_000
 
 /** Shortest block worth calling a transfer. */
 const MIN_BLOCK_LINES = 4

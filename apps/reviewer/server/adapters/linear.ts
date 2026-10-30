@@ -1,7 +1,10 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { z } from 'zod'
 import { UserError } from '../errors'
-import { LINEAR_TIMEOUT_MS, MAX_LINEAR_RESPONSE_BYTES, NETWORK_RETRY_DELAYS_MS } from '../limits'
+import { NETWORK_RETRY_DELAYS_MS } from '../limits'
+
+export const LINEAR_TIMEOUT_MS = 30_000
+const MAX_LINEAR_RESPONSE_BYTES = 8 * 1024 * 1024
 
 const endpoint = 'https://api.linear.app/graphql'
 

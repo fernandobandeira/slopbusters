@@ -2,8 +2,10 @@ import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type RequestListener, type Server } from 'node:http'
 import { z } from 'zod'
 import { logError, UserError } from '../errors'
-import { LINEAR_OAUTH_TIMEOUT_MS, LINEAR_TIMEOUT_MS } from '../limits'
+import { LINEAR_TIMEOUT_MS } from './linear'
 import type { LinearCredentials, TicketStore } from './ticketStore'
+
+const LINEAR_OAUTH_TIMEOUT_MS = 10 * 60 * 1000
 
 export const linearOAuth = {
   authorize: 'https://linear.app/oauth/authorize',

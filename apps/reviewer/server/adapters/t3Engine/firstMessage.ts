@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { PROVIDER_SEND_TURN_MAX_INPUT_CHARS } from '@t3tools/contracts'
-import { T3_ENGINE_TURN_INPUT_MARGIN_CHARS } from '../../limits'
+import { T3_ENGINE_TURN_INPUT_MARGIN_CHARS } from './limits'
 import type { z } from 'zod'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import {

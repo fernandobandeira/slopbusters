@@ -1,4 +1,3 @@
-import { LSP_INITIALIZE_TIMEOUT_MS, LSP_INDEX_TIMEOUT_MS, LSP_INDEX_POLL_MS } from '../limits'
 import { MAX_NAVIGATION_TARGETS } from '../limits'
 import { spawn } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -17,6 +16,10 @@ import type {
   NavigationTarget,
 } from '../../shared/domain/navigation'
 import { workspacePath, type SourceWorkspace } from './sourceWorkspace'
+
+const LSP_INITIALIZE_TIMEOUT_MS = 45_000
+const LSP_INDEX_TIMEOUT_MS = 25_000
+const LSP_INDEX_POLL_MS = 150
 
 const positionSchema = z.object({
   line: z.number().int().nonnegative(),

@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { bobReviewSummarySchema } from '../../shared/domain/bob'
-import { MAX_SAVED_BOB_REVIEWS } from '../limits'
+
+const MAX_SAVED_BOB_REVIEWS = 500
 
 export function readSavedBobReviews(database: DatabaseSync, repository: string) {
   const rows = database

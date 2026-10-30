@@ -13,7 +13,7 @@ import { LayerBuildError, type SplitWorkspace } from '../../adapters/splitWorksp
 import type { ReviewerStore } from '../../adapters/store'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
-import { MAX_SPLIT_TURNS } from '../../limits'
+import { MAX_SPLIT_TURNS } from './limits'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { debate, unanimousApproval, type DebateMove } from '../flows/debate'
 import { FlowJobs } from '../flows/flowJobs'

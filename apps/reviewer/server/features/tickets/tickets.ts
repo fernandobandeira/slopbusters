@@ -14,7 +14,7 @@ import {
   MAX_TICKET_CONTEXT_CHARACTERS,
   MAX_TICKET_RELATIVE_CHARACTERS,
   TICKET_TTL_MS,
-} from '../../limits'
+} from './limits'
 import * as queries from './linearQueries'
 import { downloadTicket } from './ticketDownload'
 import { createTicketLinks } from './ticketLinks'

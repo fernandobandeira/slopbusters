@@ -6,7 +6,7 @@ import type { GitHub } from '../../adapters/github'
 import { LinearError, type Linear } from '../../adapters/linear'
 import { createCache } from '../../cache'
 import { logError } from '../../errors'
-import { MAX_TICKET_CACHE_ENTRIES, TICKET_LINK_TTL_MS } from '../../limits'
+import { MAX_TICKET_CACHE_ENTRIES, TICKET_LINK_TTL_MS } from './limits'
 import * as queries from './linearQueries'
 
 type PullIdentity = Pick<PullRequest, 'url' | 'headBranch' | 'title'>

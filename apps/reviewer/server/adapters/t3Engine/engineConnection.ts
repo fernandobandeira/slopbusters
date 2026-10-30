@@ -22,7 +22,7 @@ import {
   T3_ENGINE_PING_TIMEOUT_MS,
   T3_ENGINE_REQUEST_TIMEOUT_MS,
   T3_ENGINE_TOKEN_REFRESH_MARGIN_MS,
-} from '../../limits'
+} from './limits'
 import { EngineUnreachableError, findRunningEngine, type RunningEngine } from './engineLocation'
 import { pairWithEngine, type EngineAccess } from './enginePairing'
 

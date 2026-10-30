@@ -3,7 +3,7 @@ import type { GroundingState } from '../../../shared/domain/grounding'
 import type { PanelReviewer } from '../../../shared/domain/panel'
 import type { PanelPending } from '../../../shared/domain/panelSession'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
-import { MAX_GROUNDING_TURNS } from '../../limits'
+import { MAX_GROUNDING_TURNS } from './limits'
 import { layersWithoutDiffs } from './panelReview'
 
 /**

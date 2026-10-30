@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile, lstat } from 'node:fs/promises
 import { dirname, join } from 'node:path'
 import type { PullRequest } from '../../shared/domain/types'
 import type { GandalfTask, GandalfTurn } from '../../shared/domain/gandalf'
-import { MAX_FILE_BYTES, MAX_GANDALF_CHANGED_FILES } from '../limits'
+import { MAX_FILE_BYTES } from '../limits'
 import { UserError } from '../errors'
 import { CONFLICT_MARKER, changesInCopy, currentText } from './conflictHarvest'
 import { mergeContext, viewsDirectory, type MergeContext } from './conflictMergeContext'
@@ -14,6 +14,9 @@ import { BaseAdvancedError, readConflictRevision, verifyConflictRevision } from 
 import { conflictIndex } from './conflictIndex'
 import { GANDALF_IDENTITY, type GitIdentity } from './gitIdentity'
 import { createConflictChoices } from './conflictChoices'
+
+/** Files one turn may change; more means the agent rewrote the merge rather than resolving it. */
+const MAX_GANDALF_CHANGED_FILES = 100
 
 export interface ConflictSnapshot {
   /** Changes whenever the merge's files or index change. */

@@ -18,7 +18,7 @@ import type { SourceRepository } from '../../adapters/sourceRepository'
 import { loadOriginals } from './originals'
 import { ReviewNotFoundError } from '../../adapters/store'
 import { createCache } from '../../cache'
-import { MAX_REVISION_CACHE_ENTRIES } from '../../limits'
+import { MAX_REVISION_CACHE_ENTRIES } from './limits'
 import type { PullRevision } from '../../../shared/domain/updates'
 import { inboxStackSummaries, createStackService } from './stacks'
 

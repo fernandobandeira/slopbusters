@@ -22,7 +22,7 @@ import {
   PROVIDER_TIMEOUT_MS,
   T3_ENGINE_TURN_MARGIN_MS,
   T3_ENGINE_TURN_START_TIMEOUT_MS,
-} from '../../limits'
+} from './limits'
 import { copyForInspection, listInspectionFiles } from '../inspectionCopy'
 import { CommandTimeoutError } from '../process'
 import { EngineDisconnectedError, type EngineConnection } from './engineConnection'

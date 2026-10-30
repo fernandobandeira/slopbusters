@@ -19,7 +19,7 @@ import {
   MAX_PANEL_HISTORY_CHARS,
   MAX_PANEL_LAYER_EVIDENCE_CHARS,
   PANEL_REVIEW_TIMEOUT_MS,
-} from '../../limits'
+} from './limits'
 import { reviewEvidence } from '../../reviewSnapshot'
 import { transferInstructions } from '../transferPrompt'
 import { pullName, sourceInstructions, ticketInstructions } from '../reviewPrompts'
