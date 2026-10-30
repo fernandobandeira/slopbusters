@@ -53,6 +53,10 @@ export function useReviewLaunch({
   return {
     start,
     starting,
+    /** Show a Linus review started elsewhere, such as by the panel picker. */
+    open: (id: string) => {
+      setLaunched({ repository, id })
+    },
     linusSession: launched ?? restored.session,
     closeLinus: () => {
       const closing = launched ?? restored.session

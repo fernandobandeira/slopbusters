@@ -16,7 +16,8 @@ export function LinusRecommendationBadge({
   const stale = recommendation.headSha !== headSha
   const split = recommendation.verdict === 'stack' || recommendation.verdict === 'separate'
   const count = recommendation.recommendationCount
-  const summary = `Linus: ${count} recommendation${count === 1 ? '' : 's'}. ${verdictLabels[recommendation.verdict]}.`
+  const waiting = recommendation.panel === 'waiting'
+  const summary = `Linus: ${count} recommendation${count === 1 ? '' : 's'}. ${verdictLabels[recommendation.verdict]}.${waiting ? ' The panel is waiting on you.' : ''}`
   const revision = stale ? ' This PR changed after Linus reviewed it.' : ''
   return (
     <Button
@@ -30,6 +31,7 @@ export function LinusRecommendationBadge({
       <ReviewerFace name="Linus" src={personaFaceSrc('linus', 'neutral')} size={18} />
       {split && <span>Split</span>}
       <span className="tabular-nums">{count}</span>
+      {waiting && <span className="linus-panel-waiting">Panel waiting</span>}
       {stale && <History size={12} className="muted" aria-hidden="true" />}
     </Button>
   )

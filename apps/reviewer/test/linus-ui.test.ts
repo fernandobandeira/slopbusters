@@ -17,6 +17,8 @@ vi.mock('../src/features/linus/useLinusSession', () => ({
     busy: false,
     error: '',
     act: vi.fn(),
+    sendToPanel: vi.fn(),
+    askAgain: vi.fn(),
     reload: vi.fn(),
   }),
 }))

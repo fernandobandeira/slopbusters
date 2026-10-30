@@ -22,9 +22,16 @@ export function linusRouter({ linusJobs, store }: Services) {
     if (new Set(body.urls).size !== body.urls.length)
       throw new UserError('Select each PR only once.')
     response.status(202)
-    return linusJobs.start(body.repository, body.urls)
+    return linusJobs.start(body.repository, body.urls, {
+      thenPanel: body.thenPanel,
+      guidance: body.guidance,
+    })
   })
   handle(router, routes.getLinus, ({ params }) => linusJobs.get(params.id))
+  handle(router, routes.startLinusPanel, ({ params, body }, _request, response) => {
+    response.status(202)
+    return linusJobs.startPanel(params.id, body.url)
+  })
   handle(router, routes.continueLinus, ({ params }, _request, response) => {
     response.status(202)
     return linusJobs.continue(params.id)

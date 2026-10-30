@@ -127,6 +127,10 @@ export function createServices(options: ReviewerServerOptions) {
     openRepository,
     loadPull: pulls.fetchPull,
     context: tickets.contextForPull,
+    // The panel is composed below; Linus only starts one once a review has run.
+    panels: {
+      start: (repository, urls, reviewers) => panelJobs.start(repository, urls, reviewers),
+    },
   })
   const bobJobs = new BobJobs({
     store,

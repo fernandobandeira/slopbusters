@@ -8,6 +8,7 @@ import {
 } from '../../../shared/domain/panel'
 
 const SELECTION_KEY = 'slopbusters:panel-reviewers'
+const LINUS_FIRST_KEY = 'slopbusters:panel-linus-first'
 const providers = [Provider.codex, Provider.claude] as const
 
 /** A reviewer the user picked, and the providers to run it on; none means its default ones. */
@@ -46,6 +47,23 @@ export function savedPanelSelection(): PanelChoice[] {
 export function savePanelSelection(selection: PanelChoice[]) {
   try {
     localStorage.setItem(SELECTION_KEY, JSON.stringify(selection))
+  } catch {
+    /* The picker still works without browser storage. */
+  }
+}
+
+/** Whether the author last asked Linus to decide on a split before the panel reviews. */
+export function savedLinusFirst(): boolean {
+  try {
+    return localStorage.getItem(LINUS_FIRST_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function saveLinusFirst(linusFirst: boolean) {
+  try {
+    localStorage.setItem(LINUS_FIRST_KEY, String(linusFirst))
   } catch {
     /* The picker still works without browser storage. */
   }

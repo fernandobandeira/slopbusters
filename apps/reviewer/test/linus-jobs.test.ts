@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LinusJobs } from '../server/features/linus/linusJobs'
+import { UserError } from '../server/errors'
 import { ReviewerStore } from '../server/adapters/store'
 import { fetchPull } from '../server/features/pulls/github'
 import {
@@ -12,6 +13,7 @@ import {
 } from '../server/features/linus/linusReview'
 import { Provider } from '../shared/domain/types'
 import type { LinusAdvice } from '../shared/domain/linus'
+import type { PanelSeatRequest } from '../shared/domain/panel'
 import { fixturePull } from './fixtures/pull'
 import { recordingTurns } from './fixtures/turns'
 
@@ -249,5 +251,109 @@ describe('dual Linus review sessions', () => {
     })
     expect(jobs.latest(repository)?.status).toBe('cancelled')
     expect(store.getLinusSession('interrupted')?.status).toBe('cancelled')
+  })
+})
+
+const reviewers: PanelSeatRequest[] = [
+  'unclebob',
+  { id: 'terminator', providers: [Provider.claude] },
+]
+const split: LinusAdvice = {
+  ...advice,
+  verdict: 'stack',
+  layers: [
+    { title: 'Adapter', reason: 'Stands alone', dependsOn: [], verification: 'Unit tests' },
+    { title: 'Feature', reason: 'Uses it', dependsOn: [1], verification: 'Integration' },
+  ],
+  steps: [{ text: 'Two changes.', emotion: 'angry', target: 'diff', reference: 'h1' }],
+}
+function withPanels() {
+  const start = vi.fn((repository: string, urls: string[]) =>
+    Promise.resolve({ id: `panel-${String(urls.length)}`, repository, urls } as never),
+  )
+  jobs = new LinusJobs({
+    store,
+    turns: recordingTurns().turns,
+    staticDirectory: directory,
+    panels: { start },
+  })
+  return start
+}
+async function completed(session: { id: string }) {
+  await vi.waitFor(() => {
+    expect(jobs.get(session.id).status).toBe('complete')
+  })
+  return jobs.get(session.id)
+}
+
+describe('the panel that follows Linus', () => {
+  it('sends a PR Linus would keep straight on to the panel and records which one', async () => {
+    const start = withPanels()
+    const session = jobs.start(repository, [fixturePull().url], { thenPanel: { reviewers } })
+
+    const done = await completed(session)
+
+    expect(start).toHaveBeenCalledWith(repository, [fixturePull().url], reviewers)
+    expect(done.results[0]).toMatchObject({ panelSessionId: 'panel-1' })
+    expect(store.linusRecommendations(repository)[0]).toMatchObject({ panel: 'started' })
+  })
+
+  it('holds a PR Linus would split until the author sends it on anyway', async () => {
+    const start = withPanels()
+    vi.mocked(reconcileWithLinus).mockResolvedValue(split)
+    const session = jobs.start(repository, [fixturePull().url], { thenPanel: { reviewers } })
+    const done = await completed(session)
+    expect(start).not.toHaveBeenCalled()
+    expect(done.results[0]?.panelSessionId).toBeUndefined()
+    expect(store.linusRecommendations(repository)[0]).toMatchObject({ panel: 'waiting' })
+
+    const sent = await jobs.startPanel(session.id, fixturePull().url)
+
+    expect(start).toHaveBeenCalledWith(repository, [fixturePull().url], reviewers)
+    expect(sent.results[0]?.panelSessionId).toBe('panel-1')
+    expect(store.getLinusSession(session.id)?.results[0]?.panelSessionId).toBe('panel-1')
+    expect(store.linusRecommendations(repository)[0]).toMatchObject({ panel: 'started' })
+  })
+
+  it('keeps a panel that would not start as the result’s error, for the author to retry', async () => {
+    const start = withPanels()
+    start.mockRejectedValueOnce(
+      new UserError('Finish or cancel the current panel review first.', 409),
+    )
+    const session = jobs.start(repository, [fixturePull().url], { thenPanel: { reviewers } })
+
+    const done = await completed(session)
+
+    expect(done.results[0]).toMatchObject({
+      panelError: 'Finish or cancel the current panel review first.',
+    })
+    expect(store.linusRecommendations(repository)[0]).toMatchObject({ panel: 'waiting' })
+    await expect(jobs.startPanel(session.id, fixturePull().url)).resolves.toMatchObject({
+      results: [expect.objectContaining({ panelSessionId: 'panel-1' })],
+    })
+  })
+})
+
+describe('what the author tells Linus', () => {
+  it('passes the author’s guidance to both reviewers and the reconciliation', async () => {
+    const guidance = 'The adapter ships alone next week; keep it in this PR.'
+    const session = jobs.start(repository, [fixturePull().url], { guidance })
+
+    const done = await completed(session)
+
+    expect(done.guidance).toBe(guidance)
+    for (const [request] of vi.mocked(reviewWithLinus).mock.calls)
+      expect(request.guidance).toBe(guidance)
+    expect(vi.mocked(reconcileWithLinus).mock.calls[0]?.[0].guidance).toBe(guidance)
+  })
+
+  it('refuses to send a PR on without a panel to send it to', () => {
+    expect(() =>
+      jobs.start(repository, [fixturePull().url], { thenPanel: { reviewers: ['unclebob'] } }),
+    ).toThrow('The review panel is not available here.')
+    const plain = jobs.start(repository, [fixturePull().url])
+    return expect(jobs.startPanel(plain.id, fixturePull().url)).rejects.toThrow(
+      'Linus was not asked to send this PR on to the panel.',
+    )
   })
 })

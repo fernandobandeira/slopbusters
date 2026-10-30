@@ -1,6 +1,6 @@
 import * as routes from '../../../shared/api'
 import { useEffect, useState } from 'react'
-import type { LinusSession } from '../../../shared/domain/linus'
+import type { LinusSession, LinusThenPanel } from '../../../shared/domain/linus'
 import { call, message } from '../../lib/api'
 
 export function useLinusSession(repository: string, sessionId?: string) {
@@ -63,27 +63,56 @@ export function useLinusSession(repository: string, sessionId?: string) {
     }
   }, [runningId])
 
-  async function act(action: 'start' | 'retry' | 'continue' | 'cancel', urls?: string[]) {
-    if (busy) return
+  /** Run one request on the review while the companion shows it as busy. */
+  async function run(request: () => Promise<LinusSession>): Promise<LinusSession | undefined> {
+    if (busy) return undefined
     setBusy(true)
     setError('')
     try {
-      const params = { id: session?.id ?? '' }
-      const next =
-        action === 'start'
-          ? await call(routes.startLinus, { body: { repository, urls: urls ?? [] } })
-          : action === 'cancel'
-            ? await call(routes.cancelLinus, { params })
-            : action === 'retry'
-              ? await call(routes.retryLinus, { params })
-              : await call(routes.continueLinus, { params })
-      setSession(next)
-      setActiveId(next.id)
+      return await request()
     } catch (cause) {
       setError(message(cause))
+      return undefined
     } finally {
       setBusy(false)
     }
+  }
+  async function act(action: 'retry' | 'continue' | 'cancel') {
+    const params = { id: session?.id ?? '' }
+    const next = await run(() =>
+      action === 'cancel'
+        ? call(routes.cancelLinus, { params })
+        : action === 'retry'
+          ? call(routes.retryLinus, { params })
+          : call(routes.continueLinus, { params }),
+    )
+    if (next) {
+      setSession(next)
+      setActiveId(next.id)
+    }
+  }
+  /** Send a reviewed PR on to the panel that was to follow Linus, whatever he said. */
+  async function sendToPanel(id: string, url: string): Promise<LinusSession | undefined> {
+    const next = await run(() => call(routes.startLinusPanel, { params: { id }, body: { url } }))
+    if (next && next.id === session?.id) setSession(next)
+    return next
+  }
+  /** Ask Linus about the PR again with the author's guidance; the same panel follows. */
+  async function askAgain(
+    url: string,
+    guidance: string,
+    thenPanel?: LinusThenPanel,
+  ): Promise<LinusSession | undefined> {
+    const next = await run(() =>
+      call(routes.startLinus, {
+        body: { repository, urls: [url], guidance, ...(thenPanel ? { thenPanel } : {}) },
+      }),
+    )
+    if (next) {
+      setSession(next)
+      setActiveId(next.id)
+    }
+    return next
   }
   return {
     session,
@@ -91,6 +120,8 @@ export function useLinusSession(repository: string, sessionId?: string) {
     busy,
     error,
     act,
+    sendToPanel,
+    askAgain,
     reload: () => {
       setRefresh((value) => value + 1)
     },

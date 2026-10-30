@@ -26,6 +26,8 @@ export interface ReviewSession<Advice> {
   pending?: PendingReview<Advice>
   error?: string
   createdAt: string
+  /** What the author asked the reviewer to weigh, when asking again. */
+  guidance?: string
 }
 
 /** A running or partial review holds its persona until the user finishes or cancels it. */

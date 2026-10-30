@@ -19,6 +19,7 @@ import {
   type LinusSession,
   type LinusStep,
   type LinusReplayRequest,
+  type LinusThenPanel,
 } from '../../../shared/domain/linus'
 import {
   Priority,
@@ -35,6 +36,7 @@ import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { diffItems } from '../review/diff/diffItems'
 import { useReviewerTheme } from '../../app/ThemeProvider'
 import { linusReviewTurns } from './linusReviewTurns'
+import { LinusPanelDecision } from './LinusPanelDecision'
 import { useLinusSession } from './useLinusSession'
 import { call, message } from '../../lib/api'
 import { reviewPath } from '../../lib/routes'
@@ -200,6 +202,8 @@ export function LinusCompanion({
   currentPull,
   replayRequest,
   onSessionUpdate,
+  onSessionStarted,
+  onOpenPanel,
   sessionId,
   renderSessionCard,
   onClose,
@@ -209,11 +213,18 @@ export function LinusCompanion({
   currentPull?: PullRequest
   replayRequest?: LinusReplayRequest
   onSessionUpdate?: () => void
+  /** Linus started again on a PR, with the author's guidance: show that review. */
+  onSessionStarted?: (sessionId: string) => void
+  /** Open the panel that followed Linus on a PR. */
+  onOpenPanel?: (url: string, sessionId: string) => void
   sessionId?: string
   renderSessionCard?: (sessionId: string) => ReactNode
   onClose?: () => void
 }) {
-  const { session, loading, busy, error, act, reload } = useLinusSession(repository, sessionId)
+  const { session, loading, busy, error, act, reload, sendToPanel, askAgain } = useLinusSession(
+    repository,
+    sessionId,
+  )
   const [open, setOpen] = useState(Boolean(sessionId || replayRequest))
   const [cursor, setCursor] = useState<{ sessionId: string; index: number }>()
   const [hiddenEvidenceTurn, setHiddenEvidenceTurn] = useState<string>()
@@ -221,10 +232,16 @@ export function LinusCompanion({
   const [copyFallback, setCopyFallback] = useState(false)
   const copyState = copyFallback ? 'fallback' : clipboardState
   const [copyText, setCopyText] = useState('')
-  const [replayed, setReplayed] = useState<{ request: LinusReplayRequest; result: LinusResult }>()
+  const [replayed, setReplayed] = useState<{
+    request: LinusReplayRequest
+    result: LinusResult
+    thenPanel?: LinusThenPanel
+  }>()
   const [replayError, setReplayError] = useState<{ request: LinusReplayRequest; message: string }>()
   const replayMessage = replayError?.request === replayRequest ? replayError?.message : undefined
   const savedResult = replayed?.request === replayRequest ? replayed?.result : undefined
+  const thenPanel = savedResult ? replayed?.thenPanel : session?.thenPanel
+  const decisionSessionId = savedResult ? replayRequest?.sessionId : session?.id
   const replayLoading = Boolean(replayRequest && !savedResult && !replayMessage)
   const reviewId = savedResult
     ? `saved:${replayRequest!.sessionId}:${savedResult.pull.url}`
@@ -289,7 +306,7 @@ export function LinusCompanion({
         if (controller.signal.aborted) return
         const result = saved.results.find((item) => item.pull.url === replayRequest.url)
         if (!result) throw new Error('Saved recommendations for this PR are no longer available.')
-        setReplayed({ request: replayRequest, result })
+        setReplayed({ request: replayRequest, result, thenPanel: saved.thenPanel })
         setReplayError(undefined)
         setCursor({ sessionId: `saved:${saved.id}:${result.pull.url}`, index: 0 })
         setHiddenEvidenceTurn(undefined)
@@ -339,6 +356,17 @@ export function LinusCompanion({
     const text = recommendationsPrompt(completed ? [completed] : results)
     setCopyText(text)
     setCopyFallback(!(await copyClipboard(text)))
+  }
+  async function sendOn(result: LinusResult) {
+    if (!decisionSessionId) return
+    const next = await sendToPanel(decisionSessionId, result.pull.url)
+    const sent = next?.results.find((item) => item.pull.url === result.pull.url)
+    if (sent && savedResult && replayed)
+      setReplayed({ ...replayed, result: sent, thenPanel: next?.thenPanel })
+  }
+  async function askLinusAgain(result: LinusResult, guidance: string) {
+    const next = await askAgain(result.pull.url, guidance, thenPanel)
+    if (next) onSessionStarted?.(next.id)
   }
   return (
     <>
@@ -476,6 +504,17 @@ export function LinusCompanion({
                       </Button>
                     </div>
                   </div>
+                  {thenPanel && (
+                    <LinusPanelDecision
+                      key={`${decisionSessionId ?? ''}:${turn.result.pull.url}`}
+                      result={turn.result}
+                      thenPanel={thenPanel}
+                      busy={busy}
+                      onOpenPanel={(panelId) => onOpenPanel?.(turn.result.pull.url, panelId)}
+                      onSendOn={() => void sendOn(turn.result)}
+                      onAskAgain={(guidance) => void askLinusAgain(turn.result, guidance)}
+                    />
+                  )}
                   <div className="linus-actions linus-continue">
                     <ContinueLinus sessionId={activitySessionId} url={turn.result.pull.url} />
                   </div>

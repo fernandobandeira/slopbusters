@@ -101,6 +101,24 @@
   color: var(--primary);
   font-size: 11px;
 }
+.panel-linus-first {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.panel-linus-first:hover {
+  background: var(--accent);
+}
+.panel-linus-first:has(input:checked) {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+.panel-linus-first input {
+  margin-top: 6px;
+}
 .panel-faces {
   display: flex;
   align-items: center;

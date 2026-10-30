@@ -9,11 +9,15 @@ import type { Teammate } from '../../../shared/domain/teammates'
 import type { Provider } from '../../../shared/domain/types'
 import { call, message } from '../../lib/api'
 import { useApiQuery } from '../../lib/useApiQuery'
+import { ReviewerFace } from '../../components/ReviewerFace'
+import { personaFaceSrc } from '../../lib/reviewerFaces'
 import { CandidateRow } from './CandidateRow'
 import {
   panelCandidates,
   resolveChoices,
+  savedLinusFirst,
   savedPanelSelection,
+  saveLinusFirst,
   savePanelSelection,
   toggleProvider,
   toggleReviewer,
@@ -28,6 +32,7 @@ export function PanelPicker({
   pull,
   provider,
   onOpen,
+  onLinus,
   openOnMount = false,
   onClose,
 }: {
@@ -36,10 +41,12 @@ export function PanelPicker({
   /** The primary model's provider; teammates need their skill installed for it. */
   provider?: Provider
   onOpen: (sessionId: string) => void
+  /** Linus went first instead: the panel follows his verdict. */
+  onLinus?: (sessionId: string) => void
   openOnMount?: boolean
   onClose?: () => void
 }) {
-  const start = usePanelStart({ repository, url: pull.url, onOpen })
+  const start = usePanelStart({ repository, url: pull.url, onOpen, onLinus })
   return (
     <PanelPickerPopover
       label={`Ask the review panel about PR #${String(pull.number)}`}
@@ -128,9 +135,12 @@ export function PanelPickerPopover({
 
 /** What a panel start reports: whether it started, while it starts, and why it did not. */
 export interface PanelStart {
-  run: (reviewers: Required<PanelChoice>[]) => Promise<boolean>
+  /** Start the reviewers, or Linus first so that only the PRs he would keep as one go on. */
+  run: (reviewers: Required<PanelChoice>[], linusFirst: boolean) => Promise<boolean>
   starting: boolean
   error: string
+  /** Whether Linus can go first here. */
+  linusFirst?: boolean
 }
 
 /** Pick the reviewers and their providers, then start them; shared by one PR and several. */
@@ -156,6 +166,12 @@ function PickerBody({
   start: PanelStart
   onStarted: () => void
 }) {
+  const [linusFirst, setLinusFirst] = useState(savedLinusFirst)
+  const askLinus = Boolean(start.linusFirst) && linusFirst
+  const chooseLinusFirst = (next: boolean) => {
+    setLinusFirst(next)
+    saveLinusFirst(next)
+  }
   return (
     <>
       <Popover.Title className="panel-picker-title">Who should review {subject}?</Popover.Title>
@@ -184,6 +200,7 @@ function PickerBody({
       <Link className="panel-manage" to="/settings">
         Add or edit teammates in Settings
       </Link>
+      {start.linusFirst && <LinusFirstChoice checked={linusFirst} onChange={chooseLinusFirst} />}
       {!provider && <p className="muted">Choose your primary model in Settings first.</p>}
       {start.error && (
         <p role="alert" className="error-text">
@@ -194,15 +211,44 @@ function PickerBody({
         size="sm"
         disabled={!provider || !chosen.length || start.starting}
         onClick={() => {
-          void start.run(chosen).then((started) => {
+          void start.run(chosen, askLinus).then((started) => {
             if (started) onStarted()
           })
         }}
       >
         {start.starting && <LoaderCircle size={13} className="animate-spin" />}
-        {startLabel(chosen)}
+        {askLinus ? `Ask Linus, then ${startLabel(chosen).toLowerCase()}` : startLabel(chosen)}
       </Button>
     </>
+  )
+}
+
+/** Whether Linus decides on a split before the panel starts. */
+function LinusFirstChoice({
+  checked,
+  onChange,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label className="panel-linus-first">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => {
+          onChange(event.target.checked)
+        }}
+      />
+      <ReviewerFace name="Linus" src={personaFaceSrc('linus', 'neutral')} size={28} />
+      <span className="panel-candidate-text">
+        <strong>Ask Linus first</strong>
+        <span className="muted">
+          He decides whether each PR should be split. One he would keep goes straight to the panel;
+          one he would split waits for you.
+        </span>
+      </span>
+    </label>
   )
 }
 
@@ -220,17 +266,26 @@ function usePanelStart({
   repository,
   url,
   onOpen,
+  onLinus,
 }: {
   repository: string
   url: string
   onOpen: (sessionId: string) => void
+  onLinus?: (sessionId: string) => void
 }): PanelStart {
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
-  async function run(reviewers: PanelChoice[]): Promise<boolean> {
+  async function run(reviewers: PanelChoice[], linusFirst: boolean): Promise<boolean> {
     setStarting(true)
     setError('')
     try {
+      if (linusFirst && onLinus) {
+        const linus = await call(routes.startLinus, {
+          body: { repository, urls: [url], thenPanel: { reviewers } },
+        })
+        onLinus(linus.id)
+        return true
+      }
       const session = await call(routes.startPanel, {
         body: { repository, urls: [url], reviewers },
       })
@@ -247,5 +302,5 @@ function usePanelStart({
       setStarting(false)
     }
   }
-  return { run, starting, error }
+  return { run, starting, error, linusFirst: Boolean(onLinus) }
 }

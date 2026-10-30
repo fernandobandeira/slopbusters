@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import type { OrganizationPreferences } from './preferences'
+import type { PanelSeatRequest } from './panel'
+import type { PendingReview, ReviewResult, ReviewSession } from './reviewSession'
 import type { PullRequest } from './types'
 
 export const linusTourStepLimit = 3
@@ -44,31 +45,33 @@ export const adviceSchema = z
 
 export type LinusAdvice = z.infer<typeof adviceSchema>
 export type LinusStep = LinusAdvice['steps'][number]
-export interface LinusResult {
-  pull: PullRequest
-  fingerprint: string
-  advice: LinusAdvice
-  reviewers: OrganizationPreferences[]
+export interface LinusResult extends ReviewResult<LinusAdvice> {
+  /** The panel Linus sent the PR on to, when he was asked to go first. */
+  panelSessionId?: string
+  /** Why the panel did not start after Linus would keep the PR as one. */
+  panelError?: string
 }
-export interface LinusPending {
-  pull: PullRequest
-  fingerprint: string
-  context?: string
-  reviews: { model: OrganizationPreferences; advice?: LinusAdvice; error?: string }[]
+export type LinusPending = PendingReview<LinusAdvice>
+/** The panel to start on each PR after Linus reviews it, when he is asked to go first. */
+export interface LinusThenPanel {
+  reviewers: PanelSeatRequest[]
 }
-export interface LinusSession {
-  id: string
-  repository: string
-  urls: string[]
-  primary: OrganizationPreferences
-  companion: OrganizationPreferences
-  status: 'running' | 'partial' | 'complete' | 'failed' | 'cancelled'
-  progress: string
+export interface LinusSession extends ReviewSession<LinusAdvice> {
   results: LinusResult[]
-  pending?: LinusPending
-  error?: string
-  createdAt: string
+  /**
+   * Set when the panel asked Linus first: a PR he would keep as one goes straight to the panel,
+   * and one he would split waits for the author's call.
+   */
+  thenPanel?: LinusThenPanel
 }
+
+/** Whether the panel goes ahead on its own after this verdict, when Linus goes first. */
+export function panelProceeds(advice: Pick<LinusAdvice, 'verdict'>): boolean {
+  return advice.verdict === 'keep'
+}
+
+/** What the panel asked to follow Linus is doing on a reviewed PR. */
+export type LinusPanelState = 'started' | 'waiting'
 
 export interface LinusRecommendation {
   sessionId: string
@@ -78,6 +81,8 @@ export interface LinusRecommendation {
   headSha: string
   verdict: LinusAdvice['verdict']
   recommendationCount: number
+  /** Set when the panel was asked to follow Linus on this PR. */
+  panel?: LinusPanelState
 }
 
 export interface LinusReplayRequest {

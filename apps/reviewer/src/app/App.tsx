@@ -593,6 +593,14 @@ export function App() {
             currentPull={pull}
             replayRequest={activeLinusReplay}
             onSessionUpdate={refreshLinus}
+            onSessionStarted={(id) => {
+              setLinusReplay(undefined)
+              reviewLaunch.open(id)
+            }}
+            onOpenPanel={(url, id) => {
+              activePanels.reload()
+              openPanel(url, id)
+            }}
           />
         )}
         {repository && gandalf?.repository === repository && route.kind === 'inbox' && (

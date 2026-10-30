@@ -27,6 +27,7 @@ const job = {
   act: vi.fn(),
   reload: vi.fn(),
 }
+const linusJob = { ...job, sendToPanel: vi.fn(), askAgain: vi.fn() }
 const recommendation = {
   sessionId: 'saved-linus',
   createdAt: '',
@@ -113,7 +114,7 @@ beforeEach(() => {
     reload: vi.fn(),
   }))
   vi.mocked(useBobSession).mockReturnValue(job)
-  vi.mocked(useLinusSession).mockReturnValue(job)
+  vi.mocked(useLinusSession).mockReturnValue(linusJob)
   vi.mocked(usePanelSession).mockReturnValue({ ...job, replace: vi.fn() })
   vi.mocked(call).mockImplementation((route) => {
     if (route === routes.startPanel || route === routes.startLinus)

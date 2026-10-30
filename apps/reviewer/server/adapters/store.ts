@@ -230,7 +230,9 @@ export class ReviewerStore {
         json_extract(result.value, '$.pull.number') AS number,
         json_extract(result.value, '$.pull.headSha') AS head_sha,
         json_extract(result.value, '$.advice.verdict') AS verdict,
-        json_array_length(result.value, '$.advice.steps') AS recommendation_count
+        json_array_length(result.value, '$.advice.steps') AS recommendation_count,
+        json_type(sessions.session, '$.thenPanel') IS NOT NULL AS then_panel,
+        json_extract(result.value, '$.panelSessionId') AS panel_session_id
       FROM linus_sessions AS sessions, json_each(sessions.session, '$.results') AS result
       WHERE sessions.repository = ?
       ORDER BY sessions.created_at DESC, sessions.rowid DESC
@@ -249,6 +251,7 @@ export class ReviewerStore {
           headSha: String(row.head_sha),
           verdict: String(row.verdict) as LinusRecommendation['verdict'],
           recommendationCount: Number(row.recommendation_count),
+          ...(row.then_panel ? { panel: row.panel_session_id ? 'started' : 'waiting' } : {}),
         })
     }
     return [...latest.values()]

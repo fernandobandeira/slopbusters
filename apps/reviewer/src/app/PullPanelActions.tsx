@@ -17,6 +17,7 @@ export function PullPanelActions({
   provider,
   review,
   onOpen,
+  onLinus,
   onSettled,
   asking = false,
   onDismissAsk,
@@ -26,6 +27,8 @@ export function PullPanelActions({
   provider?: Provider
   review?: PanelReviewSummary
   onOpen: (sessionId: string) => void
+  /** Linus went first: open his review, which sends the PR on to the panel. */
+  onLinus?: (sessionId: string) => void
   /** A panel on this PR stopped running, so its saved result may have changed. */
   onSettled?: () => void
   /** Open the picker straight away, as when the PR list asked for the panel. */
@@ -81,6 +84,7 @@ export function PullPanelActions({
                 active.reload()
                 onOpen(sessionId)
               }}
+              onLinus={onLinus}
               openOnMount={asking}
               onClose={onDismissAsk}
             />

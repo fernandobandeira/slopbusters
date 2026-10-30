@@ -49,7 +49,7 @@ describe('Requested Linus session', () => {
     await waitFor(() => {
       expect(hook.result.current.session?.id).toBe('first')
     })
-    await act(() => hook.result.current.act('start', [url]))
+    await act(() => hook.result.current.askAgain(url, 'Keep the adapter here.'))
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith('/api/linus/next', expect.anything())
     })

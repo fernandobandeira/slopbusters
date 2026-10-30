@@ -6,6 +6,7 @@ import {
   blocksNewReview,
   reviewedPullsLabel,
   type PendingReview,
+  type ReviewResult,
   type ReviewSession,
 } from '../../shared/domain/reviewSession'
 import type { PullRequest } from '../../shared/domain/types'
@@ -15,15 +16,18 @@ import { pullFingerprint } from '../reviewSnapshot'
 import { FlowJobs } from './flows/flowJobs'
 import { failedSeats, reviewSeats } from './flows/panel'
 
-interface ReviewStrategy<Advice extends { limitations: string[] }> {
+interface ReviewStrategy<
+  Advice extends { limitations: string[] },
+  Session extends ReviewSession<Advice>,
+> {
   name: string
   kind: 'bob' | 'linus'
   sessions?: AgentSessions
   models: () => { primary: OrganizationPreferences; companion: OrganizationPreferences }
   skill: () => Promise<string>
-  save: (session: ReviewSession<Advice>) => void
-  get: (id: string) => ReviewSession<Advice> | undefined
-  latest: (repository: string) => ReviewSession<Advice> | undefined
+  save: (session: Session) => void
+  get: (id: string) => Session | undefined
+  latest: (repository: string) => Session | undefined
   loadPull: (url: string) => Promise<PullRequest>
   openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
   /** Evidence about what the PR is meant to do, such as its linked ticket. */
@@ -37,6 +41,7 @@ interface ReviewStrategy<Advice extends { limitations: string[] }> {
     repository?: ReviewCheckout
     observer?: ProviderObserver
     context?: string
+    guidance?: string
   }) => Promise<Advice>
   reconcile: (request: {
     pending: PendingReview<Advice>
@@ -45,16 +50,28 @@ interface ReviewStrategy<Advice extends { limitations: string[] }> {
     signal: AbortSignal
     repository?: ReviewCheckout
     observer?: ProviderObserver
+    guidance?: string
   }) => Promise<Advice>
+  /** What follows a PR's result before it is saved, such as the panel Linus sends it on to. */
+  onResult?: (session: Session, result: Session['results'][number]) => Promise<void>
 }
+
+/** What a session carries beyond the review itself, such as what the author asked for. */
+type SessionExtras<Advice, Session extends ReviewSession<Advice>> = Omit<
+  Session,
+  Exclude<keyof ReviewSession<Advice>, 'guidance'>
+>
 
 /**
  * A panel of two seats running the same skill, one on each model, then a reconciliation on the
  * primary model, for each PR in turn.
  */
-export class DualReviewJobs<Advice extends { limitations: string[] }> {
-  private readonly jobs: FlowJobs<ReviewSession<Advice>>
-  constructor(private strategy: ReviewStrategy<Advice>) {
+export class DualReviewJobs<
+  Advice extends { limitations: string[] },
+  Session extends ReviewSession<Advice> = ReviewSession<Advice>,
+> {
+  private readonly jobs: FlowJobs<Session>
+  constructor(private strategy: ReviewStrategy<Advice, Session>) {
     this.jobs = new FlowJobs({
       save: (session) => {
         this.save(session)
@@ -67,7 +84,11 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     })
   }
 
-  start(repository: string, urls: string[]): ReviewSession<Advice> {
+  start(
+    repository: string,
+    urls: string[],
+    extras: SessionExtras<Advice, Session> = {} as SessionExtras<Advice, Session>,
+  ): Session {
     const { primary, companion } = this.strategy.models()
     const previous = this.latest(repository)
     if (previous && blocksNewReview(previous)) {
@@ -84,7 +105,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
         409,
       )
     }
-    const session: ReviewSession<Advice> = {
+    const base: ReviewSession<Advice> = {
       id: randomUUID(),
       repository,
       urls,
@@ -95,21 +116,22 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
       results: [],
       createdAt: new Date().toISOString(),
     }
+    const session = { ...base, ...extras } as Session
     this.strategy.sessions?.start(session.id, this.strategy.kind, session)
     this.save(session)
     this.launch(session)
     return session
   }
-  get(id: string): ReviewSession<Advice> {
+  get(id: string): Session {
     const session = this.strategy.get(id)
     if (!session) throw new UserError(`This ${this.strategy.name} review is no longer available.`)
     return this.recover(session)
   }
-  latest(repository: string): ReviewSession<Advice> | undefined {
+  latest(repository: string): Session | undefined {
     const session = this.strategy.latest(repository)
     return session && this.recover(session)
   }
-  continue(id: string): ReviewSession<Advice> {
+  continue(id: string): Session {
     const session = this.get(id)
     if (session.status !== 'partial' || !session.pending?.reviews.some((review) => review.advice))
       throw new UserError('There is no partial review to continue.')
@@ -120,7 +142,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     this.launch(session, true)
     return session
   }
-  cancel(id: string): ReviewSession<Advice> {
+  cancel(id: string): Session {
     this.jobs.abort(id)
     const session = this.get(id)
     if (session.status === 'running' || session.status === 'partial') {
@@ -131,7 +153,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     }
     return session
   }
-  retry(id: string): ReviewSession<Advice> {
+  retry(id: string): Session {
     const session = this.get(id)
     if (session.status === 'running' || this.jobs.isRunning(id))
       throw new UserError('Wait for the current review to stop before retrying.')
@@ -148,20 +170,16 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
   async close(): Promise<void> {
     await this.jobs.stop((session) => this.cancel(session.id))
   }
-  private recover(session: ReviewSession<Advice>): ReviewSession<Advice> {
+  private recover(session: Session): Session {
     return this.jobs.recover(
       session,
       'Review interrupted when the app stopped. Completed recommendations are saved.',
     )
   }
-  private launch(session: ReviewSession<Advice>, single = false): void {
+  private launch(session: Session, single = false): void {
     this.jobs.launch(session, (signal) => this.run(session, signal, single))
   }
-  private async run(
-    session: ReviewSession<Advice>,
-    signal: AbortSignal,
-    single: boolean,
-  ): Promise<void> {
+  private async run(session: Session, signal: AbortSignal, single: boolean): Promise<void> {
     const skill = await this.strategy.skill()
     for (let index = session.results.length; index < session.urls.length; index++) {
       signal.throwIfAborted()
@@ -175,7 +193,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     )
   }
   private async reviewNext(request: {
-    session: ReviewSession<Advice>
+    session: Session
     signal: AbortSignal
     skill: string
     single: boolean
@@ -214,6 +232,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
           signal,
           repository,
           observer,
+          guidance: session.guidance,
         })
       const advice = this.strategy.sessions
         ? await this.strategy.sessions.run(
@@ -224,13 +243,15 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
         : await execute()
       this.preserveSourceLimitations(pending, advice)
       signal.throwIfAborted()
-      session.results.push({
+      const result: ReviewResult<Advice> = {
         pull: pending.pull,
         fingerprint: pending.fingerprint,
         advice,
         reviewers: pending.reviews.filter((review) => review.advice).map((review) => review.model),
-      })
+      }
+      session.results.push(result)
       session.pending = undefined
+      await this.strategy.onResult?.(session, result)
       this.save(session)
       return true
     } finally {
@@ -249,7 +270,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     }
   }
   private async reviewPair(request: {
-    session: ReviewSession<Advice>
+    session: Session
     pull: PullRequest
     skill: string
     signal: AbortSignal
@@ -275,6 +296,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
             repository,
             observer,
             context,
+            guidance: session.guidance,
           })
         return this.strategy.sessions
           ? this.strategy.sessions.run(
@@ -299,7 +321,7 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
       })),
     }
   }
-  private canReconcile(session: ReviewSession<Advice>): boolean {
+  private canReconcile(session: Session): boolean {
     const failed = failedSeats(
       session.pending?.reviews ?? [],
       (review) => `${review.model.provider}: ${review.error ?? 'No review returned.'}`,
@@ -324,11 +346,15 @@ export class DualReviewJobs<Advice extends { limitations: string[] }> {
     ))
       if (!advice.limitations.includes(limitation)) advice.limitations.unshift(limitation)
   }
-  private save(session: ReviewSession<Advice>) {
+  /** Save a session changed outside the review flow; the flow saves its own. */
+  protected saveSession(session: Session) {
+    this.save(session)
+  }
+  private save(session: Session) {
     this.strategy.save(session)
     this.strategy.sessions?.sync(this.strategy.kind, session)
   }
-  private progress(session: ReviewSession<Advice>, progress: string): void {
+  private progress(session: Session, progress: string): void {
     this.jobs.progress(session, progress)
   }
 }

@@ -1,9 +1,12 @@
 import { z } from 'zod'
 import { adviceSchema, verdictSchema, type LinusSession } from '../domain/linus'
+import { panelSeatRequestSchema } from '../domain/panel'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, repositoryQuery, pullUrlSchema } from './contract'
 import { pullSchema } from './reviewSchemas'
 
+const thenPanel = z.object({ reviewers: z.array(panelSeatRequestSchema).min(1).max(8) }).strict()
+const guidance = z.string().trim().min(1).max(4000)
 const session = z.object({
   id: z.string(),
   repository: z.string(),
@@ -14,12 +17,16 @@ const session = z.object({
   progress: z.string(),
   createdAt: z.string(),
   error: z.string().optional(),
+  thenPanel: thenPanel.optional(),
+  guidance: z.string().optional(),
   results: z.array(
     z.object({
       pull: pullSchema,
       fingerprint: z.string(),
       advice: adviceSchema,
       reviewers: z.array(organizationSchema),
+      panelSessionId: z.string().optional(),
+      panelError: z.string().optional(),
     }),
   ),
   pending: z
@@ -52,15 +59,30 @@ export const linusRecommendations = defineRoute('GET', '/linus/recommendations',
         headSha: z.string(),
         verdict: verdictSchema,
         recommendationCount: z.number(),
+        panel: z.enum(['started', 'waiting']).optional(),
       }),
     ),
   }),
 })
 export const startLinus = defineRoute('POST', '/linus', {
-  request: repositoryQuery.extend({ urls: z.array(pullUrlSchema).min(1).max(20) }).strict(),
+  request: repositoryQuery
+    .extend({
+      urls: z.array(pullUrlSchema).min(1).max(20),
+      /** Start this panel on each PR Linus would keep as one; the others wait for the author. */
+      thenPanel: thenPanel.optional(),
+      /** What the author wants Linus to weigh, when asking again. */
+      guidance: guidance.optional(),
+    })
+    .strict(),
   response: session,
 })
 export const getLinus = defineRoute('GET', '/linus/:id', { params: idParams, response: session })
+/** Start the panel that was to follow Linus on a PR he would split, as the author decided. */
+export const startLinusPanel = defineRoute('POST', '/linus/:id/panel', {
+  params: idParams,
+  request: z.object({ url: pullUrlSchema }).strict(),
+  response: session,
+})
 export const continueLinus = defineRoute('POST', '/linus/:id/continue', {
   params: idParams,
   response: session,
