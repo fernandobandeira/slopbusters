@@ -27,3 +27,8 @@ export const pullUrlSchema = z
       return false
     }
   }, 'Enter a valid GitHub pull request URL.')
+
+/** `owner/repo#12`. */
+export function pullName(pull: { owner: string; repo: string; number: number }): string {
+  return `${pull.owner}/${pull.repo}#${String(pull.number)}`
+}

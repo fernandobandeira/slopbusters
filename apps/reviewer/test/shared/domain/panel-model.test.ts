@@ -190,6 +190,16 @@ describe('ranking and comments', () => {
     expect(panelCommentBody(fixturePanelFinding())).toContain('Call auditProjectUpdate')
   })
 
+  it('starts a finding’s comment from the grounded plan instead of the reviewer’s suggestion', () => {
+    const body = panelCommentBody(
+      fixturePanelFinding(),
+      'Call auditLog.record once, after the save.',
+    )
+
+    expect(body).toContain('Call auditLog.record once, after the save.')
+    expect(body).not.toContain('Call auditProjectUpdate')
+  })
+
   it('tells a continuing reviewer which of its findings the judge kept and set aside', () => {
     const judged = fixtureJudgeAdvice(['terminator'])
     judged.setAside.push({

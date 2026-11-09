@@ -11,7 +11,7 @@ import { PLANNING_TIMEOUT_MS } from './limits'
 import { reviewEvidence } from '../../reviewSnapshot'
 import { transferInstructions } from '../transferPrompt'
 import type { AgentSessions } from '../agent-sessions/agentSessions'
-import { pullName } from '../reviewPrompts'
+import { pullName } from '../../../shared/domain/pullUrl'
 import type { PanelJobs } from './panelJobs'
 import { untrusted } from './panelReview'
 

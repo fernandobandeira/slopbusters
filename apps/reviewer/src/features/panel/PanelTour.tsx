@@ -14,7 +14,11 @@ import {
   type PanelReviewer,
 } from '../../../shared/domain/panel'
 import type { PanelResult } from '../../../shared/domain/panelSession'
-import { panelFindingMarkdown, panelReviewMarkdown } from '../../../shared/domain/panelMarkdown'
+import {
+  panelBriefMarkdown,
+  panelFindingBrief,
+  panelFindingPlan,
+} from '../../../shared/domain/panelBrief'
 import type { ReviewLocation } from '../../../shared/domain/review'
 import type { Teammate } from '../../../shared/domain/teammates'
 import type { PullRequest, ReviewDraft } from '../../../shared/domain/types'
@@ -69,10 +73,7 @@ export function PanelTour(props: TourProps) {
         <FindingDraftAction result={result} finding={finding} stale={stale} context={context} />
       ) : (
         <div className="finding-actions" key={result.fingerprint}>
-          <CopyButton
-            label="Copy review"
-            text={panelReviewMarkdown(result.advice, props.reviewers)}
-          />
+          <CopyButton label="Copy review" text={panelBriefMarkdown(result, props.reviewers)} />
         </div>
       )}
       <TourControls index={index} count={count} advance={advance} />
@@ -107,9 +108,9 @@ function FindingDraftAction({
   const key = `${result.fingerprint}:${finding.id}`
   const entry = {
     location: anchorLabel(finding.anchor),
-    initialBody: panelCommentBody(finding),
+    initialBody: panelCommentBody(finding, panelFindingPlan(result, finding)),
     disabled: stale || !context.ready,
-    actions: <CopyButton label="Copy" text={panelFindingMarkdown(finding)} />,
+    actions: <CopyButton label="Copy" text={panelFindingBrief(result, finding)} />,
   }
   const id = panelCommentId(result.pull, finding)
   if (!panelCommentsInline(result.pull, finding))

@@ -1,9 +1,9 @@
-import { anchorLabel } from '../../../shared/domain/anchors'
-import { groundingOriginLabels, type GroundingCandidate } from '../../../shared/domain/grounding'
+import type { GroundingCandidate } from '../../../shared/domain/grounding'
+import { fixRules, fixSection } from '../../../shared/domain/panelBrief'
 import type { GateItem } from '../../../shared/domain/panelGate'
+import { pullName } from '../../../shared/domain/pullUrl'
 import type { PullRequest } from '../../../shared/domain/types'
 import type { FixWorktree } from '../../adapters/fixWorktrees'
-import { pullName } from '../reviewPrompts'
 
 /**
  * The first message of a fix thread: the reviewed revision it must start from, the author's
@@ -26,33 +26,6 @@ export function fixSeed(input: {
 }
 
 const rules = [
-  '- Apply only the plans below. Do not change unrelated code, the PR title or description, or other PRs in the stack.',
-  '- A plan is a proposal checked against the code, not a fact. Confirm it in the code first; if it is wrong or incomplete, skip it and say why rather than improvising a different fix.',
-  "- Follow the repository's instructions (AGENTS.md, CLAUDE.md and the like) and the conventions each plan names.",
-  "- After the changes, run the repository's declared lint, build and the tests relevant to what you changed. Install dependencies first if this worktree needs them.",
+  ...fixRules,
   '- Commit the fixes that pass verification on this branch, one commit per independent fix. Never push, never open or update a pull request, and never rewrite history that was there before you.',
 ].join('\n')
-
-function fixSection(
-  item: GateItem,
-  index: number,
-  candidates: readonly GroundingCandidate[],
-): string {
-  const { entry, action } = item
-  const sources = candidates.filter((candidate) => entry.sources.includes(candidate.key))
-  const title = sources[0]?.finding.title ?? entry.id
-  const lines = [`### ${String(index + 1)}. ${title}`, '', `Plan: ${item.plan ?? ''}`]
-  if (entry.question && action.answer)
-    lines.push('', `The author's answer to "${entry.question}": ${action.answer}`)
-  lines.push('', `Why: ${entry.reason}`)
-  if (entry.evidence.length) lines.push(`Evidence: ${entry.evidence.join(', ')}`)
-  if (entry.origin) lines.push(`Origin: ${groundingOriginLabels[entry.origin]}`)
-  lines.push('', 'What the reviewers wrote:')
-  for (const { seat, finding } of sources)
-    lines.push(
-      '',
-      `> **${finding.title}** (${seat}, ${anchorLabel(finding.anchor)})`,
-      ...finding.body.split('\n').map((line) => `> ${line}`),
-    )
-  return lines.join('\n')
-}

@@ -22,7 +22,8 @@ import {
 } from './limits'
 import { reviewEvidence } from '../../reviewSnapshot'
 import { transferInstructions } from '../transferPrompt'
-import { pullName, sourceInstructions, ticketInstructions } from '../reviewPrompts'
+import { sourceInstructions, ticketInstructions } from '../reviewPrompts'
+import { pullName } from '../../../shared/domain/pullUrl'
 
 /** Where a teammate's skill folder is copied in the reviewer's working directory. */
 export const SKILL_FOLDER = '.slopbusters/skill'

@@ -271,9 +271,16 @@ export function panelDraftComment(
   if (!location) throw new Error('This finding belongs in the review summary, not on a line.')
   return findingDraftComment(panelCommentId(pull, finding), pull, location, body)
 }
-/** The comment a finding starts as: a fix to make, or for a decision the question to answer. */
-export function panelCommentBody(finding: PanelFinding): string {
-  return [finding.title, finding.body, finding.tag === 'decision' ? '' : finding.suggestion]
+/**
+ * The comment a finding starts as: a fix to make, or for a decision the question to answer. A
+ * grounded plan, checked against the code, replaces the reviewer's suggestion.
+ */
+export function panelCommentBody(finding: PanelFinding, plan?: string): string {
+  return [
+    finding.title,
+    finding.body,
+    finding.tag === 'decision' ? '' : (plan ?? finding.suggestion),
+  ]
     .filter(Boolean)
     .join('\n\n')
 }

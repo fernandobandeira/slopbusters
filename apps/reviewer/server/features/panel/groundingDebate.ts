@@ -21,7 +21,8 @@ import { GROUNDING_TURN_TIMEOUT_MS, MAX_GROUNDING_SOURCES, MAX_GROUNDING_TURNS }
 import { reviewEvidence } from '../../reviewSnapshot'
 import { transferInstructions } from '../transferPrompt'
 import { debate, unanimousApproval } from '../flows/debate'
-import { pullName, sourceInstructions, ticketInstructions } from '../reviewPrompts'
+import { sourceInstructions, ticketInstructions } from '../reviewPrompts'
+import { pullName } from '../../../shared/domain/pullUrl'
 import { groundingLimitations } from './groundingLimitations'
 import { panelRoster, stackEvidence, teammateSkillFolders, untrusted } from './panelReview'
 
