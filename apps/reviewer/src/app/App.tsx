@@ -546,7 +546,6 @@ export function App() {
                     renderCompanion={({ draft, setDraft, ready, openReview, focusLine }) =>
                       panel.sessionId ? (
                         <PanelCompanion
-                          renderSessionCard={renderSessionCard}
                           key={`${pull.id}:${panel.sessionId}`}
                           sessionId={panel.sessionId}
                           onOpen={panel.open}

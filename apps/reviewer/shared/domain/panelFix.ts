@@ -3,12 +3,6 @@ import type { Anchor } from './anchors'
 import type { PanelFinding } from './panel'
 
 export const fixCheckStatuses = ['applied', 'partial', 'missing', 'wrong'] as const
-export const fixCheckLabels: Record<(typeof fixCheckStatuses)[number], string> = {
-  applied: 'Applied',
-  partial: 'Partly applied',
-  missing: 'Not applied',
-  wrong: 'Applied wrongly',
-}
 
 /** What the other provider's model found when it checked the committed fixes against the plans. */
 export const fixCheckSchema = z.object({
@@ -26,7 +20,6 @@ export const fixCheckSchema = z.object({
   ),
   createdAt: z.string(),
 })
-export type FixCheck = z.infer<typeof fixCheckSchema>
 
 /**
  * The fixes the author sent from one reviewed PR to a T3 Code thread. Saved before the launch so a

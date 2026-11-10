@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, type ReactNode } from 'react'
+import { useEffect, useEffectEvent } from 'react'
 import { Check, CircleAlert, LoaderCircle, X } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
@@ -12,8 +12,7 @@ import { PanelStack } from './PanelStack'
 import { ProviderMark } from './ProviderMark'
 import { reviewerFaceSrc } from '../../lib/reviewerFaces'
 import { useApiQuery } from '../../lib/useApiQuery'
-import { type PanelDraftContext } from './PanelTour'
-import { PanelResultView } from './PanelResultView'
+import { PanelTour, type PanelDraftContext } from './PanelTour'
 import { LocalRoundNotice, OutdatedReview, ReviewAgain } from './ReviewAgain'
 import { usePanelSession } from './usePanelSession'
 import { usePanelTour } from './usePanelTour'
@@ -31,7 +30,6 @@ export function PanelCompanion(
     onOpen: (sessionId: string) => void
     onClose: () => void
     onSessionUpdate?: () => void
-    renderSessionCard?: (sessionId: string) => ReactNode
   },
 ) {
   const job = usePanelSession(context.sessionId)
@@ -75,7 +73,6 @@ export function PanelCompanion(
             <X size={16} />
           </button>
         </header>
-        {job.session && context.renderSessionCard?.(job.session.id)}
         <PanelBody job={job} tour={tour} teammates={teammates} context={context} />
       </div>
       <Portrait session={job.session} tour={tour} teammates={teammates} onClose={context.onClose} />
@@ -109,14 +106,13 @@ function PanelBody({
         <RoundNotice session={session} result={tour.result} context={context} />
       )}
       {session && tour.result && (
-        <PanelResultView
-          session={session}
+        <PanelTour
           result={tour.result}
-          tour={tour}
+          reviewers={session.reviewers}
           teammates={teammates}
+          index={tour.index}
+          advance={tour.advance}
           context={context}
-          replace={job.replace}
-          onOpen={context.onOpen}
         />
       )}
       {session && !tour.finding && (
