@@ -266,7 +266,7 @@ it.each(['gandalf', 'bob', 'linus'] as const)(
 )
 it('names the grounding models the way settings does', () => {
   expect(modelName({ provider: Provider.codex, model: 'gpt-6-astra' })).toBe('Astra 6')
-  expect(modelName({ provider: Provider.claude, model: 'claude-fable-5-1' })).toBe('Fable 5.1')
+  expect(modelName({ provider: Provider.claude, model: 'claude-fable-5-2' })).toBe('Fable 5.2')
 })
 
 it('opens a panel session on its PR with the panel showing, even while it runs', () => {

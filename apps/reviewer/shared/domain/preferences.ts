@@ -49,7 +49,7 @@ export const providerModels: Record<
   },
   [Provider.claude]: {
     review: { model: 'claude-opus-5-5', label: 'Opus 5.5' },
-    judge: { model: 'claude-fable-5-1', label: 'Fable 5.1' },
+    judge: { model: 'claude-fable-5-2', label: 'Fable 5.2' },
   },
 }
 

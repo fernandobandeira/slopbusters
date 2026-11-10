@@ -52,7 +52,7 @@ describe('Linus entry and model settings', () => {
     expect(markup).not.toContain('Companion model')
     expect(markup.match(/class="organization-settings"/g)).toHaveLength(1)
     expect(markup).toContain('Reviews run on Sol 6.1 and Opus 5.5.')
-    expect(markup).toContain('Astra 6 and Fable 5.1 check panel')
+    expect(markup).toContain('Astra 6 and Fable 5.2 check panel')
     expect(markup).not.toContain('<input id=')
   })
 })
