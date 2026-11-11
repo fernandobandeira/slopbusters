@@ -1,4 +1,4 @@
-import { required } from '../../fixtures/bob'
+import { required } from '../../fixtures/required'
 import { describe, expect, it } from 'vitest'
 import { jobsExpression, validateJobsAdvice } from '../../../shared/domain/jobs'
 import { displayMarkdown, linearMarkdown, ticketIdentifierIn } from '../../../shared/domain/tickets'

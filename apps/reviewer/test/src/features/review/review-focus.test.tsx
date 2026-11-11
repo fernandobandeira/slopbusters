@@ -7,8 +7,8 @@ import { useReviewDiff } from '../../../../src/features/review/useReviewDiff'
 import { useReviewFocus } from '../../../../src/features/review/useReviewFocus'
 import { DiffSide, LineKind, Provider, type ReviewDraft } from '../../../../shared/domain/types'
 import { fixturePull } from '../../../fixtures/pull'
-import { fixtureBobFinding } from '../../../fixtures/bob'
-import { required } from '../../../fixtures/bob'
+import { fixtureFinding } from '../../../fixtures/finding'
+import { required } from '../../../fixtures/required'
 
 const context = vi.hoisted(() => ({ contents: new Map(), load: vi.fn(() => Promise.resolve()) }))
 vi.mock('../../../../src/features/review/diff/useFileContext', () => ({
@@ -18,7 +18,7 @@ afterEach(cleanup)
 
 function setup(side = DiffSide.right) {
   const pull = { ...fixturePull(), groupingSource: Provider.codex }
-  let finding = fixtureBobFinding()
+  let finding = fixtureFinding()
   if (side === DiffSide.left) {
     const file = required(pull.files[1])
     const hunk = required(

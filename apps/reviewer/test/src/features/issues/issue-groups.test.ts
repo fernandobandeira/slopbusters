@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TicketSummary } from '../../../../shared/domain/tickets'
 import { issueGroups } from '../../../../src/features/issues/issueGroups'
-import { required } from '../../../fixtures/bob'
+import { required } from '../../../fixtures/required'
 import { fixtureTicket } from '../../../fixtures/tickets'
 
 function issue(identifier: string, changes: Partial<TicketSummary> = {}): TicketSummary {

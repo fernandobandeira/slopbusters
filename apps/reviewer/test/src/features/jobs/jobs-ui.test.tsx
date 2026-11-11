@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TicketMarkdown } from '../../../../src/components/TicketMarkdown'
 import { JobsQuestions } from '../../../../src/features/jobs/JobsQuestions'
-import { required } from '../../../fixtures/bob'
+import { required } from '../../../fixtures/required'
 import { fixtureDescription, fixtureJobsAdvice } from '../../../fixtures/tickets'
 
 afterEach(cleanup)

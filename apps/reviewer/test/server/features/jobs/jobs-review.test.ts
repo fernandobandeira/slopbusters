@@ -12,7 +12,7 @@ import {
 import { TicketReviewJobs } from '../../../../server/features/jobs/ticketReviewJobs'
 import type { Ticket } from '../../../../shared/domain/tickets'
 import { Provider } from '../../../../shared/domain/types'
-import { required } from '../../../fixtures/bob'
+import { required } from '../../../fixtures/required'
 import { fixtureJobsAdvice, fixtureTicket } from '../../../fixtures/tickets'
 import { recordingTurns } from '../../../fixtures/turns'
 

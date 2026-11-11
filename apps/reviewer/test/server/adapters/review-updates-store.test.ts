@@ -1,4 +1,4 @@
-import { required } from '../../fixtures/bob'
+import { required } from '../../fixtures/required'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

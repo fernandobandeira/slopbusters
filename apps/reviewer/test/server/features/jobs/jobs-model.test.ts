@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { foldAnswers, reviewTicket } from '../../../../server/features/jobs/ticketReview'
 import { Provider } from '../../../../shared/domain/types'
-import { required } from '../../../fixtures/bob'
+import { required } from '../../../fixtures/required'
 import { fixtureJobsAdvice, fixtureTicket } from '../../../fixtures/tickets'
 import { recordingTurns } from '../../../fixtures/turns'
 

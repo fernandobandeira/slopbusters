@@ -1,4 +1,4 @@
-import { required } from '../../fixtures/bob'
+import { required } from '../../fixtures/required'
 import { parsePatch } from 'diff'
 import { describe, expect, it } from 'vitest'
 import { splitChangeSections } from '../../../shared/domain/changeSections'

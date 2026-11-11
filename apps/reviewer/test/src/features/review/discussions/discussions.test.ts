@@ -16,7 +16,7 @@ import {
 import { diffItems } from '../../../../../src/lib/diffItems'
 import { restoreDraft } from '../../../../../src/features/review/drafts'
 import { fixturePull } from '../../../../fixtures/pull'
-import { required } from '../../../../fixtures/bob'
+import { required } from '../../../../fixtures/required'
 import { parseFile } from '../../../../../server/features/diff'
 
 function thread(params: { path: string; line: number; side: DiffSide; id: string }): ReviewThread {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { organizePull } from '../../../../server/features/organization/organize'
 import { Provider } from '../../../../shared/domain/types'
-import { required } from '../../../fixtures/bob'
+import { required } from '../../../fixtures/required'
 import { fixturePull } from '../../../fixtures/pull'
 import { recordingTurns } from '../../../fixtures/turns'
 

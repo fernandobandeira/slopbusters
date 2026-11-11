@@ -1,7 +1,7 @@
 import type { BuiltInReviewer } from '../../../shared/domain/panel'
 import { loadReviewSkill } from '../../adapters/reviewSkill'
-import { loadBobSkill } from '../bob/bobReview'
 
+export const uncleBobSkillFiles = ['SKILL.md', 'references/checklist.md', 'references/examples.md']
 export const terminatorSkillFiles = ['SKILL.md', 'references/checklist.md']
 
 /** The instructions of a reviewer Slopbusters ships: bundled in the app, or read from the repo in development. */
@@ -14,7 +14,12 @@ export function loadBuiltInSkill(
   },
 ): Promise<string> {
   if (reviewer === 'unclebob')
-    return loadBobSkill(options.staticDirectory, options.bobSkillDirectory)
+    return loadReviewSkill({
+      staticDirectory: options.staticDirectory,
+      skillDirectory: options.bobSkillDirectory,
+      filename: 'bob-skill.md',
+      files: uncleBobSkillFiles,
+    })
   return loadReviewSkill({
     staticDirectory: options.staticDirectory,
     skillDirectory: options.terminatorSkillDirectory,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { required } from '../../../fixtures/bob'
+import { required } from '../../../fixtures/required'
 import { sectionPull } from '../../../fixtures/sections'
 import { diffItems } from '../../../../src/lib/diffItems'
 import { reviewItems } from '../../../../src/features/review/reviewUpdates'

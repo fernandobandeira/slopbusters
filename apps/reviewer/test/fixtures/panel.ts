@@ -1,8 +1,8 @@
 import type { JudgeAdvice, PanelAdvice, PanelFinding } from '../../shared/domain/panel'
-import { fixtureBobFinding } from './bob'
+import { fixtureFinding } from './finding'
 
 export function fixturePanelFinding(changes: Partial<PanelFinding> = {}): PanelFinding {
-  const { path, hunkId, line, side, ...finding } = fixtureBobFinding()
+  const { path, hunkId, line, side, ...finding } = fixtureFinding()
   return {
     ...finding,
     tag: 'code',

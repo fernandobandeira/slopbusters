@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { required } from '../../../fixtures/bob'
+import { required } from '../../../fixtures/required'
 import { useState } from 'react'
 import { MemoryRouter } from 'react-router'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
