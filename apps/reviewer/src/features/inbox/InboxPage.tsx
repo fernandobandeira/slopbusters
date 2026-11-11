@@ -24,7 +24,6 @@ interface Props {
   inboxLoading: boolean
   statusLoading: boolean
   recommendationsError?: string
-  bobReviewsError?: string
   chips: InboxChip[]
   chipContext: ChipContext
   onChips: (chips: InboxChip[]) => void
@@ -174,18 +173,12 @@ function InboxWarnings({
   inboxLoading,
   statusLoading,
   recommendationsError,
-  bobReviewsError,
 }: Props) {
   return (
     <>
       {recommendationsError && (
         <p role="status" className="inbox-warning">
           Could not load Linus recommendations: {recommendationsError}
-        </p>
-      )}
-      {bobReviewsError && (
-        <p role="status" className="inbox-warning">
-          Could not load saved Uncle Bob reviews: {bobReviewsError}
         </p>
       )}
       {inbox?.warnings?.map((warning) => (

@@ -4,7 +4,7 @@ import { useApiQuery } from '../lib/useApiQuery'
 
 /**
  * The review panel: each PR's latest saved result, and the open panel session, kept in the
- * `panel` query parameter so a reload reopens it. Opening a panel closes Uncle Bob's companion.
+ * `panel` query parameter so a reload reopens it.
  */
 export function usePanelReview({
   repository,
@@ -40,7 +40,6 @@ export function usePanelReview({
     },
     open: (sessionId: string) => {
       const next = new URLSearchParams(location.search)
-      next.delete('bob')
       next.delete('ask')
       next.set('panel', sessionId)
       go(next)

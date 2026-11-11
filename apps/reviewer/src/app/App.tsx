@@ -10,7 +10,6 @@ import { PanelBatchPicker } from '../features/panel/PanelBatchPicker'
 import { notifySettled } from '../features/panel/panelNotifications'
 import { useActivePanels } from '../features/panel/useActivePanels'
 import { MAX_PANEL_BATCH_PULLS } from '../../shared/domain/panel'
-import { BobCompanion } from '../features/bob/BobCompanion'
 import { PanelCompanion } from '../features/panel/PanelCompanion'
 import { PullPanelActions } from './PullPanelActions'
 import { usePanelReview } from './usePanelReview'
@@ -105,31 +104,11 @@ export function App() {
   const [linusRefresh, setLinusRefresh] = useState(0)
   const [linusReplay, setLinusReplay] = useState<LinusReplayRequest & { repository: string }>()
   const savedLinus = useLinusRecommendations(repository, refresh + linusRefresh)
-  const savedBob = useApiQuery(
-    routes.savedBobReviews,
-    { query: { repository } },
-    {
-      enabled: Boolean(repository) && (route.kind === 'inbox' || route.kind === 'pull'),
-      refresh: refresh + linusRefresh,
-    },
-  )
-  const bobReviews = new Map(savedBob.data?.reviews.map((review) => [review.url, review]))
-  const bobReplayId = new URLSearchParams(location.search).get('bob') ?? undefined
-  function openBob(url: string, sessionId: string) {
-    const target = new URL(
-      pull?.url === url ? location.pathname + location.search : reviewPath({ url, filter }),
-      window.location.origin,
-    )
-    target.searchParams.delete('panel')
-    target.searchParams.set('bob', sessionId)
-    void navigate(target.pathname + target.search)
-  }
   function openPanel(url: string, sessionId: string) {
     const target = new URL(
       pull?.url === url ? location.pathname + location.search : reviewPath({ url, filter }),
       window.location.origin,
     )
-    target.searchParams.delete('bob')
     target.searchParams.set('panel', sessionId)
     void navigate(target.pathname + target.search)
   }
@@ -164,11 +143,6 @@ export function App() {
     setSelection(undefined)
     setLinusReplay(undefined)
     reviewLaunch.closeLinus()
-  }
-  function closeBob() {
-    const query = new URLSearchParams(location.search)
-    query.delete('bob')
-    void navigate(location.pathname + '?' + query.toString(), { replace: true })
   }
 
   const activeLinusReplay = linusReplay?.repository === repository ? linusReplay : undefined
@@ -289,7 +263,6 @@ export function App() {
       inboxLoading={inboxLoading}
       statusLoading={inboxStatusLoading}
       recommendationsError={savedLinus.error}
-      bobReviewsError={savedBob.error}
       chips={chips}
       chipContext={{
         panelReviewed: (pr) =>
@@ -311,10 +284,6 @@ export function App() {
         <InboxPullActions
           pull={pr}
           recommendation={recommendations.get(pr.url)}
-          bobReview={bobReviews.get(pr.url)}
-          onBobReplay={(review) => {
-            openBob(pr.url, review.sessionId)
-          }}
           panelReview={panel.reviewFor(pr.url)}
           onPanelReplay={(review) => {
             openPanel(pr.url, review.sessionId)
@@ -518,11 +487,7 @@ export function App() {
                         <LinkedTicketLink url={pull.url} />
                         <PullReviewActions
                           pull={pull}
-                          bobReview={bobReviews.get(pull.url)}
                           recommendation={recommendations.get(pull.url)}
-                          onBobReplay={(review) => {
-                            openBob(pull.url, review.sessionId)
-                          }}
                           onReplay={(recommendation) => {
                             setLinusReplay({
                               repository,
@@ -544,7 +509,7 @@ export function App() {
                       </>
                     }
                     renderCompanion={({ draft, setDraft, ready, openReview, focusLine }) =>
-                      panel.sessionId ? (
+                      panel.sessionId && (
                         <PanelCompanion
                           key={`${pull.id}:${panel.sessionId}`}
                           sessionId={panel.sessionId}
@@ -558,22 +523,6 @@ export function App() {
                           openReview={openReview}
                           focusLine={focusLine}
                         />
-                      ) : (
-                        bobReplayId && (
-                          <BobCompanion
-                            renderSessionCard={renderSessionCard}
-                            key={`${pull.id}:${bobReplayId}`}
-                            replaySessionId={bobReplayId}
-                            onClose={closeBob}
-                            onSessionUpdate={refreshLinus}
-                            pull={pull}
-                            draft={draft}
-                            setDraft={setDraft}
-                            ready={ready}
-                            openReview={openReview}
-                            focusLine={focusLine}
-                          />
-                        )
                       )
                     }
                     titlebarTarget={titlebarTarget}

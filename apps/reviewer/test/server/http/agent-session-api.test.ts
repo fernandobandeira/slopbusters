@@ -13,7 +13,7 @@ it('validates session API responses, repository filters and transcript ownership
   const directory = mkdtempSync(join(tmpdir(), 'session-api-'))
   const store = new AgentSessionStore(directory)
   const sessions = new AgentSessions(store)
-  sessions.start('abc', 'bob', { repository: 'example/project', urls: [] })
+  sessions.start('abc', 'linus', { repository: 'example/project', urls: [] })
   await sessions.run(
     'abc',
     { model: { provider: Provider.codex, model: 'gpt-6.1-sol' }, label: 'Review' },

@@ -22,7 +22,6 @@ import {
 } from './adapters/workspaceNavigation'
 import { createSourceNavigator } from './features/navigation/navigation'
 import { configureSourceAssetsDirectory } from './adapters/treeSymbols'
-import { BobJobs } from './features/bob/bobJobs'
 import { LinusJobs } from './features/linus/linusJobs'
 import { OrganizationJobs } from './features/organizationJobs'
 import { savedModels } from './features/models'
@@ -166,7 +165,6 @@ export function createServices(options: ReviewerServerOptions) {
     skillDirectory: options.linusSkillDirectory,
     panels: panelJobs,
   })
-  const bobJobs = new BobJobs({ ...dependencies, skillDirectory: options.bobSkillDirectory })
   const jobs = new TicketReviewJobs({
     ...dependencies,
     skillDirectory: options.jobsSkillDirectory,
@@ -221,7 +219,6 @@ export function createServices(options: ReviewerServerOptions) {
     workspaces,
     languageServers,
     linusJobs,
-    bobJobs,
     gandalfJobs,
     splitJobs,
     agentSessions,
@@ -247,7 +244,6 @@ export function createServices(options: ReviewerServerOptions) {
         return continueInT3Code(chatHosts, {
           sessions: {
             linus: linusJobs,
-            bob: bobJobs,
             jobs,
             gandalf: gandalfJobs,
             panel: panelJobs,
@@ -276,7 +272,7 @@ export function createServices(options: ReviewerServerOptions) {
       await organizationJobs.close()
       linearAuth.close()
       await Promise.all(
-        [linusJobs, bobJobs, gandalfJobs, splitJobs, jobs, panelJobs].map((job) => job.close()),
+        [linusJobs, gandalfJobs, splitJobs, jobs, panelJobs].map((job) => job.close()),
       )
       await pruning.stop()
       await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])

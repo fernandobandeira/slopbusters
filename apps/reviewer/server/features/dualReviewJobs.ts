@@ -29,7 +29,7 @@ interface ReviewStrategy<
   Session extends ReviewSession<Advice>,
 > {
   name: string
-  kind: 'bob' | 'linus'
+  kind: 'linus'
   sessions?: AgentSessions
   models: () => { primary: OrganizationPreferences; companion: OrganizationPreferences }
   skill: () => Promise<string>

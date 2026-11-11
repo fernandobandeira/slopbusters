@@ -8,8 +8,7 @@ import type { ChatHosts } from '../../../server/adapters/t3Engine/chatHosts'
 import type { EngineThreadOperations } from '../../../server/adapters/t3Engine/engineThreads'
 import * as routes from '../../../shared/api/chat'
 import { Provider } from '../../../shared/domain/types'
-import { fixtureBobAdvice } from '../../fixtures/bob'
-import { fixturePull } from '../../fixtures/pull'
+import { linusSession, pull } from '../../fixtures/chatSessions'
 
 const directories: string[] = []
 afterEach(() => {
@@ -41,18 +40,7 @@ async function serverWith(chatHosts: ChatHosts, organization?: Provider) {
   const directory = mkdtempSync(join(tmpdir(), 'chat-api-'))
   directories.push(directory)
   const store = new ReviewerStore({ dataDirectory: directory })
-  const pull = fixturePull()
-  store.bob.save({
-    id: 'bob-1',
-    repository: 'review-room/example',
-    urls: [pull.url],
-    primary: claude,
-    companion: claude,
-    status: 'complete',
-    progress: 'Reviewed 1 PR.',
-    results: [{ pull, fingerprint: 'f', advice: fixtureBobAdvice(), reviewers: [claude] }],
-    createdAt: '2026-10-01T00:00:00Z',
-  })
+  store.linus.save(linusSession())
   if (organization) store.savePreferences({ organization: { ...claude, provider: organization } })
   store.close()
   return startReviewerServer({
@@ -71,18 +59,18 @@ function post(server: { url: string }, body: unknown) {
   })
 }
 
-it('continues a saved Uncle Bob review in T3 Code and returns where it runs', async () => {
+it('continues a saved Linus review in T3 Code and returns where it runs', async () => {
   const { chatHosts, startThread } = t3CodeHosts()
   const server = await serverWith(chatHosts, Provider.claude)
   try {
-    const response = await post(server, { persona: 'unclebob', sessionId: 'bob-1' })
+    const response = await post(server, { persona: 'linus', sessionId: 'linus-1', url: pull.url })
 
     expect(response.status).toBe(200)
     const chat = routes.continueInT3Code.response.parse(await response.json())
     expect(chat).toMatchObject({ project: 'project', location: 't3code', onPullRequestHead: true })
     const start = startThread.mock.calls[0]?.[0] as { threadId: string; message: string }
     expect(start.threadId).toBe(chat.threadId)
-    expect(start.message).toContain('## Uncle Bob: Improvements to make')
+    expect(start.message).toContain('/slopbusters:linus Use review-only mode for PR #128')
   } finally {
     await server.close()
   }
@@ -92,8 +80,12 @@ it('asks for a model first, reports a missing session, and needs a PR for Linus'
   const unconfigured = await serverWith(t3CodeHosts().chatHosts)
   const configured = await serverWith(t3CodeHosts().chatHosts, Provider.claude)
   try {
-    const noModel = await post(unconfigured, { persona: 'unclebob', sessionId: 'bob-1' })
-    const missing = await post(configured, { persona: 'unclebob', sessionId: 'gone' })
+    const noModel = await post(unconfigured, {
+      persona: 'linus',
+      sessionId: 'linus-1',
+      url: pull.url,
+    })
+    const missing = await post(configured, { persona: 'linus', sessionId: 'gone', url: pull.url })
     const noUrl = await post(configured, { persona: 'linus', sessionId: 'linus-1' })
 
     expect(noModel.status).toBe(400)
@@ -101,7 +93,7 @@ it('asks for a model first, reports a missing session, and needs a PR for Linus'
       error: 'Choose your primary provider in Settings first.',
     })
     expect(missing.status).toBe(400)
-    expect(await missing.json()).toEqual({ error: 'This Bob review is no longer available.' })
+    expect(await missing.json()).toEqual({ error: 'This Linus review is no longer available.' })
     expect(noUrl.status).toBe(400)
   } finally {
     await unconfigured.close()

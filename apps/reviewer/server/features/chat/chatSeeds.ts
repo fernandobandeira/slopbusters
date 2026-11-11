@@ -2,7 +2,6 @@ import type { PreparedPullRequest } from '../../adapters/t3Engine/engineThreads'
 import { UserError } from '../../errors'
 import { clip } from '../tickets/tickets'
 import { gandalfSessionMarkdown, jobsReviewMarkdown, linusReviewMarkdown } from './reviewMarkdown'
-import { bobReviewMarkdown, type BobSession } from '../../../shared/domain/bob'
 import type { ContinueChatRequest } from '../../../shared/domain/chat'
 import type { GandalfSession } from '../../../shared/domain/gandalf'
 import { latestJobsAdvice, type JobsSession } from '../../../shared/domain/jobs'
@@ -20,7 +19,6 @@ const MAX_CHAT_REVIEW_CHARACTERS = 20_000
 /** Where each persona keeps the sessions a chat can continue. */
 export interface ReviewSessions {
   linus: { get(id: string): LinusSession }
-  bob: { get(id: string): BobSession }
   jobs: { get(id: string): JobsSession }
   gandalf: { get(id: string): GandalfSession }
   panel: { get(id: string): PanelSession }
@@ -59,8 +57,6 @@ export function chatSeed(sessions: ReviewSessions, request: ContinueChatRequest)
   switch (request.persona) {
     case 'linus':
       return linusSeed(sessions.linus.get(request.sessionId), request.url)
-    case 'unclebob':
-      return bobSeed(sessions.bob.get(request.sessionId))
     case 'jobs':
       return jobsSeed(sessions.jobs.get(request.sessionId))
     case 'gandalf':
@@ -84,25 +80,6 @@ function linusSeed(session: LinusSession, url: string): ChatSeed {
         checkoutLine(pull, checkout),
         reviewedLine(pull, partial),
         clip(linusReviewMarkdown(advice), MAX_CHAT_REVIEW_CHARACTERS),
-        HANDOVER,
-      ),
-  }
-}
-
-function bobSeed(session: BobSession): ChatSeed {
-  const review = reviewOf(session, session.urls[0] ?? '')
-  if (!review) throw new UserError('Uncle Bob has not finished reviewing this PR yet.')
-  const { pull, advice, partial } = review
-  return {
-    kind: 'pull',
-    title: `Uncle Bob · #${String(pull.number)} ${pull.title}`,
-    pull,
-    message: (provider, checkout) =>
-      paragraphs(
-        `${invocation('unclebob', provider)} Review ${subject(pull)}`,
-        `${checkoutLine(pull, checkout)} Review its changes with \`git diff origin/${pull.baseBranch}...HEAD\`.`,
-        reviewedLine(pull, partial),
-        clip(bobReviewMarkdown(advice), MAX_CHAT_REVIEW_CHARACTERS),
         HANDOVER,
       ),
   }
@@ -235,7 +212,7 @@ function reviewedLine(pull: PullRequest, partial: boolean): string {
 }
 
 /** Claude Code expands a leading `/skill`; Codex reads `$skill`. */
-function invocation(skill: 'linus' | 'unclebob' | 'jobs', provider: Provider): string {
+function invocation(skill: 'linus' | 'jobs', provider: Provider): string {
   return `${provider === Provider.claude ? '/' : '$'}slopbusters:${skill}`
 }
 

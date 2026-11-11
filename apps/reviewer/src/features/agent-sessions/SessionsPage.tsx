@@ -160,7 +160,7 @@ function SessionHistory({ repository }: { repository?: string }) {
       {list.error && <p role="alert">{list.error}</p>}
       {list.loading && <p role="status">Loading sessions…</p>}
       {list.data && !list.data.sessions.length && (
-        <p>No sessions yet. Ask Uncle Bob, Linus, or Gandalf to begin.</p>
+        <p>No sessions yet. Ask the review panel, Linus, or Gandalf to begin.</p>
       )}
       {list.data?.sessions.map((session) => (
         <Link

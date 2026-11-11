@@ -1,9 +1,7 @@
-import type { BobSession } from '../../shared/domain/bob'
 import type { GandalfSession } from '../../shared/domain/gandalf'
 import type { JobsAdvice, JobsSession } from '../../shared/domain/jobs'
 import type { LinusAdvice, LinusSession } from '../../shared/domain/linus'
 import { Provider } from '../../shared/domain/types'
-import { fixtureBobAdvice } from './bob'
 import { fixturePull } from './pull'
 
 /** Finished review sessions of each persona about the fixture PR, for chats that continue them. */
@@ -67,15 +65,6 @@ export function linusSession(overrides: Partial<LinusSession> = {}): LinusSessio
     progress: 'Reviewed 1 PR.',
     results: [{ pull, fingerprint: 'f', advice: linusAdvice, reviewers: [claude, codex] }],
     createdAt: '2026-10-01T00:00:00Z',
-    ...overrides,
-  }
-}
-export function bobSession(overrides: Partial<BobSession> = {}): BobSession {
-  const { pending: _pending, ...base } = linusSession()
-  return {
-    ...base,
-    id: 'bob-1',
-    results: [{ pull, fingerprint: 'f', advice: fixtureBobAdvice(), reviewers: [claude, codex] }],
     ...overrides,
   }
 }

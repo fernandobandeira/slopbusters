@@ -2,7 +2,11 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { DatabaseSync } from 'node:sqlite'
 import { ReviewerStore } from '../../../server/adapters/store'
+import { AgentSessionStore } from '../../../server/adapters/agentSessionStore'
+import { AgentSessions } from '../../../server/features/agent-sessions/agentSessions'
+import { agentSessionSchema } from '../../../shared/domain/agentSession'
 import { emptyDraft } from '../../../server/features/progress'
 import { Provider, DiffSide } from '../../../shared/domain/types'
 import { fixturePull } from '../../fixtures/pull'
@@ -140,6 +144,48 @@ describe('SQLite review storage', () => {
     store.savePull(next)
     expect(store.getDraft(pull.id).draft.viewedFileIds).toContain(pull.files[0]!.id)
     expect(store.getDraft(next.id).draft.viewedFileIds).toEqual([])
+  })
+})
+
+describe('retired solo Uncle Bob reviews', () => {
+  it('drops them and their agent sessions, and keeps every other session', () => {
+    const path = directory()
+    close(open(path))
+    const agents = new AgentSessionStore(path)
+    new AgentSessions(agents).start('linus-1', 'linus', { repository: 'acme/app', urls: [] })
+    agents.close()
+    const database = new DatabaseSync(join(path, 'reviewer.sqlite'))
+    const linus = agentSessionSchema.parse(
+      JSON.parse(String(database.prepare('SELECT value FROM agent_sessions').get()?.value)),
+    )
+    const bob = { ...linus, id: 'bob-1', kind: 'bob' }
+    database.exec(`CREATE TABLE bob_sessions (id TEXT PRIMARY KEY, repository TEXT NOT NULL, created_at TEXT NOT NULL, session TEXT NOT NULL);
+      INSERT INTO agent_runs VALUES ('bob-run', 'bob-1', '{}');
+      INSERT INTO agent_events VALUES ('bob-run', 'event', 1, 1, '{}');
+      PRAGMA user_version = 9;`)
+    database
+      .prepare('INSERT INTO agent_sessions VALUES (?, ?, ?, ?)')
+      .run('bob-1', 'acme/app', bob.updatedAt, JSON.stringify(bob))
+    database.close()
+
+    open(path)
+
+    const reopened = new AgentSessionStore(path)
+    try {
+      expect(reopened.list().map((session) => session.id)).toEqual(['linus-1'])
+    } finally {
+      reopened.close()
+    }
+    const after = new DatabaseSync(join(path, 'reviewer.sqlite'))
+    try {
+      expect(
+        after.prepare("SELECT name FROM sqlite_master WHERE name = 'bob_sessions'").get(),
+      ).toBeUndefined()
+      expect(after.prepare('SELECT COUNT(*) AS count FROM agent_runs').get()?.count).toBe(0)
+      expect(after.prepare('SELECT COUNT(*) AS count FROM agent_events').get()?.count).toBe(0)
+    } finally {
+      after.close()
+    }
   })
 })
 

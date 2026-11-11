@@ -5,41 +5,52 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { LinearError, type Linear } from '../../../../server/adapters/linear'
 import { ReviewerStore } from '../../../../server/adapters/store'
-import { BobJobs } from '../../../../server/features/bob/bobJobs'
+import { LinusJobs } from '../../../../server/features/linus/linusJobs'
 import {
-  loadBobSkill,
-  reconcileWithBob,
-  reviewWithBob,
-} from '../../../../server/features/bob/bobReview'
+  loadLinusSkill,
+  reconcileWithLinus,
+  reviewWithLinus,
+} from '../../../../server/features/linus/linusReview'
 import { createTicketLinks } from '../../../../server/features/tickets/ticketLinks'
 import type { GitHub } from '../../../../server/adapters/github'
+import type { LinusAdvice } from '../../../../shared/domain/linus'
 import { Provider } from '../../../../shared/domain/types'
-import { fixtureBobAdvice, required } from '../../../fixtures/bob'
+import { required } from '../../../fixtures/required'
 import { fixturePull } from '../../../fixtures/pull'
 import { recordingTurns } from '../../../fixtures/turns'
 
-vi.mock('../../../../server/features/bob/bobReview', () => ({
-  loadBobSkill: vi.fn(),
-  reviewWithBob: vi.fn(),
-  reconcileWithBob: vi.fn(),
+vi.mock('../../../../server/features/linus/linusReview', () => ({
+  loadLinusSkill: vi.fn(),
+  reviewWithLinus: vi.fn(),
+  reconcileWithLinus: vi.fn(),
 }))
+const keep: LinusAdvice = {
+  verdict: 'keep',
+  reasoning: 'One logical change.',
+  revisedTitle: '',
+  revisedDescription: '',
+  layers: [],
+  limitations: [],
+  disagreements: [],
+  steps: [{ text: 'Keep it together.', emotion: 'happy', target: 'overview', reference: '' }],
+}
 afterEach(() => {
   vi.resetAllMocks()
 })
 
 describe('linked tickets as review evidence', () => {
-  it('gives both Bob reviewers and the reconciliation the PR’s ticket', async () => {
+  it('gives both Linus reviewers and the reconciliation the PR’s ticket', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'ticket-context-'))
     const store = new ReviewerStore({ dataDirectory: directory })
     store.savePreferences({
       organization: { provider: Provider.codex, model: 'gpt-6.1-sol' },
       companion: { provider: Provider.claude, model: 'claude-opus-5-5' },
     })
-    vi.mocked(loadBobSkill).mockResolvedValue('Bob')
-    vi.mocked(reviewWithBob).mockImplementation(() => Promise.resolve(fixtureBobAdvice()))
-    vi.mocked(reconcileWithBob).mockImplementation(() => Promise.resolve(fixtureBobAdvice()))
+    vi.mocked(loadLinusSkill).mockResolvedValue('Linus')
+    vi.mocked(reviewWithLinus).mockResolvedValue(keep)
+    vi.mocked(reconcileWithLinus).mockResolvedValue(keep)
     const context = vi.fn(() => Promise.resolve('{"identifier":"SCH-760"}'))
-    const jobs = new BobJobs({
+    const jobs = new LinusJobs({
       store,
       turns: recordingTurns().turns,
       staticDirectory: directory,
@@ -51,11 +62,11 @@ describe('linked tickets as review evidence', () => {
       await vi.waitFor(() => {
         expect(jobs.get(session.id).status).toBe('complete')
       })
-      expect(vi.mocked(reviewWithBob).mock.calls.map(([request]) => request.context)).toEqual([
+      expect(vi.mocked(reviewWithLinus).mock.calls.map(([request]) => request.context)).toEqual([
         '{"identifier":"SCH-760"}',
         '{"identifier":"SCH-760"}',
       ])
-      expect(required(vi.mocked(reconcileWithBob).mock.calls[0])[0].pending.context).toBe(
+      expect(required(vi.mocked(reconcileWithLinus).mock.calls[0])[0].pending.context).toBe(
         '{"identifier":"SCH-760"}',
       )
     } finally {

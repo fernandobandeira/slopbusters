@@ -22,7 +22,6 @@ import { migrateTicketStore, TicketStore } from './ticketStore'
 import { EngineCredentialStore } from './t3Engine/engineCredentials'
 import { migratePanelSessions, PanelSessionStore } from './panelSessionStore'
 import { LinusSessionStore, migrateLinusSessions } from './linusSessionStore'
-import { BobSessionStore, migrateBobSessions } from './bobSessionStore'
 import { GandalfSessionStore, migrateGandalfSessions } from './gandalfSessionStore'
 import { migrateSplitSessions, SplitSessionStore } from './splitSessionStore'
 
@@ -44,7 +43,6 @@ export class ReviewerStore {
   readonly engine: EngineCredentialStore
   readonly panel: PanelSessionStore
   readonly linus: LinusSessionStore
-  readonly bob: BobSessionStore
   readonly gandalf: GandalfSessionStore
   readonly split: SplitSessionStore
   constructor({ dataDirectory }: { dataDirectory: string }) {
@@ -56,7 +54,7 @@ export class ReviewerStore {
       'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;',
     )
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
-    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9].includes(version)) {
+    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(version)) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
     }
@@ -79,17 +77,18 @@ export class ReviewerStore {
     }
     // Each step sets the next version; their order is the schema's history and must not change.
     if (version < 3) migrateLinusSessions(this.database)
-    if (version < 4) migrateBobSessions(this.database)
+    // Version 4 added solo Uncle Bob reviews; version 10 removes them.
+    if (version < 4) this.database.exec('PRAGMA user_version = 4')
     if (version < 5) migrateGandalfSessions(this.database)
     if (version < 6) migrateReviewProgress(this.database)
     if (version < 7) migrateTicketStore(this.database)
     if (version < 8) migratePanelSessions(this.database)
     if (version < 9) migrateSplitSessions(this.database)
+    if (version < 10) dropSoloBobReviews(this.database)
     this.tickets = new TicketStore(this.database)
     this.engine = new EngineCredentialStore(this.database)
     this.panel = new PanelSessionStore(this.database)
     this.linus = new LinusSessionStore(this.database)
-    this.bob = new BobSessionStore(this.database)
     this.gandalf = new GandalfSessionStore(this.database)
     this.split = new SplitSessionStore(this.database)
   }
@@ -230,4 +229,25 @@ export class ReviewerStore {
       }
     }
   }
+}
+
+/**
+ * Uncle Bob reviews only on the panel now. Drop his solo reviews and their agent sessions, whose
+ * kind the session list no longer reads.
+ */
+function dropSoloBobReviews(database: DatabaseSync): void {
+  const hasAgentSessions = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'agent_sessions'")
+    .get()
+  const soloBob = "SELECT id FROM agent_sessions WHERE json_extract(value, '$.kind') = 'bob'"
+  database.exec(`BEGIN IMMEDIATE;
+    DROP TABLE IF EXISTS bob_sessions;
+    ${
+      hasAgentSessions
+        ? `DELETE FROM agent_events WHERE run_id IN (SELECT id FROM agent_runs WHERE session_id IN (${soloBob}));
+    DELETE FROM agent_runs WHERE session_id IN (${soloBob});
+    DELETE FROM agent_sessions WHERE id IN (${soloBob});`
+        : ''
+    }
+    PRAGMA user_version = 10; COMMIT;`)
 }

@@ -3,11 +3,12 @@ import { createTwoFilesPatch } from 'diff'
 import { parseFile } from '../../../server/features/diff'
 import { detectTransfers } from '../../../server/features/transfers'
 import { reviewEvidence } from '../../../server/reviewSnapshot'
-import { reviewWithBob } from '../../../server/features/bob/bobReview'
+import { reviewWithLinus } from '../../../server/features/linus/linusReview'
 import { organizePull } from '../../../server/features/organization/organize'
 import { anchorProblem } from '../../../shared/domain/anchors'
+import type { LinusAdvice } from '../../../shared/domain/linus'
 import { DiffSide, Provider, type PullRequest } from '../../../shared/domain/types'
-import { fixtureBobAdvice, required } from '../../fixtures/bob'
+import { required } from '../../fixtures/required'
 import { fixturePull } from '../../fixtures/pull'
 import { recordingTurns } from '../../fixtures/turns'
 
@@ -15,6 +16,16 @@ const block =
   'export function slug(value: string) {\n  return value.trim()\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, "-")\n    .replace(/^-|-$/g, "");\n}\n'
 const model = { provider: Provider.codex, model: 'gpt-6.1-sol' }
 const signal = new AbortController().signal
+const keep: LinusAdvice = {
+  verdict: 'keep',
+  reasoning: 'One logical change.',
+  revisedTitle: '',
+  revisedDescription: '',
+  layers: [],
+  limitations: [],
+  disagreements: [],
+  steps: [{ text: 'Keep it together.', emotion: 'happy', target: 'overview', reference: '' }],
+}
 
 interface EvidenceLine {
   kind: string
@@ -96,7 +107,7 @@ describe('moved code in review evidence', () => {
 describe('moved code in model prompts', () => {
   it('explains the markers to a reviewer and to the organizer', async () => {
     const pull = fixturePull()
-    const review = recordingTurns(() => fixtureBobAdvice())
+    const review = recordingTurns(() => keep)
     const organize = recordingTurns(() => ({
       groups: pull.groups.map(({ title, priority, reason, hunkIds }) => ({
         title,
@@ -106,11 +117,11 @@ describe('moved code in model prompts', () => {
       })),
     }))
 
-    await reviewWithBob({
+    await reviewWithLinus({
       turns: review.turns,
       pull,
       model,
-      skill: 'Bob',
+      skill: 'Linus',
       signal,
       companion: false,
     })
@@ -125,13 +136,13 @@ describe('moved code in model prompts', () => {
   })
   it('leaves prompts without transfers as they were', async () => {
     const pull = { ...fixturePull(), transfers: [] }
-    const review = recordingTurns(() => fixtureBobAdvice())
+    const review = recordingTurns(() => keep)
 
-    await reviewWithBob({
+    await reviewWithLinus({
       turns: review.turns,
       pull,
       model,
-      skill: 'Bob',
+      skill: 'Linus',
       signal,
       companion: false,
     })

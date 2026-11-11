@@ -1,4 +1,4 @@
-import { DiffSide, LineKind, type DiffLine, type DraftComment, type PullRequest } from './types'
+import { DiffSide, type DiffLine, type DraftComment, type PullRequest } from './types'
 
 /** Where a reviewer's finding points: a line of one hunk, on one side of the diff. */
 export interface FindingLocation {
@@ -17,12 +17,6 @@ export function findingLine(pull: PullRequest, finding: FindingLocation): DiffLi
   return hunk?.lines.find((line) =>
     finding.side === DiffSide.left ? line.oldLine === finding.line : line.newLine === finding.line,
   )
-}
-
-/** Findings must point at a line the PR changed, not at context around it. */
-export function pointsAtChange(pull: PullRequest, finding: FindingLocation): boolean {
-  const line = findingLine(pull, finding)
-  return Boolean(line && line.kind !== LineKind.context)
 }
 
 /**

@@ -9,8 +9,6 @@ export function InboxPullActions({
   pull,
   recommendation,
   onReplay,
-  bobReview,
-  onBobReplay,
   panelReview,
   onPanelReplay,
   activePanel,
@@ -39,8 +37,6 @@ export function InboxPullActions({
         pull={pull}
         recommendation={recommendation}
         onReplay={onReplay}
-        bobReview={bobReview}
-        onBobReplay={onBobReplay}
         panelReview={panelReview}
         onPanelReplay={onPanelReplay}
       />

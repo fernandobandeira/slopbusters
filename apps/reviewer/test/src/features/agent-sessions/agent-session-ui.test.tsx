@@ -1,8 +1,6 @@
 // @vitest-environment happy-dom
 import { GandalfCompanion } from '../../../../src/features/gandalf/GandalfCompanion'
-import { BobCompanion } from '../../../../src/features/bob/BobCompanion'
 import { LinusCompanion } from '../../../../src/features/linus/LinusCompanion'
-import { fixturePull } from '../../../fixtures/pull'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -204,7 +202,7 @@ function requestUrl(input: RequestInfo | URL) {
   return typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
 }
 
-it.each(['gandalf', 'bob', 'linus'] as const)(
+it.each(['gandalf', 'linus'] as const)(
   'keeps the %s session card inside its own chat bubble',
   async (kind) => {
     const job = { ...root, primary: first.model, companion: second.model, turns: [], results: [] }
@@ -234,18 +232,6 @@ it.each(['gandalf', 'bob', 'linus'] as const)(
           ready
           onClose={vi.fn()}
           onComplete={vi.fn()}
-          renderSessionCard={renderSessionCard}
-        />
-      ),
-      bob: (
-        <BobCompanion
-          pull={{ ...fixturePull(), owner: 'example', repo: 'project', url: root.urls[0] ?? '' }}
-          draft={{ viewedFileIds: [], comments: [], summary: '' }}
-          setDraft={vi.fn()}
-          ready
-          openReview={vi.fn()}
-          focusLine={vi.fn()}
-          replaySessionId={root.id}
           renderSessionCard={renderSessionCard}
         />
       ),

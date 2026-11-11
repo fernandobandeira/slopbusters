@@ -13,7 +13,6 @@ const sessionId = z.string().min(1).max(100)
  */
 export const continueChatSchema = z.discriminatedUnion('persona', [
   z.object({ persona: z.literal('linus'), sessionId, url: pullUrl }).strict(),
-  z.object({ persona: z.literal('unclebob'), sessionId }).strict(),
   z.object({ persona: z.literal('jobs'), sessionId }).strict(),
   z.object({ persona: z.literal('gandalf'), sessionId, url: pullUrl }).strict(),
   z

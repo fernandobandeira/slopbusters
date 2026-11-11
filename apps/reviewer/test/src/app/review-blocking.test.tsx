@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as routes from '../../../shared/api'
 import { Provider } from '../../../shared/domain/types'
 import { useApiQuery } from '../../../src/lib/useApiQuery'
-import { useBobSession } from '../../../src/features/bob/useBobSession'
 import { App } from '../../../src/app/App'
 import { call } from '../../../src/lib/api'
 import type { ReviewPage } from '../../../src/app/ReviewPage'
@@ -41,7 +40,6 @@ vi.mock('../../../src/features/inbox/useInbox', () => ({
 vi.mock('../../../src/features/linus/useLinusRecommendations', () => ({
   useLinusRecommendations: () => ({ recommendations: [] }),
 }))
-vi.mock('../../../src/features/bob/useBobSession', () => ({ useBobSession: vi.fn() }))
 vi.mock('../../../src/features/review/usePullReview', () => ({
   usePullReview: (route: { kind: string }) => ({ pull: route.kind === 'pull' ? pull : undefined }),
 }))
@@ -81,12 +79,7 @@ function blockingReview(status: 'running' | 'partial' | 'complete', url = pull.u
 }
 function savedLatestLinus(session?: ReturnType<typeof blockingReview>) {
   vi.mocked(useApiQuery).mockImplementation((route) => ({
-    data:
-      route === routes.latestLinus
-        ? { session: session ?? null }
-        : route === routes.savedBobReviews
-          ? { reviews: [] }
-          : undefined,
+    data: route === routes.latestLinus ? { session: session ?? null } : undefined,
     error: undefined,
     loading: false,
     setData: vi.fn(),
@@ -116,14 +109,6 @@ async function askLinus() {
 beforeEach(() => {
   vi.clearAllMocks()
   savedLatestLinus()
-  vi.mocked(useBobSession).mockReturnValue({
-    session: undefined,
-    loading: false,
-    busy: false,
-    error: '',
-    act: vi.fn(),
-    reload: vi.fn(),
-  })
 })
 afterEach(() => {
   cleanup()

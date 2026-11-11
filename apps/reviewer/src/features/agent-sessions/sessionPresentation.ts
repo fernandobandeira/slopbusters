@@ -4,7 +4,6 @@ import { issuePath, reviewPath } from '../../lib/routes'
 
 export const agentNames: Record<AgentSession['kind'], string> = {
   gandalf: 'Gandalf',
-  bob: 'Uncle Bob',
   linus: 'Linus',
   grouping: 'Diff organization',
   jobs: 'Steve Jobs',

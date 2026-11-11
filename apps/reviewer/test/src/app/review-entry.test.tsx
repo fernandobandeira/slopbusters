@@ -5,9 +5,7 @@ import { MemoryRouter, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as routes from '../../../shared/api'
 import { Provider } from '../../../shared/domain/types'
-import type { BobReviewSummary } from '../../../shared/domain/bob'
 import { useApiQuery } from '../../../src/lib/useApiQuery'
-import { useBobSession } from '../../../src/features/bob/useBobSession'
 import { usePanelSession } from '../../../src/features/panel/usePanelSession'
 import { App } from '../../../src/app/App'
 import { call } from '../../../src/lib/api'
@@ -37,18 +35,6 @@ const recommendation = {
   verdict: 'keep',
   recommendationCount: 1,
 }
-const bobReview: BobReviewSummary = {
-  sessionId: 'saved-bob',
-  createdAt: '',
-  url: pull.url,
-  number: pull.number,
-  headSha: pull.headSha,
-  verdict: 'changes',
-  findingCount: 1,
-}
-
-let savedReviews = [bobReview]
-let savedReviewsLoading = false
 let preferences: Preferences | undefined = { organization: model }
 const savePreferences = vi.fn((changes: Preferences) =>
   Promise.resolve({ ...preferences, ...changes }),
@@ -80,7 +66,6 @@ vi.mock('../../../src/features/linus/useLinusRecommendations', () => ({
   useLinusRecommendations: () => ({ recommendations: [recommendation] }),
 }))
 vi.mock('../../../src/features/linus/useLinusSession', () => ({ useLinusSession: vi.fn() }))
-vi.mock('../../../src/features/bob/useBobSession', () => ({ useBobSession: vi.fn() }))
 vi.mock('../../../src/features/panel/usePanelSession', () => ({ usePanelSession: vi.fn() }))
 vi.mock('../../../src/features/review/usePullReview', () => ({
   usePullReview: (route: { kind: string }) => ({ pull: route.kind === 'pull' ? pull : undefined }),
@@ -103,17 +88,14 @@ vi.mock('../../../src/app/ReviewPage', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
-  savedReviews = [bobReview]
-  savedReviewsLoading = false
   preferences = { organization: model }
-  vi.mocked(useApiQuery).mockImplementation((route) => ({
-    data: route.path === '/bob/reviews' ? { reviews: savedReviews } : undefined,
+  vi.mocked(useApiQuery).mockImplementation(() => ({
+    data: undefined,
     error: undefined,
-    loading: route.path === '/bob/reviews' && savedReviewsLoading,
+    loading: false,
     setData: vi.fn(),
     reload: vi.fn(),
   }))
-  vi.mocked(useBobSession).mockReturnValue(job)
   vi.mocked(useLinusSession).mockReturnValue(linusJob)
   vi.mocked(usePanelSession).mockReturnValue({ ...job, replace: vi.fn() })
   vi.mocked(call).mockImplementation((route) => {
@@ -174,19 +156,6 @@ describe('Review entry points', () => {
     expect(screen.getByRole('button', { name: 'Ask Linus about 1 PR' })).toBeTruthy()
     expect(call).not.toHaveBeenCalledWith(routes.startPanel, expect.anything())
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
-  })
-
-  it('reopens Uncle Bob from a saved badge after closing the panel', async () => {
-    openPage()
-    fireEvent.click(screen.getByRole('button', { name: /Open saved Uncle Bob review/ }))
-    expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Close Uncle Bob' }))
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Close Uncle Bob' })).toBeNull()
-    })
-    fireEvent.click(screen.getByRole('button', { name: /Open saved Uncle Bob review/ }))
-    expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
-    expect(call).not.toHaveBeenCalledWith(routes.startBob, expect.anything())
   })
 
   it('reports a failed start without opening a companion and keeps the selection for a retry', async () => {
@@ -276,32 +245,13 @@ describe('repository startup selection', () => {
 
 describe('Review actions in the diff view', () => {
   it('offers the review panel instead of a solo Uncle Bob review', () => {
-    savedReviews = []
     openPage(`/repos/${repository}/pulls/${pull.number}?inbox=mine&group=permissions&diff=split`)
 
     expect(screen.queryByRole('complementary', { name: /companion/ })).toBeNull()
-    expect(screen.queryByRole('button', { name: /Ask Uncle Bob to review/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Uncle Bob/ })).toBeNull()
     expect(
       screen.getByRole('button', { name: `Ask the review panel about PR #${pull.number}` }),
     ).toBeTruthy()
     expect(call).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    { findingCount: 1, headSha: pull.headSha },
-    { findingCount: 0, headSha: pull.headSha },
-    { findingCount: 3, headSha: 'previous-head' },
-  ])('still reopens a saved Uncle Bob review (%j)', async (review) => {
-    savedReviews = [{ ...bobReview, ...review }]
-    openPage(`/repos/${repository}/pulls/${pull.number}`)
-    const button = screen.getByRole('button', { name: /Open saved Uncle Bob review/ })
-    expect(button.textContent).toBe(String(review.findingCount))
-    expect(button.querySelector('img')?.getAttribute('src')).toBe('/unclebob/neutral.png')
-
-    fireEvent.click(button)
-
-    expect(await screen.findByRole('button', { name: 'Close Uncle Bob' })).toBeTruthy()
-    expect(useBobSession).toHaveBeenLastCalledWith(repository, pull.url, bobReview.sessionId)
-    expect(call).not.toHaveBeenCalledWith(routes.startBob, expect.anything())
   })
 })

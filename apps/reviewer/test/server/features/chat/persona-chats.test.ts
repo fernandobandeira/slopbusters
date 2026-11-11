@@ -6,13 +6,11 @@ import type { EngineThreadOperations } from '../../../../server/adapters/t3Engin
 import type { ReviewSessions } from '../../../../server/features/chat/chatSeeds'
 import { continueInT3Code } from '../../../../server/features/chat/personaChats'
 import { UserError } from '../../../../server/errors'
-import type { BobSession } from '../../../../shared/domain/bob'
 import type { ContinueChatRequest } from '../../../../shared/domain/chat'
 import type { GandalfSession } from '../../../../shared/domain/gandalf'
 import type { JobsSession } from '../../../../shared/domain/jobs'
 import type { LinusSession } from '../../../../shared/domain/linus'
 import {
-  bobSession,
   claude,
   codex,
   gandalfSession,
@@ -23,7 +21,6 @@ import {
 } from '../../../fixtures/chatSessions'
 function sessionsWith(saved: {
   linus?: LinusSession
-  bob?: BobSession
   jobs?: JobsSession
   gandalf?: GandalfSession
   panel?: PanelSession
@@ -36,7 +33,6 @@ function sessionsWith(saved: {
   })
   return {
     linus: find(saved.linus),
-    bob: find(saved.bob),
     jobs: find(saved.jobs),
     gandalf: find(saved.gandalf),
     panel: find(saved.panel),
@@ -135,18 +131,16 @@ describe('continuing a PR review in T3 Code', () => {
     expect(message.endsWith('Pick up from this review. Wait for my questions.')).toBe(true)
   })
 
-  it('invokes the skill the way Codex expects and points Uncle Bob at the diff', async () => {
+  it('invokes the skill the way Codex expects', async () => {
     const { firstMessage, startThread } = await continueWith(
-      { bob: bobSession() },
-      { persona: 'unclebob', sessionId: 'bob-1' },
+      { linus: linusSession() },
+      { persona: 'linus', sessionId: 'linus-1', url: pull.url },
       codex,
     )
 
-    const message = firstMessage()
-    expect(message.startsWith('$slopbusters:unclebob Review PR #128')).toBe(true)
-    expect(message).toContain('git diff origin/main...HEAD')
-    expect(message).toContain('## Uncle Bob: Improvements to make')
-    expect(message).toMatch(/\*\*Should fix: Reuse the audit helper\*\*\n\n`src\/[^`]+:\d+`/)
+    expect(firstMessage().startsWith('$slopbusters:linus Use review-only mode for PR #128')).toBe(
+      true,
+    )
     expect(startThread).toHaveBeenCalledWith(
       expect.objectContaining({ model: { instanceId: 'codex', model: 'gpt-5.5' } }),
     )
@@ -214,9 +208,9 @@ describe('which review a PR chat continues', () => {
     })
 
     await continueInT3Code(host.hosts, {
-      sessions: sessionsWith({ bob: bobSession() }),
+      sessions: sessionsWith({ linus: linusSession() }),
       model: claude,
-      request: { persona: 'unclebob', sessionId: 'bob-1' },
+      request: { persona: 'linus', sessionId: 'linus-1', url: pull.url },
     })
 
     expect(host.firstMessage()).toContain('may not match the PR head')
@@ -233,9 +227,9 @@ describe("continuing in the user's own checkout", () => {
     })
 
     await continueInT3Code(host.hosts, {
-      sessions: sessionsWith({ bob: bobSession() }),
+      sessions: sessionsWith({ linus: linusSession() }),
       model: claude,
-      request: { persona: 'unclebob', sessionId: 'bob-1' },
+      request: { persona: 'linus', sessionId: 'linus-1', url: pull.url },
     })
 
     expect(host.preparePullRequest).toHaveBeenCalledWith(
