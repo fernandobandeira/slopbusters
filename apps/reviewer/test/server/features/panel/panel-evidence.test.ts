@@ -177,6 +177,12 @@ describe("the stack's top layer", () => {
     expect(requests.find(isGrounding)?.prompt).toContain(
       "`.slopbusters/stack/top/` is the source at the head of the stack's top open layer, PR #140",
     )
+    expect(requests.find(isGrounding)?.prompt).toContain(
+      'it can lack a lower layer’s newer commits: when it disagrees with a layer’s diff file, the diff file is that layer’s current change.'.replaceAll(
+        '’',
+        "'",
+      ),
+    )
     expect(source.opened.sort()).toEqual([128, 140])
     expect(source.released.sort()).toEqual([128, 140])
   })
@@ -208,7 +214,7 @@ describe("the stack's top layer", () => {
     const session = await finish(panel(turns, { loadPull: loadLayer, stack, openRepository: open }))
 
     expect(session.results[0]?.advice.limitations).toContain(
-      "The source of the stack's top layer, PR #140, could not be opened (The head commit is gone.), so grounding could not read the stack as it will land.",
+      "The source of the stack's top layer, PR #140, could not be opened (The head commit is gone.), so grounding could not read the code above this layer.",
     )
   })
 })

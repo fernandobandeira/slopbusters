@@ -8,7 +8,7 @@ import { reviewEvidence } from '../../reviewSnapshot'
 
 /** Where a model pass finds the other layers' whole diffs, one file per layer, by PR number. */
 export const STACK_FOLDER = '.slopbusters/stack'
-/** Where grounding finds the source at the stack's top layer: the stack as it will land. */
+/** Where grounding finds the source at the head of the stack's top layer. */
 export const STACK_TOP_FOLDER = `${STACK_FOLDER}/top`
 
 /** What a round supplies a PR's model passes about the other layers of its stack, as files. */

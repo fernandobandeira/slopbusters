@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join, resolve, sep } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import type { z } from 'zod'
 import {
   CommandId,
@@ -381,11 +381,31 @@ export class EngineTurns implements StructuredTurns {
 
 /** Copy an included folder to its place inside the working directory, never outside it. */
 async function copyIncluded(folder: IncludedFolder, workspaceRoot: string, signal: AbortSignal) {
-  const destination = resolve(workspaceRoot, folder.as)
-  if (!destination.startsWith(`${resolve(workspaceRoot)}${sep}`))
+  const root = resolve(workspaceRoot)
+  const destination = resolve(root, folder.as)
+  if (!destination.startsWith(`${root}${sep}`))
     throw new Error(`An included folder must stay inside the working directory: ${folder.as}`)
+  await clearWay(root, destination)
   await mkdir(dirname(destination), { recursive: true })
   await copyForInspection(folder.directory, destination, signal)
+}
+
+/**
+ * The copy holds the PR's files, so a symlink, a file or the folder itself may already sit where an
+ * included folder goes. Remove the first one in the way, never what a symlink points at, so the
+ * copy cannot write outside the working directory.
+ */
+async function clearWay(root: string, destination: string) {
+  let path = root
+  for (const part of relative(root, destination).split(sep)) {
+    path = join(path, part)
+    const entry = await lstat(path).catch(() => undefined)
+    if (!entry) return
+    if (path === destination || !entry.isDirectory()) {
+      await rm(path, { recursive: true, force: true })
+      return
+    }
+  }
 }
 
 /** Threads and messages Slopbusters creates are the user's, sent from a T3 Code client. */

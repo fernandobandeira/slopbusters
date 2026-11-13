@@ -71,7 +71,7 @@ function stackLimitations(layers: readonly LayerSnapshot[], stack: StackFolders)
       : []),
     ...(top && !top.checkout
       ? [
-          `The source of the stack's top layer, PR #${String(top.number)}, could not be opened (${top.error ?? 'unknown error'}), so grounding could not read the stack as it will land.`,
+          `The source of the stack's top layer, PR #${String(top.number)}, could not be opened (${top.error ?? 'unknown error'}), so grounding could not read the code above this layer.`,
         ]
       : []),
   ]

@@ -221,7 +221,7 @@ function stackReading({ layers, top }: StackFolders): string {
     ...(top?.checkout
       ? [
           {
-            what: `\`${STACK_TOP_FOLDER}/\` is the source at the head of the stack's top open layer, PR #${String(top.number)}: the stack as it will land, with every layer in.`,
+            what: `\`${STACK_TOP_FOLDER}/\` is the source at the head of the stack's top open layer, PR #${String(top.number)}, as it was loaded. It holds the layers below as they were when that layer last took them in, so it can lack a lower layer's newer commits: when it disagrees with a layer's diff file, the diff file is that layer's current change.`,
             cite: `a file under \`${STACK_TOP_FOLDER}/\`, by that path`,
           },
         ]
