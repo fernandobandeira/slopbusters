@@ -12,6 +12,7 @@ import { PanelStack } from './PanelStack'
 import { ProviderMark } from './ProviderMark'
 import { reviewerFaceSrc } from '../../lib/reviewerFaces'
 import { useApiQuery } from '../../lib/useApiQuery'
+import { PanelFollowupProvider } from './PanelFollowups'
 import { PanelTour, type PanelDraftContext } from './PanelTour'
 import { LocalRoundNotice, OutdatedReview, ReviewAgain } from './ReviewAgain'
 import { usePanelSession } from './usePanelSession'
@@ -106,14 +107,16 @@ function PanelBody({
         <RoundNotice session={session} result={tour.result} context={context} />
       )}
       {session && tour.result && (
-        <PanelTour
-          result={tour.result}
-          reviewers={session.reviewers}
-          teammates={teammates}
-          index={tour.index}
-          advance={tour.advance}
-          context={context}
-        />
+        <PanelFollowupProvider sessionId={session.id} result={tour.result} replace={job.replace}>
+          <PanelTour
+            result={tour.result}
+            reviewers={session.reviewers}
+            teammates={teammates}
+            index={tour.index}
+            advance={tour.advance}
+            context={context}
+          />
+        </PanelFollowupProvider>
       )}
       {session && !tour.finding && (
         <ContinueWith session={session} url={context.pull.url} teammates={teammates} />

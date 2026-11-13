@@ -70,14 +70,22 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
   const candidates = result.grounding?.candidates ?? []
   const items = gateItems(resolved, result.gate, result.pull.number)
   const chosen = items
-    .filter((item) => item.action.selected && item.plan && !item.problem)
+    .filter(
+      (item) => item.action.selected && item.plan && !item.problem && !triage(item.entry).followUp,
+    )
     .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
   const decisions = items
     .filter((item) => triage(item.entry).disposition === 'ask' && !chosen.includes(item))
     .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
-  const blocked = items.filter((item) => item.action.selected && item.problem)
+  const blocked = items.filter(
+    (item) => item.action.selected && item.problem && !triage(item.entry).followUp,
+  )
   const rest = items.filter(
-    (item) => !item.action.selected && !decisions.includes(item) && !settledRejection(item.entry),
+    (item) =>
+      !item.action.selected &&
+      !decisions.includes(item) &&
+      !settledRejection(item.entry) &&
+      !triage(item.entry).followUp,
   )
   return [
     `Panel review of ${pullName(result.pull)}, "${result.pull.title}" (${result.pull.url}). Reviewers raised findings, two models grounded them against the code, and the author chose which to fix.`,
@@ -98,6 +106,17 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
       'Chosen but not ready',
       'Do not act on these until the author resolves what blocks them.',
       blocked.map((item) => `${entryBrief(item, candidates)}\n  Blocked: ${item.problem ?? ''}`),
+    ),
+    section(
+      'Follow-ups',
+      'Deferred from this PR. Do not fix these here.',
+      items
+        .filter((item) => triage(item.entry).followUp)
+        .map((item) => {
+          const ticket = result.followUps?.find((filed) => filed.entry === item.entry.id)
+          const title = leadSource(item.entry, candidates)?.finding.title ?? item.entry.id
+          return `- **${title}**: ${triage(item.entry).reason}${ticket ? ` Ticket: [${ticket.identifier}](${ticket.url})` : ''}`
+        }),
     ),
     section(
       'Other grounded findings',

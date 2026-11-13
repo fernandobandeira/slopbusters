@@ -11,6 +11,7 @@ export function panelRouter({
   panelGates,
   panelFixes,
   panelRoutes,
+  panelFollowups,
   fixChecks,
   store,
 }: Services) {
@@ -36,6 +37,12 @@ export function panelRouter({
     response.status(202)
     return started
   })
+  handle(router, routes.panelFollowUpOptions, ({ params, query }) =>
+    panelFollowups.choices(params.id, query.url),
+  )
+  handle(router, routes.filePanelFollowUps, ({ params, body }) =>
+    panelFollowups.file(params.id, body),
+  )
   handle(router, routes.getPanel, ({ params }) => panelJobs.get(params.id))
   handle(router, routes.continuePanel, ({ params }, _request, response) => {
     response.status(202)

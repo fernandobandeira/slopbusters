@@ -55,6 +55,7 @@ import { PanelFixes } from './features/panel/panelFixes'
 import { FixChecks } from './features/panel/fixCheck'
 import { localSnapshotLoader } from './features/panel/localRound'
 import { PanelGates } from './features/panel/panelGates'
+import { PanelFollowups } from './features/panel/panelFollowups'
 import { PanelRoutes } from './features/panel/panelRoutes'
 import { loadBuiltInSkill } from './features/panel/builtInSkills'
 import { PanelTools } from './features/mcp/panelTools'
@@ -234,6 +235,7 @@ export function createServices(options: ReviewerServerOptions) {
     panelGates,
     panelFixes,
     panelRoutes,
+    panelFollowups: new PanelFollowups({ ...panel, linear, linked: tickets.forPull }),
     fixChecks,
     panelTools: new PanelTools({ jobs: panelJobs, teammates }),
     chats: {

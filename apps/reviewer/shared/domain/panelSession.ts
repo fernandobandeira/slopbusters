@@ -1,3 +1,4 @@
+import type { FollowUpTicket } from './panelFollowups'
 import type { GroundingState } from './grounding'
 import type { Gate } from './panelGate'
 import type { CarriedFinding, FixHandoff, LayerRoute, LocalRound, MetadataDraft } from './panelFix'
@@ -37,6 +38,8 @@ export interface PanelResult {
   handoff?: FixHandoff
   /** Findings the author sent to another layer's round. */
   routed?: LayerRoute[]
+  /** Follow-up tickets filed in Linear for findings triage set aside, one per entry. */
+  followUps?: FollowUpTicket[]
   /** Titles and descriptions drafted from the chosen metadata plans. */
   metadataDrafts?: MetadataDraft[]
 }

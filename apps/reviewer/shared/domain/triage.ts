@@ -7,7 +7,7 @@ export const dispositionLabels: Record<Disposition, string> = {
   ask: 'Your call',
 }
 
-interface Triage {
+interface Decision {
   disposition: Disposition
   rank: number
   reason: string
@@ -18,12 +18,19 @@ interface Triage {
  * first rule that applies wins. The author takes the panel's recommendation on a question unless
  * it goes against the ticket, so only those and the models' disagreements come back to them.
  */
-export function triage(entry: ResolvedEntry): Triage {
-  return unsettled(entry) ?? rejected(entry) ?? question(entry) ?? worth(entry)
+export function triage(entry: ResolvedEntry): Decision & { followUp: boolean } {
+  const decision = unsettled(entry) ?? rejected(entry) ?? question(entry) ?? worth(entry)
+  const real = entry.verdict === 'legit' || (entry.verdict === 'authorsCall' && !!entry.plan)
+  const followUp =
+    decision.disposition === 'skip' &&
+    entry.resolution === 'agreed' &&
+    real &&
+    (entry.origin === 'preexisting' || entry.kind === 'edgeCase')
+  return { ...decision, followUp }
 }
 
 /** Without a verdict nothing can be decided; without agreement the author picks a side. */
-function unsettled(entry: ResolvedEntry): Triage | undefined {
+function unsettled(entry: ResolvedEntry): Decision | undefined {
   if (!entry.verdict) return skip('Needs evidence before it can be decided.')
   if (entry.resolution !== 'agreed')
     return ask(entry, 'Needs the author to settle what the models could not agree on.')
@@ -36,7 +43,7 @@ const rejections: Partial<Record<NonNullable<ResolvedEntry['verdict']>, string>>
   handledUpstack: 'Another stack layer already settles this.',
 }
 
-function rejected(entry: ResolvedEntry): Triage | undefined {
+function rejected(entry: ResolvedEntry): Decision | undefined {
   const reason = entry.verdict && rejections[entry.verdict]
   return reason ? skip(reason) : undefined
 }
@@ -45,7 +52,7 @@ function rejected(entry: ResolvedEntry): Triage | undefined {
  * An author's call takes the panel's recommendation unless it goes against the ticket. Calls
  * grounded before recommendations were asked for, which have no kind, still go to the author.
  */
-function question(entry: ResolvedEntry): Triage | undefined {
+function question(entry: ResolvedEntry): Decision | undefined {
   if (entry.verdict !== 'authorsCall') return undefined
   if (entry.ticketConflict) return ask(entry, 'The recommendation goes against the ticket.')
   if (!entry.kind) return ask(entry, 'Needs a decision only the author can make.')
@@ -64,7 +71,7 @@ const fixReasons: Record<NonNullable<ResolvedEntry['kind']>, string> = {
 }
 
 /** What is left is worth fixing, unless it predates the PR, costs more than it saves, or is taste. */
-function worth(entry: ResolvedEntry): Triage {
+function worth(entry: ResolvedEntry): Decision {
   const { verdict, kind } = entry
   if (entry.origin === 'preexisting')
     return skip('Already there before this change; leave it for a follow-up.')
@@ -77,15 +84,15 @@ function worth(entry: ResolvedEntry): Triage {
   return fix(entry, kind ? fixReasons[kind] : 'Both models agree this is worth fixing.')
 }
 
-function fix(entry: ResolvedEntry, reason: string): Triage {
+function fix(entry: ResolvedEntry, reason: string): Decision {
   return { disposition: 'fix', rank: fixRank(entry.kind), reason }
 }
 
-function ask(entry: ResolvedEntry, reason: string): Triage {
+function ask(entry: ResolvedEntry, reason: string): Decision {
   return { disposition: 'ask', rank: entry.kind === 'simplification' ? 0 : 1, reason }
 }
 
-function skip(reason: string): Triage {
+function skip(reason: string): Decision {
   return { disposition: 'skip', rank: 0, reason }
 }
 

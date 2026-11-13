@@ -12,6 +12,7 @@ import {
 import type { PanelReviewer } from '../../../shared/domain/panel'
 import type { PanelResult } from '../../../shared/domain/panelSession'
 import { FindingText } from '../../components/FindingText'
+import { FollowupAction } from './PanelFollowups'
 import { reviewerName } from './PanelFaces'
 
 /** What grounding decided about one finding: its verdict, whether both models agree, and why. */
@@ -30,6 +31,7 @@ export function GroundingVerdict({ result, id }: { result: PanelResult; id: stri
         {verdictLabel(entry)} · {groundingResolutionLabels[entry.resolution]}
         {entry.origin && ` · ${groundingOriginLabels[entry.origin]}`}
       </p>
+      <FollowupAction result={result} id={id} />
       <FindingText>{entry.reason}</FindingText>
       <EntryDetails entry={entry} />
       {entry.other && <OtherPosition other={entry.other} />}
@@ -117,8 +119,8 @@ export function GroundingSummary({
     const count = resolved.filter((entry) => entry.verdict === verdict).length
     return count ? [`${verdictLabel({ verdict })} ${String(count)}`] : []
   })
-  const followUps = resolved.filter((entry) => entry.origin === 'preexisting').length
-  if (followUps) verdicts.push(`${String(followUps)} already there, follow-up`)
+  const followUps = resolved.filter((entry) => triage(entry).followUp).length
+  if (followUps) verdicts.push(`${String(followUps)} follow-ups`)
   return (
     <>
       <p className="muted panel-grounding-counts">{counts.join(' · ')}</p>

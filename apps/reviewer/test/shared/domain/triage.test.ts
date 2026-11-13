@@ -123,3 +123,30 @@ describe('the default selection', () => {
     expect(items[1]?.problem).toBe('Answer the question first.')
   })
 })
+
+describe('follow-ups', () => {
+  it.each([
+    [{ origin: 'preexisting' }, true],
+    [{ kind: 'edgeCase' }, true],
+    [{ origin: 'preexisting', verdict: 'authorsCall', kind: 'product' }, true],
+    [{ kind: 'edgeCase', verdict: 'authorsCall' }, true],
+    [{ origin: 'change', kind: 'defect' }, false],
+    [{ kind: 'edgeCase', ...repeated }, false],
+    [{ origin: 'preexisting', resolution: 'disputed' }, false],
+    [{ kind: 'edgeCase', resolution: 'unverified' }, false],
+    [{ origin: 'preexisting', verdict: 'authorsCall', kind: 'product', plan: undefined }, false],
+    [{ kind: 'edgeCase', verdict: 'authorsCall', ticketConflict: 'Keep the behavior.' }, false],
+    [{ origin: 'preexisting', verdict: undefined }, false],
+    ...(['notTrue', 'overEngineering', 'handledUpstack', 'tasteSkip'] as const).flatMap(
+      (verdict) => [
+        [{ origin: 'preexisting', verdict }, false],
+        [{ kind: 'edgeCase', verdict }, false],
+      ],
+    ),
+  ] as [Partial<ResolvedEntry>, boolean][])(
+    'classifies %j as follow-up %s',
+    (changes, expected) => {
+      expect(triage({ ...base, ...changes }).followUp).toBe(expected)
+    },
+  )
+})

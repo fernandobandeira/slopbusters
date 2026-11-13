@@ -1,3 +1,4 @@
+import { followUpTicketSchema, followUpOptionsSchema } from '../domain/panelFollowups'
 import { z } from 'zod'
 import {
   activePanelSchema,
@@ -58,6 +59,7 @@ const session = z.object({
       gate: gateSchema.optional(),
       handoff: fixHandoffSchema.optional(),
       routed: z.array(layerRouteSchema).optional(),
+      followUps: z.array(followUpTicketSchema).optional(),
       metadataDrafts: z.array(metadataDraftSchema).optional(),
     }),
   ),
@@ -167,4 +169,24 @@ export const checkLocalFixes = defineRoute('POST', '/panel/:id/check-local', {
 export const cancelPanel = defineRoute('DELETE', '/panel/:id', {
   params: idParams,
   response: session,
+})
+
+export const panelFollowUpOptions = defineRoute('GET', '/panel/:id/follow-ups', {
+  params: idParams,
+  query: z.object({ url: pullUrlSchema }),
+  response: followUpOptionsSchema,
+})
+export const filePanelFollowUps = defineRoute('POST', '/panel/:id/follow-ups', {
+  params: idParams,
+  request: z
+    .object({
+      url: pullUrlSchema,
+      entries: z.array(z.string().min(1).max(40)).min(1).max(40),
+      team: z.string().min(1).optional(),
+    })
+    .strict(),
+  response: z.object({
+    session,
+    failures: z.array(z.object({ entry: z.string(), message: z.string() })),
+  }),
 })

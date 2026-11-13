@@ -83,7 +83,7 @@ describe('the panel review copied for an agent', () => {
     const brief = panelBriefMarkdown(
       result([
         entry('g1', 'f1'),
-        entry('g2', 'f2', { origin: 'preexisting' }),
+        entry('g2', 'f2', { verdict: 'authorsCall', kind: 'product', plan: undefined }),
         entry('g3', 'f3', { verdict: 'authorsCall', plan: undefined, question: 'Per day?' }),
       ]),
       reviewers,
@@ -138,6 +138,7 @@ describe('the panel review copied for an agent', () => {
     expect(brief).toContain('None yet.')
     expect(brief).toContain('- **Extract a class**: Over-engineering: one caller.')
     expect(brief).not.toContain('## Other grounded findings')
+    expect(brief).not.toContain('### 1. Reuse the audit helper')
   })
 
   it('falls back to the judged review, with the revision, for sessions before grounding', () => {
@@ -206,4 +207,26 @@ describe('triage in the agent brief', () => {
     expect(brief).toContain('Recommendation: Plan for g3.')
     expect(brief).toContain('Cost: large.')
   })
+})
+
+it('separates follow-ups from other context and includes filed tickets', () => {
+  const review = result([
+    entry('g1', 'f1', { origin: 'preexisting' }),
+    entry('g2', 'f2', { kind: 'edgeCase' }),
+  ])
+  review.gate = { actions: [{ entry: 'g1', selected: true }] }
+  review.followUps = [
+    {
+      entry: 'g1',
+      identifier: 'DEMO-21',
+      url: 'https://linear.app/demo/issue/DEMO-21',
+      filedAt: '2026-01-01',
+    },
+  ]
+  const brief = panelBriefMarkdown(review, reviewers)
+  expect(brief).toContain('## Follow-ups\n\nDeferred from this PR. Do not fix these here.')
+  expect(brief).toContain('Ticket: [DEMO-21](https://linear.app/demo/issue/DEMO-21)')
+  expect(brief).toContain('Rename the guard')
+  expect(brief).not.toContain('## Other grounded findings')
+  expect(brief).not.toContain('### 1. Reuse the audit helper')
 })

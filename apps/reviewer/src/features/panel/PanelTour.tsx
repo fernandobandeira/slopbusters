@@ -32,6 +32,7 @@ import {
 import { CodeReferenceText } from '../../components/CodeReferenceText'
 import { FindingText } from '../../components/FindingText'
 import { GroundingSummary, GroundingVerdict } from './GroundingNotes'
+import { FollowupSummaryAction } from './PanelFollowups'
 import { PanelFaces, reviewerName } from './PanelFaces'
 
 export interface PanelDraftContext {
@@ -205,6 +206,7 @@ function SummaryStep({ result, reviewers, teammates }: TourProps) {
       />
       <FindingText>{advice.summary}</FindingText>
       {result.grounding && <GroundingSummary grounding={result.grounding} reviewers={reviewers} />}
+      <FollowupSummaryAction result={result} />
       {advice.setAside.length > 0 && (
         <details className="finding-notes">
           <summary>
