@@ -176,6 +176,28 @@ it('requires observed commands and lets observed failures override claimed succe
   ).toEqual([])
 })
 
+it('judges each check by its last run and ignores the worker’s other commands', () => {
+  const run = (id: string, input: string, exitCode: number) => ({
+    id,
+    input,
+    output: commit,
+    exitCode,
+  })
+  expect(
+    checkProblems(report, [
+      run('search', 'grep -rn retry src', 1),
+      run('before', 'git rev-parse HEAD && pnpm test', 1),
+      run('after', 'git rev-parse HEAD && pnpm test', 0),
+    ]),
+  ).toEqual([])
+  expect(
+    checkProblems(report, [
+      run('before', 'git rev-parse HEAD && pnpm test', 0),
+      run('after', 'git rev-parse HEAD && pnpm test', 1),
+    ]).join('\n'),
+  ).toContain('observed failure')
+})
+
 it.each([
   ['b'.repeat(40), 'pushed'],
   ['c'.repeat(40), 'moved'],

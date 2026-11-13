@@ -1,43 +1,31 @@
 import type { LayerFixSession, WorkerReport } from '../../../shared/domain/layerFix'
 import type { ObservedCommand } from '../../adapters/t3Engine/threadTurns'
 
-/** Exact commands only. A successful assertion never overrides a failed engine observation. */
+/**
+ * Each claimed check is judged by its last run the engine observed, on the exact command the
+ * report names: it must have run, exited 0 without indicating failure, and match the claimed exit
+ * code. Other commands, such as a search that found nothing or a test run before the fix, are the
+ * worker's own business and never count against it.
+ */
 export function checkProblems(
   report: WorkerReport,
   commands: readonly ObservedCommand[],
 ): string[] {
-  const problems: string[] = []
-  for (const claim of report.checks) {
-    const observed = commands.filter((command) => command.input.trim() === claim.command.trim())
-    if (!observed.length) problems.push(`${claim.command}: not observed`)
-    else if (!observed.some((command) => command.exitCode === claim.exitCode))
-      problems.push(
-        `${claim.command}: claimed exit code ${String(claim.exitCode)} was not observed`,
-      )
-  }
-  for (const command of commands) {
-    if (command.exitCode === undefined) problems.push(`${command.input}: exit code not observed`)
-    if (
-      command.outputIndicatesFailure ||
-      (command.exitCode !== undefined && command.exitCode !== 0)
-    )
-      problems.push(
-        `${command.input}: observed failure (exit ${String(command.exitCode ?? 'unknown')})`,
-      )
-  }
-  if (!report.checks.length) problems.push('No repository checks were reported.')
-  for (const claim of report.checks) {
-    if (
-      !commands.some(
-        (command) =>
-          command.input.trim() === claim.command.trim() &&
-          command.exitCode === 0 &&
-          !command.outputIndicatesFailure,
-      )
-    )
-      problems.push(`${claim.command}: no observed successful execution`)
-  }
-  return [...new Set(problems)]
+  if (!report.checks.length) return ['No repository checks were reported.']
+  return report.checks.flatMap((claim) => {
+    const last = lastRun(commands, claim.command)
+    if (!last) return [`${claim.command}: not observed`]
+    if (last.exitCode === undefined) return [`${claim.command}: exit code not observed`]
+    if (last.exitCode !== 0 || last.outputIndicatesFailure)
+      return [`${claim.command}: observed failure (exit ${String(last.exitCode)})`]
+    if (claim.exitCode !== last.exitCode)
+      return [`${claim.command}: claimed exit code ${String(claim.exitCode)}, observed 0`]
+    return []
+  })
+}
+
+function lastRun(commands: readonly ObservedCommand[], command: string) {
+  return commands.filter((item) => item.input.trim() === command.trim()).at(-1)
 }
 
 export function reportProblems(session: LayerFixSession): string[] {
@@ -85,16 +73,13 @@ function checkedProblems(session: LayerFixSession, id: string): string[] {
 }
 
 function testedHeadProblems(session: LayerFixSession, report: WorkerReport): string[] {
-  const problems: string[] = []
-  for (const check of report.checks) {
-    const observed = session.commands.find(
-      (command) => command.input.trim() === check.command.trim(),
-    )
-    if (
-      !observed?.input.startsWith('git rev-parse HEAD && ') ||
-      observed.output?.split('\n')[0]?.trim() !== session.head
-    )
-      problems.push(`${check.command}: the tested HEAD was not observed at the final commit`)
-  }
-  return problems
+  return report.checks.flatMap((check) => {
+    const last = lastRun(session.commands, check.command)
+    const tested = last?.input.trim().startsWith('git rev-parse HEAD && ')
+      ? last.output?.split('\n')[0]?.trim()
+      : undefined
+    return tested === session.head
+      ? []
+      : [`${check.command}: the tested HEAD was not observed at the final commit`]
+  })
 }

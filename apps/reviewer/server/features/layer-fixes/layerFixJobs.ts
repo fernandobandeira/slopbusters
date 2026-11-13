@@ -68,10 +68,7 @@ export class LayerFixJobs {
       base: group.layer.reviewedBase ?? '',
       createdAt: new Date().toISOString(),
       model: models.primary,
-      checker: {
-        ...models.companion,
-        model: models.companion.provider === Provider.claude ? 'claude-haiku-5-5' : 'gpt-6.1-sol',
-      },
+      checker: models.companion,
       status: 'running',
       progress: 'Preparing an app-owned worktree…',
       fixes: chosen.map((fix) => ({
