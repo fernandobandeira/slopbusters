@@ -1600,6 +1600,33 @@ pre {
   margin: 8px 0;
   max-width: 520px;
 }
+.agent-commands {
+  display: grid;
+  gap: 8px;
+}
+.agent-command {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.agent-command code {
+  padding: 6px 10px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  font-size: 12px;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .agent-command {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .agent-command span {
+    grid-column: 1 / -1;
+  }
+}
 .sidebar-label-spaced {
   margin-top: 18px;
 }

@@ -57,6 +57,7 @@ import { localSnapshotLoader } from './features/panel/localRound'
 import { PanelGates } from './features/panel/panelGates'
 import { PanelRoutes } from './features/panel/panelRoutes'
 import { loadBuiltInSkill } from './features/panel/builtInSkills'
+import { PanelTools } from './features/mcp/panelTools'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   dataDirectory: string
@@ -69,6 +70,8 @@ export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   /** Where Claude Code and Codex keep the user's own skills; replaced in tests. */
   skillRoots?: SkillRoots
   port?: number
+  /** Serve coding agents the panel over MCP, on the app's fixed loopback port unless one is given. */
+  mcp?: { port?: number }
   allowedOrigins?: string[]
   sourceRemoteUrl?: (owner: string, repo: string) => string
   github?: GitHub
@@ -232,6 +235,7 @@ export function createServices(options: ReviewerServerOptions) {
     panelFixes,
     panelRoutes,
     fixChecks,
+    panelTools: new PanelTools({ jobs: panelJobs, teammates }),
     chats: {
       continueInT3Code: async (request: ContinueChatRequest) => {
         const model = chatModel()

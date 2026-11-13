@@ -16,6 +16,9 @@ import { chatRouter } from './http/chatRouter'
 import { teammatesRouter } from './http/teammatesRouter'
 import { panelRouter } from './http/panelRouter'
 import { splitRouter } from './http/splitRouter'
+import { openMcpEndpoint, type McpEndpoint } from './http/mcpEndpoint'
+import { panelMcpServer } from './http/mcpTools'
+import { MCP_PORT } from './features/mcp/limits'
 
 export type { ReviewerServerOptions } from './services'
 
@@ -23,6 +26,7 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
   const services = createServices(options)
   const app = express()
   let ownOrigin = ''
+  let mcp: McpEndpoint | undefined
   app.disable('x-powered-by')
   app.use(
     localOnly(() => ownOrigin, options.allowedOrigins),
@@ -42,7 +46,7 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
     panelRouter(services),
     splitRouter(services),
     sourceRouter(services),
-    settingsRouter(services),
+    settingsRouter(services, () => ({ url: mcp?.url, problem: mcp?.problem })),
   )
   app.use('/api', (_request, response) => {
     response.status(404).json({ error: 'Unknown API route.' })
@@ -52,7 +56,7 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
     response.sendFile(resolve(options.staticDirectory, 'index.html'))
   })
   app.use(errorHandler)
-  return listen(
+  const server = await listen(
     app,
     services,
     (origin) => {
@@ -60,4 +64,19 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
     },
     options.port,
   )
+  if (options.mcp)
+    mcp = await openMcpEndpoint(
+      () => panelMcpServer(services.panelTools),
+      options.mcp.port ?? MCP_PORT,
+    )
+  return {
+    ...server,
+    /** Where coding agents connect, when the endpoint is served and its port was free. */
+    mcpUrl: mcp?.url,
+    // The endpoint closes first, so a tool waiting on a panel ends before the panel is stopped.
+    close: async () => {
+      await mcp?.close()
+      await server.close()
+    },
+  }
 }

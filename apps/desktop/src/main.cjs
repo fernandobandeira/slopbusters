@@ -272,6 +272,13 @@ async function verifySmoke(window) {
     if (!/^t3 v\d/.test(stdout.trim())) throw new Error('The bundled T3 Code engine did not run.')
   }
   smokeStage('engine-ready')
+  const tools = await fetch(server.mcpUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+  })
+  if (!tools.ok || !(await tools.text()).includes('start_panel_review')) throw new Error('The MCP endpoint for coding agents did not list its tools.')
+  smokeStage('mcp-ready')
   const phase = smokeArgument('--smoke-phase')
   const isolation = window.webContents.getLastWebPreferences()
   if (!isolation.sandbox || !isolation.contextIsolation || isolation.nodeIntegration) throw new Error('The renderer must remain sandboxed and isolated from Node.')
@@ -416,6 +423,8 @@ async function start() {
     ...sourceAnalysisOptions,
     bundledEngine: { executable: engineExecutable, openUrl: openChatWindow },
     port: 0,
+    // Coding agents find the app on a fixed port. A smoke run takes a free one, away from an installed app.
+    mcp: smoke ? { port: 0 } : {},
   })
   smokeStage('server-ready')
   powerMonitor.on('suspend', () => {

@@ -2,6 +2,7 @@
 
 - `server/app.ts` composes services, middleware and routers. Keep route handlers in `server/http`.
 - Every HTTP route has a zod contract in `shared/api`. Register it with `handle` and call it with `call`; never cast a fetched response. Validate responses as well as requests.
+- Coding agents reach the app through MCP, not the API: `server/http/mcpEndpoint.ts` serves the official SDK's streamable HTTP transport on its own fixed loopback port, one stateless server per request, and `server/http/mcpTools.ts` declares each tool with a zod input. A tool is a thin call into `server/features/mcp`, which answers in text an agent can act on and throws `UserError` for anything the agent got wrong. Expose a capability there deliberately; never mount the app's routers on that port.
 - `shared` is the narrow waist: domain types, contracts and pure rules. No Node builtins, React, Express, filesystem or process calls.
 - I/O belongs in `server/adapters`. Git uses `hardenedGit`; GitHub uses the injected `GitHub` object's `rest`, `graphql` and `paginate`. Build on the bounded process runner.
 - Services and caches belong to a server instance. Reuse `createCache` for LRU bounds, bytes, TTLs and concurrent loads; do not add module-global request caches.

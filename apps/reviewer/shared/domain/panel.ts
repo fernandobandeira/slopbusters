@@ -32,6 +32,9 @@ export const reviewerIdSchema = z.union([
 ])
 export type ReviewerId = z.infer<typeof reviewerIdSchema>
 
+/** Who sits on a panel until someone chooses: Uncle Bob and the Terminator. */
+export const defaultPanelReviewers: readonly BuiltInReviewer[] = ['unclebob', 'terminator']
+
 export function teammateReviewerId(id: string): ReviewerId {
   return `teammate:${id}` as ReviewerId
 }

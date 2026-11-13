@@ -4,6 +4,7 @@ import { Provider } from '../../../shared/domain/types'
 import {
   builtInReviewerIds,
   builtInReviewers,
+  defaultPanelReviewers,
   teammateReviewerId,
 } from '../../../shared/domain/panel'
 
@@ -27,7 +28,7 @@ export interface Candidate {
   unavailable?: string
 }
 
-const DEFAULT_SELECTION: PanelChoice[] = [{ id: 'unclebob' }, { id: 'terminator' }]
+const DEFAULT_SELECTION: PanelChoice[] = defaultPanelReviewers.map((id) => ({ id }))
 
 /** The reviewers the user last asked; Uncle Bob and the Terminator until they choose. */
 export function savedPanelSelection(): PanelChoice[] {

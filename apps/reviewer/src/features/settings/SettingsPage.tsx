@@ -5,6 +5,7 @@ import { ThemePicker } from './ThemePicker'
 import { LanguageServerSettings } from './LanguageServerSettings'
 import { ReviewWorkspaceSettings } from './ReviewWorkspaceSettings'
 import { LinearSettings } from './LinearSettings'
+import { CodingAgentSettings } from './CodingAgentSettings'
 import { OrganizationSettings } from './OrganizationSettings'
 import type { AppStatus } from '../../../shared/domain/types'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
@@ -39,6 +40,7 @@ export function SettingsPage({
       </section>
       {teammates}
       <LinearSettings />
+      <CodingAgentSettings />
       <LanguageServerSettings />
       <ReviewWorkspaceSettings />
       <section className="settings-section" aria-labelledby="appearance-title">

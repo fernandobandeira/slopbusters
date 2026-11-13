@@ -51,6 +51,29 @@ To review several PRs at once, click **Select** above the PR list on any tab, ti
 
 Teammates are reviewers you add in **Settings → Teammates** from a skill you installed for Claude Code (`~/.claude/skills`) or Codex (`~/.codex/skills`), usually a colleague's review persona. The wizard lists installed skills by provider, then asks for a name, a title the judge sees, a finding cap, and optional faces for the five moods; one face fills the rest, and none shows initials. Slopbusters stores only that record and the faces in its data folder and never writes to the skill. A teammate installed for one provider reviews only while that provider is your primary model. Its instructions go to your model provider with the PR, and the reviewer reads its own `references/` from a copy of the skill folder, so add only skills you trust as much as the built-in reviewers.
 
+## Panel reviews from your coding agent
+
+Claude Code, Codex and any other MCP client can ask the panel for a review and read the result, so the agent that wrote a PR can have it reviewed and fix what the panel finds. The desktop app serves a streamable HTTP MCP endpoint at `http://127.0.0.1:47812/mcp` while it is open. Add it once; **Settings** shows the same commands with copy buttons, and says so if another program holds the port:
+
+```sh
+claude mcp add --transport http --scope user slopbusters http://127.0.0.1:47812/mcp
+codex mcp add slopbusters --url http://127.0.0.1:47812/mcp
+```
+
+Then ask the agent for a Slopbusters panel review of a PR. The PR's URL names its panel in every call:
+
+| Tool                  | What it does                                                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list_reviewers`      | The built-in reviewers and your teammates, with the ids to ask them by.                                                                                                                          |
+| `start_panel_review`  | Starts a panel on a pushed PR and returns at once. Uncle Bob and the Terminator review unless `reviewers` names others. Asking again while the same panel is working returns that panel.         |
+| `get_panel_review`    | Waits up to `wait_seconds` (45 by default, 600 at most) for the working panel, then returns the review as the same brief **Copy review** writes, or the panel's progress if it is still working. |
+| `retry_panel_review`  | Runs a panel that failed, was cancelled, or is waiting on reviewers that could not finish; `skip_failed_reviewers` grounds the reviews that did finish instead.                                  |
+| `cancel_panel_review` | Stops the panel working on a PR. Finished reviews stay saved.                                                                                                                                    |
+
+A panel an agent starts is the same panel you would start: it appears on the PR's row and in its header, notifies you when it finishes, and its fixes are still yours to choose. Until you choose, the brief lists the default selection, the findings both grounding models agreed are worth fixing and that the PR introduced, and says that you have not confirmed it. The tools tell the agent to start a panel only when you or your instructions ask for one, because a panel runs on your Claude and Codex accounts.
+
+The endpoint listens on its own loopback port and serves only these tools; the app's API stays on a port chosen at each launch. It refuses any request that carries a browser `Origin` or a host other than the loopback address. If the port is taken the app runs without the endpoint. A development server (`pnpm dev`, `pnpm start`) leaves the port to the installed app and serves agents only when started with `SLOPBUSTERS_MCP_PORT=<port>`.
+
 ## Linear issues and Steve Jobs
 
 Slop is cheapest to catch before anyone writes code. **Issues** in the sidebar lists the open Linear issues assigned to you or created by you, with each one's state, parent, linked PR count, and the latest Jobs verdict. Paste an issue ID or a Linear link to open any other issue. No board, no triage: the list exists to pick a ticket and make it clear.

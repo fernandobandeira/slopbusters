@@ -78,6 +78,10 @@ export const saveLanguageServers = defineRoute('PUT', '/language-servers', {
   request: languageServerConfigurationSchema,
   response: servers,
 })
+/** Where coding agents reach this app over MCP; neither field when this run serves none. */
+export const getMcpEndpoint = defineRoute('GET', '/mcp-endpoint', {
+  response: z.object({ url: z.string().optional(), problem: z.string().optional() }),
+})
 export const getWorkspaces = defineRoute('GET', '/workspaces', {
   response: z.array(workspaceInfo.extend({ owner: z.string(), repo: z.string() })),
 })
