@@ -1,4 +1,5 @@
 import {
+  groundingKindLabels,
   groundingOriginLabels,
   groundingResolutionLabels,
   groundingVerdictLabels,
@@ -19,6 +20,7 @@ export function GroundingVerdict({ result, id }: { result: PanelResult; id: stri
   return (
     <div className="panel-grounding">
       <p className="finding-severity">
+        {entry.kind && `${groundingKindLabels[entry.kind]} · `}
         {verdictLabel(entry)} · {groundingResolutionLabels[entry.resolution]}
         {entry.origin && ` · ${groundingOriginLabels[entry.origin]}`}
       </p>

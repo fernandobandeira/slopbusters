@@ -70,7 +70,13 @@ export async function groundPanel(
   return { advice: groundedAdvice(state, { summary, limitations }), grounding: state }
 }
 
-function startGrounding({ pending, reviewers, models, carried }: GroundingRequest): GroundingState {
+function startGrounding({
+  pending,
+  reviewers,
+  models,
+  carried,
+  layers,
+}: GroundingRequest): GroundingState {
   const reviews = reviewers.flatMap(
     (reviewer) => pending.reviews.find((review) => review.reviewer === reviewer.id) ?? [],
   )
@@ -95,6 +101,9 @@ function startGrounding({ pending, reviewers, models, carried }: GroundingReques
       })),
     ],
     roles: models,
+    ...(layers.length
+      ? { stack: layers.map(({ pull }) => ({ pull: pull.number, headSha: pull.headSha })) }
+      : {}),
     turns: [],
     entries: [],
     positions: {},
@@ -175,15 +184,25 @@ function groundingTurn(
 const groundingRubric = `You ground a review panel's findings against the code, taking turns with another model on one shared list. Several reviewers raised the sources below independently. Check each against the PR, its stack and the repository yourself; agreement between reviewers is not evidence, and one reviewer alone can be right.
 A source with carriedFrom was grounded on another layer of the stack, whose author sent it to this PR; ground it again against this PR's code.
 Account for every source key in exactly one entry. An entry with several sources merges findings that make the same point; never invent a source, and do not add entries no source supports.
-Verdicts:
+Verdicts say what the evidence supports, not what the author should do:
 - legit: the code, a repository rule or the PR shows the problem. plan says the change in one to three lines and names the convention or sibling implementation to follow.
-- notTrue: evidence you inspected contradicts it. Cite it in evidence as path:line, or as "title: …" or "description: …" quoting the PR. Not finding something is not disproof.
+- notTrue: evidence you inspected contradicts it. Cite it in evidence as path:line, or as "title: …" or "description: …" quoting the PR. Not finding something is not disproof; a claim such as "old rows may now fail" is settled by tracing every writer, not by its plausibility.
+- handledUpstack: the finding is true of this PR alone, and another layer of the stack already settles it. settledBy names that layer's PR and evidence cites what you read there as path:line. Use it only for a layer you inspected; "the layer above probably handles it" is not evidence.
 - overEngineering: a simpler change is enough. Cite the convention or sibling implementation that shows it.
-- tasteSkip: a preference consistent with the reviewer but with no demonstrated cost, which the author can skip.
-- authorsCall: it depends on product intent, production facts or a public commitment. question says what to ask the author. A source tagged decision starts here, and preferring an answer does not settle it.
+- tasteSkip: a preference consistent with the reviewer but with no demonstrated cost, which the author can skip. When the change would be small, still say it in plan.
+- authorsCall: it depends on product intent, production facts or a public commitment. question says what to ask the author. A source tagged decision starts here, and preferring an answer does not settle it. When the linked ticket or its parent already answers the question, it is not an author's call: ground it against that answer.
 - Leave verdict out when the evidence needed to decide is unavailable, and say in missing what would settle it. Never pick a verdict just to fill the field.
+kind says what the finding asks for, whatever its verdict:
+- simplification: it would remove something, such as a helper, a map, a guard, a parameter, a job, state or a whole layer, or it asks whether that thing is needed. Check what reads, calls or depends on it. When nothing does, it is legit and plan says what to delete, even when the reviewer only asked a question. When removing it changes what users or operators get, it is authorsCall, and plan still says what would be deleted so the author can answer yes or no. It is never tasteSkip.
+- defect: the code does the wrong thing on a path that one ordinary condition reaches.
+- rule: a written repository rule, or a convention the code applies consistently, is broken.
+- edgeCase: it only matters when two or more independent things go wrong together. Its plan is the smallest thing that leaves a trace, such as a log line for whoever is on call, never new machinery.
+- test: only tests change.
+- product: what the product should do. Check the linked ticket and its parent before calling it the author's.
+- wording: a name, a comment, or the PR's title or description.
+effort: small for a few lines in one place, medium for one focused change, large for work across files or layers.
 origin: change when lines this PR or its stack changed cause the problem; exposed when the code is outside the change but the change makes it wrong or newly relevant; preexisting when it was already wrong without this PR, which makes it a follow-up. Origin never changes the verdict: a preexisting problem can still be legit, and an entry is not rejected for being outside the change.
-reason: one or two sentences with the evidence or what is missing. destination: the PR whose code must change (code), the PR whose title or description needs a new draft (metadata), or unresolved with why; a comment on one layer can need its change on another.`
+reason: one or two sentences with the evidence or what is missing. destination: the PR whose code must change (code), the PR whose title or description needs a new draft (metadata), or unresolved with why; a comment on one layer can need its change on another, and a change belongs on the layer that owns the code, never on the top of the stack for convenience.`
 
 function turnInstructions(state: GroundingState, role: GroundingRole): string {
   if (!state.turns.length)

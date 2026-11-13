@@ -179,7 +179,7 @@ function revisionHeader(result: PanelResult): string {
 function settledRejection(entry: ResolvedEntry): boolean {
   return (
     entry.resolution === 'agreed' &&
-    ['notTrue', 'overEngineering', 'tasteSkip'].includes(entry.verdict ?? '')
+    ['notTrue', 'overEngineering', 'tasteSkip', 'handledUpstack'].includes(entry.verdict ?? '')
   )
 }
 

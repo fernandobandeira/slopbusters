@@ -28,6 +28,8 @@ function entry(sources: string[], changes: Partial<GroundedEntry> = {}): Grounde
     evidence: ['src/audit.ts:4'],
     plan: 'Reuse the audit helper.',
     origin: 'change',
+    kind: 'defect',
+    effort: 'small',
     destination: { kind: 'code', pull: 12 },
     ...changes,
   }
@@ -81,8 +83,8 @@ describe('choosing what a round grounds', () => {
   })
 })
 
-describe('a grounded list', () => {
-  const candidates = selectCandidates(
+const twoSelected = () =>
+  selectCandidates(
     12,
     [
       { reviewer: 'unclebob', advice: findings('bob', 2) },
@@ -90,6 +92,9 @@ describe('a grounded list', () => {
     ],
     2,
   )
+
+describe('a grounded list', () => {
+  const candidates = twoSelected()
 
   it('passes when its entries partition the selected sources', () => {
     expect(groundingProblems(turn([entry(['f1', 'f2'])]), scope(candidates))).toEqual([])
@@ -153,8 +158,59 @@ describe('a grounded list', () => {
     }))
 
     expect(groundingProblems(turn([entry(['f1', 'f2'])]), scope(questions))).toEqual([
-      "g-f1-f2: its sources are questions for the author; it stays an author's call unless code disproves it.",
+      "g-f1-f2: its sources are questions for the author; it stays an author's call unless code disproves it, another layer settles it, or the answer is to remove something nothing needs.",
     ])
+  })
+})
+
+describe('what a grounded entry asks for', () => {
+  const candidates = twoSelected()
+
+  it('lets a question become a fix when its answer is to remove something nothing needs', () => {
+    const questions = candidates.map((candidate) => ({
+      ...candidate,
+      finding: { ...candidate.finding, tag: 'decision' as const },
+    }))
+    const removal = entry(['f1', 'f2'], { kind: 'simplification', plan: 'Delete the alert job.' })
+
+    expect(groundingProblems(turn([removal]), scope(questions))).toEqual([])
+  })
+
+  it('asks every entry what it is for and what it costs, and never files a removal as taste', () => {
+    const problems = groundingProblems(
+      turn([
+        entry(['f1'], { kind: undefined, effort: undefined }),
+        entry(['f2'], { kind: 'simplification', verdict: 'tasteSkip' }),
+      ]),
+      scope(candidates),
+    )
+
+    expect(problems).toEqual([
+      'g-f1: say in kind what the finding asks for.',
+      'g-f1: say in effort whether the change is small, medium or large.',
+      'g-f2: removing something is never taste: legit when nothing needs it, notTrue when something does, authorsCall when removing it changes what users or operators get.',
+    ])
+  })
+
+  it('accepts a finding another layer settles only with that layer and what was read there', () => {
+    const stack = { candidates, pulls: [12, 13] }
+    const settled = (changes: Partial<GroundedEntry>) =>
+      entry(['f1'], { verdict: 'handledUpstack', plan: undefined, ...changes })
+    const rest = entry(['f2'])
+
+    expect(groundingProblems(turn([settled({ settledBy: { pull: 13 } }), rest]), stack)).toEqual([])
+    expect(groundingProblems(turn([settled({}), rest]), stack)).toEqual([
+      'g-f1: handledUpstack needs settledBy, the layer that settles it.',
+    ])
+    expect(
+      groundingProblems(turn([settled({ settledBy: { pull: 12 }, evidence: [] }), rest]), stack),
+    ).toEqual([
+      'g-f1: settledBy must be another loaded layer, and PR #12 is not one.',
+      'g-f1: handledUpstack needs evidence you read in that layer, as path:line.',
+    ])
+    expect(
+      groundingProblems(turn([entry(['f1'], { settledBy: { pull: 13 } }), rest]), stack),
+    ).toEqual(['g-f1: settledBy is only for a handledUpstack entry.'])
   })
 })
 

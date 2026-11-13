@@ -99,7 +99,7 @@ function sameGrouping(a: GroundedEntry, b: GroundedEntry) {
 /** As many limitations as the review schema holds. */
 const MAX_LIMITATIONS = 16
 
-const rejections = new Set(['notTrue', 'overEngineering', 'tasteSkip'])
+const rejections = new Set(['notTrue', 'overEngineering', 'tasteSkip', 'handledUpstack'])
 
 /** Fix first, then questions, then what is still open, then disputed rejections. */
 function displayGroup(entry: ResolvedEntry): number {

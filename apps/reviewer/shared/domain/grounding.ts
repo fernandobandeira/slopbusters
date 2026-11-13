@@ -14,6 +14,7 @@ export const groundingVerdicts = [
   'overEngineering',
   'tasteSkip',
   'authorsCall',
+  'handledUpstack',
 ] as const
 export type GroundingVerdict = (typeof groundingVerdicts)[number]
 export const groundingVerdictLabels: Record<GroundingVerdict, string> = {
@@ -22,6 +23,7 @@ export const groundingVerdictLabels: Record<GroundingVerdict, string> = {
   overEngineering: 'Over-engineering',
   tasteSkip: 'Taste, safe to skip',
   authorsCall: "Author's call",
+  handledUpstack: 'Handled by another layer',
 }
 export const groundingRoles = ['primary', 'secondary'] as const
 export type GroundingRole = (typeof groundingRoles)[number]
@@ -44,6 +46,33 @@ export const groundingOriginLabels: Record<GroundingOrigin, string> = {
   exposed: 'Exposed by this change',
   preexisting: 'Already there · follow-up',
 }
+
+/**
+ * What a finding asks for, apart from whether the code supports it. Triage ranks by it: removing
+ * something comes first, a case that needs several things to go wrong is skipped.
+ */
+export const groundingKinds = [
+  'simplification',
+  'defect',
+  'rule',
+  'edgeCase',
+  'test',
+  'product',
+  'wording',
+] as const
+export type GroundingKind = (typeof groundingKinds)[number]
+export const groundingKindLabels: Record<GroundingKind, string> = {
+  simplification: 'Simplification',
+  defect: 'Defect',
+  rule: 'Repository rule',
+  edgeCase: 'Edge case',
+  test: 'Tests only',
+  product: 'Product question',
+  wording: 'Naming or wording',
+}
+
+/** How much the change costs: a few lines, one focused change, or work across files or layers. */
+export const groundingEfforts = ['small', 'medium', 'large'] as const
 
 /** The short key a round gives a seat's finding, so colliding seat-local ids stay distinct. */
 const sourceKeySchema = z.string().regex(/^f\d{1,3}$/)
@@ -92,6 +121,11 @@ export const groundedEntrySchema = z
     question: z.string().min(1).max(300).optional(),
     /** Absent only on lists grounded before origins were recorded. */
     origin: z.enum(groundingOrigins).optional(),
+    /** Absent only on lists grounded before kinds and efforts were recorded. */
+    kind: z.enum(groundingKinds).optional(),
+    effort: z.enum(groundingEfforts).optional(),
+    /** Required for `handledUpstack`: the stack layer whose change settles the finding. */
+    settledBy: z.object({ pull: z.number().int().positive() }).strict().optional(),
     destination: destinationSchema,
   })
   .strict()
@@ -150,6 +184,11 @@ export const groundingStateSchema = z.object({
   budget: z.number().int().positive(),
   candidates: z.array(groundingCandidateSchema),
   roles: z.object({ primary: organizationSchema, secondary: organizationSchema.optional() }),
+  /**
+   * The other stack layers the round read, at the heads it read them. A `handledUpstack` entry
+   * holds only while its layer is still at that head.
+   */
+  stack: z.array(z.object({ pull: z.number().int().positive(), headSha: z.string() })).optional(),
   turns: z.array(turnRecordSchema),
   /** The last valid list. */
   entries: z.array(groundedEntrySchema),
@@ -233,19 +272,58 @@ function entryProblems(
   scope: GroundingScope,
   selected: ReadonlyMap<string, GroundingCandidate>,
 ): string[] {
-  const problems = [...verdictProblems(entry), ...evidenceProblems(entry)]
+  const reviewed = selected.get(entry.sources[0] ?? '')?.pull
+  const problems = [
+    ...verdictProblems(entry),
+    ...evidenceProblems(entry),
+    ...upstackProblems(entry, scope, reviewed),
+  ]
   if (!entry.origin)
     problems.push(
       'say in origin whether this change caused it, exposed it, or it was there before.',
     )
+  if (!entry.kind) problems.push('say in kind what the finding asks for.')
+  if (!entry.effort) problems.push('say in effort whether the change is small, medium or large.')
+  if (entry.kind === 'simplification' && entry.verdict === 'tasteSkip')
+    problems.push(
+      'removing something is never taste: legit when nothing needs it, notTrue when something does, authorsCall when removing it changes what users or operators get.',
+    )
   if (entry.destination.kind !== 'unresolved' && !scope.pulls.includes(entry.destination.pull))
     problems.push(`PR #${String(entry.destination.pull)} is not this PR or a loaded layer.`)
   const decisions = entry.sources.every((key) => selected.get(key)?.finding.tag === 'decision')
-  if (decisions && entry.verdict && !['authorsCall', 'notTrue'].includes(entry.verdict))
+  if (decisions && entry.verdict && !settlesQuestion(entry))
     problems.push(
-      "its sources are questions for the author; it stays an author's call unless code disproves it.",
+      "its sources are questions for the author; it stays an author's call unless code disproves it, another layer settles it, or the answer is to remove something nothing needs.",
     )
   return problems.map((problem) => `${entry.id}: ${problem}`)
+}
+
+/**
+ * A question for the author that the code can answer after all: it is disproved, a layer above
+ * settles it, or it asks whether something can go and nothing needs that thing.
+ */
+function settlesQuestion(entry: GroundedEntry): boolean {
+  if (entry.verdict === 'legit') return entry.kind === 'simplification'
+  return ['authorsCall', 'notTrue', 'handledUpstack'].includes(entry.verdict ?? '')
+}
+
+/** `handledUpstack` names another loaded layer and what was read there; no other verdict does. */
+function upstackProblems(
+  entry: GroundedEntry,
+  scope: GroundingScope,
+  reviewed: number | undefined,
+): string[] {
+  if (entry.verdict !== 'handledUpstack')
+    return entry.settledBy ? ['settledBy is only for a handledUpstack entry.'] : []
+  const problems: string[] = []
+  const layer = entry.settledBy?.pull
+  if (layer === undefined)
+    problems.push('handledUpstack needs settledBy, the layer that settles it.')
+  else if (layer === reviewed || !scope.pulls.includes(layer))
+    problems.push(`settledBy must be another loaded layer, and PR #${String(layer)} is not one.`)
+  if (!entry.evidence.length)
+    problems.push('handledUpstack needs evidence you read in that layer, as path:line.')
+  return problems
 }
 
 /** What each verdict requires: a plan, a question, or what is missing when there is none. */

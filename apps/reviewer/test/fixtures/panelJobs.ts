@@ -102,6 +102,8 @@ export function groundingReply(request: StructuredTurnRequest<unknown>) {
         evidence: ['src/audit.ts:4'],
         plan: 'Reuse the audit helper.',
         origin: 'change',
+        kind: 'defect',
+        effort: 'small',
         destination: { kind: 'code', pull: fixturePull().number },
       },
     ],
