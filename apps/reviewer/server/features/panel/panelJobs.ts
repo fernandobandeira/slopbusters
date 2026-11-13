@@ -223,8 +223,9 @@ export class PanelJobs {
       if (mode !== 'ground') await this.review(session, pending, run)
       if (!this.canGround(session, pending, mode)) return false
       this.progress(session, `Grounding the findings on PR #${String(pending.pull.number)}…`)
+      // Without this PR's own source there is nothing to compare the top against.
       run.stack.top = await openStackTop(
-        this.options.openRepository,
+        repository && this.options.openRepository,
         stackTop(preparation, pending.pull.url),
         signal,
       )

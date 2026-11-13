@@ -204,6 +204,22 @@ describe("the stack's top layer", () => {
     expect(requests.find(isGrounding)?.prompt).not.toContain('.slopbusters/stack/top/')
   })
 
+  it('opens no top layer when the reviewed PR’s own source could not be opened', async () => {
+    const { turns, requests } = recordingTurns(reply)
+    const opened: number[] = []
+    const open = (pull: PullRequest) => {
+      opened.push(pull.number)
+      return pull.number === 128
+        ? Promise.reject(new UserError('The head commit is gone.'))
+        : checkouts().open(pull)
+    }
+
+    await finish(panel(turns, { loadPull: loadLayer, stack, openRepository: open }))
+
+    expect(opened).toEqual([128])
+    expect(requests.find(isGrounding)?.prompt).not.toContain('.slopbusters/stack/top/')
+  })
+
   it('says why grounding could not read the top layer, and still finishes', async () => {
     const { turns } = recordingTurns(reply)
     const open = (pull: PullRequest) =>
