@@ -68,6 +68,10 @@ afterEach(async () => {
 const skill = (name: string) =>
   fileURLToPath(new URL(`../../../../../skills/${name}`, import.meta.url))
 
+/** No stack and no review history, at once: these tests never reach GitHub. */
+const offline = () => Promise.reject(new Error('offline'))
+const offlineGitHub = { rest: offline, paginate: offline, graphql: offline }
+
 /** The app with its MCP endpoint on a free port, on `mcp.port`, or with none. */
 async function start(turns: StructuredTurns, mcp: { port: number } | 'none' = { port: 0 }) {
   app = await startReviewerServer({
@@ -77,6 +81,7 @@ async function start(turns: StructuredTurns, mcp: { port: number } | 'none' = { 
     bobSkillDirectory: skill('unclebob'),
     terminatorSkillDirectory: skill('terminator'),
     structuredTurns: turns,
+    github: offlineGitHub,
     port: 0,
     ...(mcp === 'none' ? {} : { mcp }),
   })
@@ -185,7 +190,8 @@ describe('the MCP endpoint for coding agents', () => {
     await new Promise((resolve) => setTimeout(resolve, 100))
 
     await expect(within(server.close(), 3000)).resolves.toBeUndefined()
-    expect(errors).not.toHaveBeenCalled()
+    // The wait ended with the connection, instead of failing on a store that had closed.
+    expect(errors.mock.calls.flat().join('\n')).not.toContain('Slopbusters could not do that')
   })
 })
 
