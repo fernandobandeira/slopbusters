@@ -50,7 +50,12 @@ export async function preparePanelRound(
     }),
   )
   snapshots.push(...siblings.flatMap((outcome) => (outcome.advice ? [outcome.advice] : [])))
-  const preparation: PanelPreparation = { snapshots, layers: {}, missing: stacks.missing }
+  const preparation: PanelPreparation = {
+    snapshots,
+    layers: {},
+    order: stacks.order,
+    missing: stacks.missing,
+  }
   for (const [url, layers] of Object.entries(stacks.layers)) {
     preparation.layers[url] = layers.filter((layer) => !failed.has(layer))
     const unloaded = layers.filter((layer) => failed.has(layer))
@@ -68,6 +73,21 @@ export function layersOf(preparation: PanelPreparation, url: string): LayerSnaps
     const snapshot = preparation.snapshots.find((entry) => entry.pull.url === layer)
     return snapshot ? [{ pull: snapshot.pull, fingerprint: snapshot.fingerprint }] : []
   })
+}
+
+/**
+ * The top open layer of a chosen PR's stack when that is another layer: its number, and its PR
+ * when it loaded. Undefined when the chosen PR is the top, and for rounds saved before the stack's
+ * order was recorded.
+ */
+export function stackTop(
+  preparation: PanelPreparation,
+  url: string,
+): { number: number; pull?: PullRequest } | undefined {
+  const top = preparation.order?.[url]?.at(-1)
+  if (!top || top === url) return undefined
+  const pull = preparation.snapshots.find((entry) => entry.pull.url === top)?.pull
+  return { number: pull?.number ?? pullNumber(top), pull }
 }
 
 function loadSnapshots(urls: readonly string[], sources: Sources, withContext: boolean) {
@@ -112,8 +132,9 @@ async function addHistory(
 /** Each chosen PR's other open stack layers, and what could not be found out about them. */
 async function stackLayers(urls: readonly string[], { stack, signal }: Sources) {
   const layers: Record<string, string[]> = {}
+  const order: Record<string, string[]> = {}
   const missing: Record<string, string[]> = {}
-  if (!stack) return { layers, missing }
+  if (!stack) return { layers, order, missing }
   const results = await settleEach(urls, {
     signal,
     concurrency: PANEL_PREPARE_CONCURRENCY,
@@ -128,9 +149,11 @@ async function stackLayers(urls: readonly string[], { stack, signal }: Sources) 
       ]
       return
     }
-    const open = (outcome.advice.stack?.items ?? []).filter(
-      (item) => item.state === 'open' && item.url !== url,
+    const stackOpen = (outcome.advice.stack?.items ?? []).filter(
+      (item) => item.state === 'open' || item.url === url,
     )
+    order[url] = stackOpen.map((item) => item.url)
+    const open = stackOpen.filter((item) => item.url !== url)
     layers[url] = open.slice(0, MAX_PANEL_STACK_LAYERS).map((item) => item.url)
     const notes = [
       ...(outcome.advice.incomplete
@@ -144,7 +167,7 @@ async function stackLayers(urls: readonly string[], { stack, signal }: Sources) 
     ]
     if (notes.length) missing[url] = notes
   })
-  return { layers, missing }
+  return { layers, order, missing }
 }
 
 function pullCount(count: number, noun = 'PR') {
@@ -154,6 +177,10 @@ function pullCount(count: number, noun = 'PR') {
 /** `PR #131` from its URL. */
 function pullLabel(url: string) {
   return `PR #${url.split('/').pop() ?? url}`
+}
+
+function pullNumber(url: string) {
+  return Number(url.split('/').pop())
 }
 
 /** The saved checkout of the PR head; without one, reviewers read the snapshot only. */

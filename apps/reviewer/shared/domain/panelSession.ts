@@ -60,6 +60,11 @@ export interface PanelPreparation {
   snapshots: PanelSnapshot[]
   /** By chosen PR URL: the URLs of the other layers of its stack that loaded. */
   layers: Record<string, string[]>
+  /**
+   * By chosen PR URL: the URLs of its stack's open layers from base to top, itself included, so a
+   * round knows which layer is the top. Absent on rounds prepared before it was recorded.
+   */
+  order?: Record<string, string[]>
   /** By chosen PR URL: what about its stack could not be loaded, in words. */
   missing: Record<string, string[]>
 }

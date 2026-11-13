@@ -27,7 +27,8 @@ export const url = fixturePull().url
 export const everyone: ReviewerId[] = ['unclebob', 'terminator', 'teammate:avery']
 
 type Options = ConstructorParameters<typeof PanelJobs>[0]
-type Sources = Pick<Options, 'loadPull' | 'stack' | 'history'> & Partial<Pick<Options, 'judges'>>
+type Sources = Pick<Options, 'loadPull' | 'stack' | 'history' | 'openRepository'> &
+  Partial<Pick<Options, 'judges'>>
 
 /**
  * A data directory, skill roots and teammate Avery (Claude only, five findings) for each test,

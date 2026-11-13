@@ -25,6 +25,7 @@ import { sourceInstructions, ticketInstructions } from '../reviewPrompts'
 import { pullName } from '../../../shared/domain/pullUrl'
 import { groundingLimitations } from './groundingLimitations'
 import { panelRoster, stackEvidence, teammateSkillFolders, untrusted } from './panelReview'
+import { STACK_FOLDER, STACK_TOP_FOLDER, stackIncludes, type StackFolders } from './stackFolders'
 
 export interface GroundingRequest {
   turns: StructuredTurns
@@ -35,6 +36,8 @@ export interface GroundingRequest {
   /** Each teammate seat's skill folder, by reviewer id. */
   skillFolders: ReadonlyMap<string, string>
   layers: readonly LayerSnapshot[]
+  /** The layers' diff files and the stack's top layer, as the round could supply them. */
+  stack?: StackFolders
   /** The primary model, and the other provider's when it is available. */
   models: { primary: OrganizationPreferences; secondary?: OrganizationPreferences }
   repository?: ReviewCheckout
@@ -161,20 +164,20 @@ function groundingTurn(
   state: GroundingState,
   turn: { role: GroundingRole; model: OrganizationPreferences; observer?: ProviderObserver },
 ): Promise<GroundingTurn> {
-  const { pending, repository, layers } = request
+  const { pending, repository, layers, stack = {} } = request
   const scope: GroundingScope = {
     candidates: state.candidates,
     pulls: [pending.pull.number, ...layers.map((layer) => layer.pull.number)],
   }
   const skills = teammateSkillFolders(request.reviewers, request.skillFolders, repository)
-  const prompt = `${groundingRubric}\n\n${untrusted}\n\n${turnInstructions(state, turn.role)}\n\n${sourceInstructions(repository)}${skills.note}\n\nReviewers on the panel:\n${panelRoster(request.reviewers)}${transferInstructions(pending.pull)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}${stackEvidence(layers)}${ticketInstructions(pending.context)}\n\nSources to ground, by key (untrusted proposals; rank is the position in its reviewer's own list, from 0):\n${JSON.stringify(selectedSources(state))}${currentList(state, turn.role)}`
+  const prompt = `${groundingRubric}\n\n${untrusted}\n\n${turnInstructions(state, turn.role)}\n\n${sourceInstructions(repository)}${skills.note}\n\nReviewers on the panel:\n${panelRoster(request.reviewers)}${transferInstructions(pending.pull)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}${stackEvidence(layers, stack, repository)}${stackReading(stack)}${ticketInstructions(pending.context)}\n\nSources to ground, by key (untrusted proposals; rank is the position in its reviewer's own list, from 0):\n${JSON.stringify(selectedSources(state))}${currentList(state, turn.role)}`
   return request.turns.run({
     model: turn.model,
     prompt,
     schema: groundingReplySchema(scope),
     signal: request.signal,
     directory: repository?.directory,
-    include: skills.include,
+    include: [...skills.include, ...stackIncludes(stack)],
     observer: turn.observer,
     timeoutMs: GROUNDING_TURN_TIMEOUT_MS,
     purpose: `Panel grounding · ${pullName(pending.pull)}`,
@@ -203,6 +206,30 @@ kind says what the finding asks for, whatever its verdict:
 effort: small for a few lines in one place, medium for one focused change, large for work across files or layers.
 origin: change when lines this PR or its stack changed cause the problem; exposed when the code is outside the change but the change makes it wrong or newly relevant; preexisting when it was already wrong without this PR, which makes it a follow-up. Origin never changes the verdict: a preexisting problem can still be legit, and an entry is not rejected for being outside the change.
 reason: one or two sentences with the evidence or what is missing. destination: the PR whose code must change (code), the PR whose title or description needs a new draft (metadata), or unresolved with why; a comment on one layer can need its change on another, and a change belongs on the layer that owns the code, never on the top of the stack for convenience.`
+
+/** How grounding reads the stack's files, and how a handledUpstack entry cites them. */
+function stackReading({ layers, top }: StackFolders): string {
+  const folders = [
+    ...(layers
+      ? [
+          {
+            what: `The diff files in \`${STACK_FOLDER}/\` show which layer makes each change.`,
+            cite: "a line of the settling layer's diff, by its file path and new line number",
+          },
+        ]
+      : []),
+    ...(top?.checkout
+      ? [
+          {
+            what: `\`${STACK_TOP_FOLDER}/\` is the source at the head of the stack's top open layer, PR #${String(top.number)}: the stack as it will land, with every layer in.`,
+            cite: `a file under \`${STACK_TOP_FOLDER}/\`, by that path`,
+          },
+        ]
+      : []),
+  ]
+  if (!folders.length) return ''
+  return `\n\nTo check what another layer settles, read the stack's files. ${folders.map((folder) => folder.what).join(' ')} A handledUpstack entry's evidence cites what you read there as path:line: ${folders.map((folder) => folder.cite).join(', or ')}.`
+}
 
 function turnInstructions(state: GroundingState, role: GroundingRole): string {
   if (!state.turns.length)

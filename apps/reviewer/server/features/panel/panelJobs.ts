@@ -14,6 +14,7 @@ import type { ModelPair, OrganizationPreferences } from '../../../shared/domain/
 import { blocksNewReview, reviewedPullsLabel } from '../../../shared/domain/reviewSession'
 import type { PullStackResult } from '../../../shared/domain/stacks'
 import type { PullRequest } from '../../../shared/domain/types'
+import type { EvidenceFolder } from '../../adapters/evidenceFolder'
 import type { PanelSessionStore } from '../../adapters/panelSessionStore'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
@@ -25,9 +26,10 @@ import { failedSeats, reviewSeats } from '../flows/panel'
 import { queuedNotice, Slots } from '../flows/slots'
 import type { PanelMembers } from './panelMembers'
 import { roundLoader } from './localRound'
-import { layersOf, openSource, preparePanelRound } from './panelPreparation'
+import { layersOf, openSource, preparePanelRound, stackTop } from './panelPreparation'
 import { groundPanel } from './groundingDebate'
 import { reviewAsPanelist } from './panelReview'
+import { openStackTop, writeLayerFiles, type StackFolders } from './stackFolders'
 
 interface Options extends Pick<
   JobDependencies,
@@ -52,6 +54,14 @@ interface Options extends Pick<
 
 /** How a run treats a PR that already has reviews waiting: start over, rerun failures, or ground. */
 type RunMode = 'fresh' | 'retry' | 'ground'
+
+/** What one PR's seats and grounding read: its checkout, its stack layers and their files. */
+interface PullRun {
+  signal: AbortSignal
+  repository?: ReviewCheckout
+  layers: LayerSnapshot[]
+  stack: StackFolders
+}
 
 /**
  * A panel review: every chosen seat reviews each PR on its provider's model, a few at a time,
@@ -189,13 +199,18 @@ export class PanelJobs {
       `The panel reviewed ${String(session.results.length)} PR${session.results.length === 1 ? '' : 's'}.`,
     )
   }
-  /** Review one PR and ground its findings; false when it stops to wait for the user. */
+  /**
+   * Review one PR and ground its findings; false when it stops to wait for the user. The PR's
+   * checkout, its layers' files and the top layer's checkout last until it returns.
+   */
   private async reviewPull(
     session: PanelSession,
     signal: AbortSignal,
     { preparation, index, mode }: { preparation: PanelPreparation; index: number; mode: RunMode },
   ): Promise<boolean> {
     let repository: ReviewCheckout | undefined
+    let top: ReviewCheckout | undefined
+    let files: EvidenceFolder | undefined
     try {
       const pending =
         mode === 'fresh' ? this.pendingFor(session, preparation, index) : session.pending
@@ -203,14 +218,18 @@ export class PanelJobs {
       const layers = layersOf(preparation, pending.pull.url)
       const source = await openSource(this.options.openRepository, pending.pull, signal)
       repository = source.repository
-      if (mode !== 'ground') await this.review(session, pending, { signal, repository, layers })
+      files = await writeLayerFiles(layers)
+      const run: PullRun = { signal, repository, layers, stack: { layers: files?.directory } }
+      if (mode !== 'ground') await this.review(session, pending, run)
       if (!this.canGround(session, pending, mode)) return false
       this.progress(session, `Grounding the findings on PR #${String(pending.pull.number)}…`)
-      const { advice, grounding } = await this.ground(session, pending, {
+      run.stack.top = await openStackTop(
+        this.options.openRepository,
+        stackTop(preparation, pending.pull.url),
         signal,
-        repository,
-        layers,
-      })
+      )
+      top = run.stack.top?.checkout
+      const { advice, grounding } = await this.ground(session, pending, run)
       signal.throwIfAborted()
       advice.limitations.unshift(...(preparation.missing[pending.pull.url] ?? []))
       if (source.limitation) advice.limitations.unshift(source.limitation)
@@ -221,14 +240,12 @@ export class PanelJobs {
       return true
     } finally {
       repository?.release()
+      top?.release()
+      await files?.remove()
     }
   }
   /** Two models ground the seats' findings, saving the debate on the pending review as it goes. */
-  private async ground(
-    session: PanelSession,
-    pending: PanelPending,
-    run: { signal: AbortSignal; repository?: ReviewCheckout; layers: LayerSnapshot[] },
-  ) {
+  private async ground(session: PanelSession, pending: PanelPending, run: PullRun) {
     const reviewers = session.reviewers.filter((reviewer) =>
       pending.reviews.some((review) => review.reviewer === reviewer.id && review.advice),
     )
@@ -274,11 +291,7 @@ export class PanelJobs {
     return preparation
   }
   /** Run every reviewer that has no review yet, a few at a time, saving each as it lands. */
-  private async review(
-    session: PanelSession,
-    pending: PanelPending,
-    run: { signal: AbortSignal; repository?: ReviewCheckout; layers: LayerSnapshot[] },
-  ) {
+  private async review(session: PanelSession, pending: PanelPending, run: PullRun) {
     pending.reviews = pending.reviews.filter((review) => review.advice)
     const waiting = session.reviewers.filter(
       (reviewer) => !pending.reviews.some((review) => review.reviewer === reviewer.id),
@@ -312,11 +325,7 @@ export class PanelJobs {
     session: PanelSession,
     pending: PanelPending,
     reviewer: PanelReviewer,
-    {
-      signal,
-      repository,
-      layers,
-    }: { signal: AbortSignal; repository?: ReviewCheckout; layers: LayerSnapshot[] },
+    { signal, repository, layers, stack }: PullRun,
   ) {
     const model = reviewer.model ?? session.model
     const member = await this.options.members.load(reviewer, model.provider)
@@ -330,6 +339,7 @@ export class PanelJobs {
         member,
         pull: pending.pull,
         layers,
+        stack: { layers: stack.layers },
         history: pending.history,
         context: pending.context,
       })

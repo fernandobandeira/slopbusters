@@ -5,6 +5,7 @@ import type { PanelPending } from '../../../shared/domain/panelSession'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import { MAX_GROUNDING_TURNS } from './limits'
 import { layersWithoutDiffs } from './panelReview'
+import type { StackFolders } from './stackFolders'
 
 /**
  * What the round could not cover, most fundamental first: missing source, incomplete patches,
@@ -18,17 +19,18 @@ export function groundingLimitations(
     reviewers,
     repository,
     layers,
+    stack = {},
   }: {
     pending: PanelPending
     reviewers: readonly PanelReviewer[]
     repository?: ReviewCheckout
     layers: readonly LayerSnapshot[]
+    stack?: StackFolders
   },
 ): string[] {
   const name = (id: string) => reviewers.find((seat) => seat.id === id)?.name ?? id
   const missing = pending.reviews.filter((review) => !review.advice)
   const capped = pending.reviews.filter((review) => review.advice && review.capped)
-  const outlines = layersWithoutDiffs(layers)
   return [
     ...(repository
       ? []
@@ -48,13 +50,30 @@ export function groundingLimitations(
           `${capped.map((review) => name(review.reviewer)).join(', ')} returned as many findings as allowed and may have had more.`,
         ]
       : []),
-    ...(outlines.length
-      ? [
-          `Stack layers ${outlines.map((pull) => `#${String(pull)}`).join(', ')} were too large to include whole; reviewers saw their titles, descriptions and file lists, not their diffs.`,
-        ]
-      : []),
+    ...stackLimitations(layers, stack),
     ...deferredLimitation(state),
     ...settlementLimitations(state),
+  ]
+}
+
+/**
+ * Layers whose whole diffs reached no model, which only happens when their files could not be
+ * written, and a top layer whose source grounding could not read.
+ */
+function stackLimitations(layers: readonly LayerSnapshot[], stack: StackFolders): string[] {
+  const outlines = stack.layers ? [] : layersWithoutDiffs(layers)
+  const { top } = stack
+  return [
+    ...(outlines.length
+      ? [
+          `Stack layers ${outlines.map((pull) => `#${String(pull)}`).join(', ')} were too large to include whole, and their diffs could not be supplied as files; reviewers saw their titles, descriptions and file lists, not their diffs.`,
+        ]
+      : []),
+    ...(top && !top.checkout
+      ? [
+          `The source of the stack's top layer, PR #${String(top.number)}, could not be opened (${top.error ?? 'unknown error'}), so grounding could not read the stack as it will land.`,
+        ]
+      : []),
   ]
 }
 

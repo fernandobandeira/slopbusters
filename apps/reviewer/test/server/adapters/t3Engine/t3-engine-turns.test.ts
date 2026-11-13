@@ -354,6 +354,31 @@ it('copies included folders, such as a skill, into the copy, scrubbed, and never
   rmSync(skill, { recursive: true, force: true })
 })
 
+it('copies included folders into the scratch directory when there is no repository, a checkout inside another', async () => {
+  const layers = mkdtempSync(join(tmpdir(), 'turns-layers-'))
+  writeFileSync(join(layers, '131.json'), '{}\n')
+  const paths = ['stack/131.json', 'stack/top/README.md', 'stack/top/.claude', 'stack/top/.git']
+  let copied: string[] = []
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'message.dispatch') return
+    copied = paths.filter((path) => existsSync(join(fake.workspaceRoots()[0] ?? '', path)))
+    thread.reply(command, '{"files":[]}')
+  })
+
+  await fake.turns.run(
+    request({
+      directory: undefined,
+      include: [
+        { directory: layers, as: 'stack' },
+        { directory: checkout, as: 'stack/top' },
+      ],
+    }),
+  )
+
+  expect(copied).toEqual(['stack/131.json', 'stack/top/README.md'])
+  rmSync(layers, { recursive: true, force: true })
+})
+
 it('lets the agent edit a copy that keeps Git metadata, and settles the copy before deleting it', async () => {
   let copied: string[] = []
   const fake = fakeEngine((command, thread) => {
