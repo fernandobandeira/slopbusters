@@ -47,7 +47,7 @@ export function followTurn(
             Effect.as<TurnOutcome>({
               status: 'failed',
               error:
-                'The worker could not run commands in approval-required mode. Approvals were declined.',
+                'The worker could not run commands in this runtime mode. Approvals were declined.',
             }),
           )
         }),

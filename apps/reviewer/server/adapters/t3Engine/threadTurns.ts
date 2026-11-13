@@ -76,7 +76,7 @@ export class EngineThreadTurns implements ThreadTurns {
   ): Promise<ThreadTurnResult<T>> {
     const messageId = first ? request.thread.messageId : randomUUID()
     const follower = new TurnFollower(request.thread.threadId, messageId, new Set())
-    follower.stopForApprovals = request.thread.runtimeMode === 'approval-required'
+    follower.stopForApprovals = true
     const start: TurnStart = {
       type: 'message.dispatch',
       ...commandBase(request.thread.threadId),
@@ -92,8 +92,7 @@ export class EngineThreadTurns implements ThreadTurns {
       dispatchMode: { type: 'start_immediately' },
     }
     const outcome = await this.follow(start, follower, request.signal, deadline)
-    const blocked =
-      request.thread.runtimeMode === 'approval-required' && follower.declinedApprovals > 0
+    const blocked = follower.declinedApprovals > 0
     return {
       outcome,
       commands: follower.commands.map(
@@ -107,8 +106,7 @@ export class EngineThreadTurns implements ThreadTurns {
       ),
       ...(blocked
         ? {
-            error:
-              'The worker could not run commands in approval-required mode. Approvals were declined.',
+            error: `The worker could not run commands in ${request.thread.runtimeMode} mode. Approvals were declined.`,
           }
         : {}),
     }
