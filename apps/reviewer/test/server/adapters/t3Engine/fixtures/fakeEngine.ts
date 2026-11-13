@@ -14,6 +14,7 @@ import {
   type EngineClient,
 } from '../../../../../server/adapters/t3Engine/engineConnection'
 import type { RunningEngine } from '../../../../../server/adapters/t3Engine/engineLocation'
+import { EngineThreadTurns } from '../../../../../server/adapters/t3Engine/threadTurns'
 import { EngineTurns } from '../../../../../server/adapters/t3Engine/engineTurns'
 
 const engine: RunningEngine = {
@@ -71,6 +72,7 @@ export function fakeEngine(
   }
   return {
     turns: new EngineTurns(connection, startTimeoutMs),
+    threadTurns: new EngineThreadTurns(connection),
     commands,
     thread,
     types: () => commands.map((command) => command.type),

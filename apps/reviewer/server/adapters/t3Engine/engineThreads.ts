@@ -10,6 +10,7 @@ import {
   ThreadId,
   type OrchestrationV2Command,
   type ProjectCloneSnapshot,
+  type RuntimeMode,
 } from '@t3tools/contracts'
 import { UserError } from '../../errors'
 import { T3_ENGINE_CLONE_TIMEOUT_MS } from './limits'
@@ -46,7 +47,14 @@ export interface EngineThreadStart {
     readonly number: number
     readonly url: string
   }
+  readonly messageId?: string
   readonly message: string
+}
+
+export interface StartedEngineThread {
+  readonly threadId: string
+  readonly messageId: string
+  readonly runtimeMode: RuntimeMode
 }
 
 export interface EngineProjectClone {
@@ -74,7 +82,7 @@ export interface EngineThreadOperations {
     /** The PR head, to tell whether a reused checkout is on it. */
     readonly headSha?: string
   }): Promise<PreparedPullRequest>
-  startThread(input: EngineThreadStart): Promise<void>
+  startThread(input: EngineThreadStart): Promise<StartedEngineThread>
 }
 
 export class EngineThreads implements EngineThreadOperations {
@@ -206,7 +214,7 @@ export class EngineThreads implements EngineThreadOperations {
    * Create the thread, link its pull request, and send the first message, in that order. The
    * thread starts in the runtime mode T3 Code gives new threads in that project.
    */
-  startThread(input: EngineThreadStart): Promise<void> {
+  startThread(input: EngineThreadStart): Promise<StartedEngineThread> {
     const threadId = ThreadId.make(input.threadId)
     const projectId = ProjectId.make(input.projectId)
     const modelSelection = {
@@ -214,6 +222,7 @@ export class EngineThreads implements EngineThreadOperations {
       model: input.model.model,
     }
     const interactionMode = 'default' as const
+    const messageId = MessageId.make(input.messageId ?? randomUUID())
     return this.connection.run((client) =>
       Effect.gen(function* () {
         const { settings } = yield* client['server.getConfig']({})
@@ -248,12 +257,13 @@ export class EngineThreads implements EngineThreadOperations {
           ...CREATED_BY_USER,
           commandId: newCommandId(),
           threadId,
-          messageId: MessageId.make(randomUUID()),
+          messageId,
           text: input.message,
           attachments: [],
           modelSelection,
           dispatchMode: { type: 'start_immediately' },
         })
+        return { threadId, messageId, runtimeMode }
       }),
     )
   }

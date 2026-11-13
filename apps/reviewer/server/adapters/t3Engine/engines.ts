@@ -5,6 +5,7 @@ import { EngineChatHosts, type BundledEngineHost } from './chatHosts'
 import { EngineConnection, type EngineCredentials } from './engineConnection'
 import { pairWithEngine } from './enginePairing'
 import { EngineThreads } from './engineThreads'
+import { EngineThreadTurns } from './threadTurns'
 import { EngineTurns } from './engineTurns'
 
 export interface BundledEngineSettings {
@@ -41,6 +42,7 @@ export function createEngines(options: {
   return {
     hosts: new EngineChatHosts({ threads: user }, bundled),
     turns: connection && new EngineTurns(connection),
+    threadTurns: connection && new EngineThreadTurns(connection),
     close: async () => {
       await Promise.all([userConnection.close(), connection?.close()])
       await engine?.close()

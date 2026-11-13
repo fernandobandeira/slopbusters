@@ -62,6 +62,11 @@ export class TurnFollower {
   private running = false
   private runId: string | undefined
   private outcome: TurnOutcome | undefined
+  private readonly commandItems = new Map<
+    string,
+    Extract<OrchestrationV2TurnItem, { type: 'command_execution' }>
+  >()
+  private readonly approvalItems = new Map<string, string | null>()
   private readonly messages = new Map<string, Message>()
   private readonly requests = new Map<string, Request>()
   private readonly questions = new Map<string, readonly Question[]>()
@@ -85,6 +90,15 @@ export class TurnFollower {
   /** The engine run of this turn, once the engine created it. */
   get run(): string | undefined {
     return this.runId
+  }
+
+  /** Final command records for this run, including records restored after reconnecting. */
+  get commands() {
+    return [...this.commandItems.values()].filter((item) => item.runId === this.runId)
+  }
+
+  get declinedApprovals(): number {
+    return [...this.approvalItems.values()].filter((run) => run === this.runId).length
   }
 
   receive(item: OrchestrationV2ThreadStreamItem): TurnStep {
@@ -153,6 +167,8 @@ export class TurnFollower {
 
   /** Keep what a later response or outcome needs: the questions asked, and the run's errors. */
   private remember(item: OrchestrationV2TurnItem) {
+    if (item.type === 'command_execution') this.commandItems.set(item.id, item)
+    if (item.type === 'approval_request') this.approvalItems.set(item.id, item.runId)
     if (item.type === 'user_input_request') this.questions.set(item.requestId, item.questions)
     if (item.type === 'error' && item.runId && item.status === 'failed')
       this.errors.set(item.runId, item.failure.message)
