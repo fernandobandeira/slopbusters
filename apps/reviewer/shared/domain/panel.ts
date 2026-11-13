@@ -241,15 +241,6 @@ function placeFindings<F extends PanelFinding>(
   return { placed, unplaced }
 }
 
-/** Repository rules first, then what the code settles, then questions; severity within each. */
-export function rankFindings<F extends Pick<PanelFinding, 'tag' | 'severity'>>(findings: F[]): F[] {
-  const tag = { convention: 0, code: 1, decision: 2 }
-  const severity = { 'must-fix': 0, 'should-fix': 1, consider: 2 }
-  return [...findings].sort(
-    (a, b) => tag[a.tag] - tag[b.tag] || severity[a.severity] - severity[b.severity],
-  )
-}
-
 function agreeingVerdict(verdict: PanelAdvice['verdict'], findings: number) {
   if (findings) return verdict === 'clean' ? 'changes' : verdict
   return verdict === 'changes' ? 'uncertain' : verdict

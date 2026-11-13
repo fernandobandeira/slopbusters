@@ -5,7 +5,6 @@ import {
   panelCommentBody,
   panelCommentsInline,
   panelDraftComment,
-  rankFindings,
 } from '../../../shared/domain/panel'
 import { DiffSide } from '../../../shared/domain/types'
 import { panelReviewerMarkdown } from '../../../shared/domain/panelMarkdown'
@@ -166,23 +165,7 @@ describe('where a finding goes in the review draft', () => {
   })
 })
 
-describe('ranking and comments', () => {
-  it('puts repository rules first, then code, then questions, by severity within each', () => {
-    const ranked = rankFindings([
-      { tag: 'decision', severity: 'must-fix' },
-      { tag: 'code', severity: 'consider' },
-      { tag: 'code', severity: 'must-fix' },
-      { tag: 'convention', severity: 'consider' },
-    ] as const)
-
-    expect(ranked.map((finding) => `${finding.tag}:${finding.severity}`)).toEqual([
-      'convention:consider',
-      'code:must-fix',
-      'code:consider',
-      'decision:must-fix',
-    ])
-  })
-
+describe('comments', () => {
   it('starts a decision’s comment as the question, without a suggested fix', () => {
     const question = fixturePanelFinding({ tag: 'decision', body: 'Should admins see this?' })
 
