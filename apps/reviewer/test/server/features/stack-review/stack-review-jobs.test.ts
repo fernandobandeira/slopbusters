@@ -5,6 +5,7 @@ import type {
 } from '../../../../server/adapters/t3Engine/engineTurns'
 import { StackReviewJobs } from '../../../../server/features/stack-review/stackReviewJobs'
 import { parsePullUrl } from '../../../../shared/domain/pullUrl'
+import { stackBrief } from '../../../../shared/domain/stackBrief'
 import { fixturePanelAdvice } from '../../../fixtures/panel'
 import {
   companionJudge,
@@ -126,6 +127,7 @@ describe('a whole-stack review', () => {
       '#202/g1',
       '#203/g1',
     ])
+    expect(stackBrief(session)?.fixes.map((group) => group.layer.number)).toEqual(numbers)
   })
 
   it('reuses a result reviewed at the current head and reruns one whose layer moved', async () => {
