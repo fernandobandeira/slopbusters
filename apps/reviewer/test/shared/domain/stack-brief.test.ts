@@ -37,6 +37,19 @@ describe('the stack brief across layers', () => {
     expect(brief?.fixes[0]?.items[0]?.alsoRaised).toEqual(['#202/g3', '#203/earlier/g1'])
   })
 
+  it('keeps a question in the decision queue even when a chain would make it unnecessary', () => {
+    const question = { disposition: 'ask' as const, question: 'Keep the retry?' }
+    const session = finishedStackReview(
+      [stackEntry(201, 'g1', question), stackEntry(203, 'g4', question)],
+      {
+        ...emptyResult,
+        chains: [{ cause: '#203/g4', unnecessary: ['#201/g1'], reason: 'The job goes.' }],
+      },
+    )
+
+    expect(stackBrief(session)?.decisions.map((item) => item.id)).toEqual(['#201/g1', '#203/g4'])
+  })
+
   it('lists entries a chain makes unnecessary under the chain, not as fixes', () => {
     const session = finishedStackReview(
       [
@@ -171,13 +184,16 @@ describe('the stack brief fixes', () => {
         disposition: 'skip',
         origin: 'preexisting',
         triage: 'Already there.',
+        followUp: true,
       }),
       stackEntry(202, 'g2', {
         disposition: 'skip',
         kind: 'edgeCase',
         triage: 'Needs two failures.',
+        followUp: true,
       }),
       stackEntry(202, 'g3', { disposition: 'skip', verdict: 'notTrue', origin: 'preexisting' }),
+      stackEntry(203, 'g4', { disposition: 'skip', verdict: 'tasteSkip', origin: 'preexisting' }),
     ])
 
     const brief = stackBrief(session)
@@ -210,6 +226,23 @@ describe('the stack brief caveats and Markdown', () => {
         layer: 202,
         entries: ['#201/g1'],
         reason: 'Settled by PR #202 at `202bbbb`, which is at `202aaaa` now.',
+      },
+    ])
+  })
+
+  it('marks a layer whose base moved even when its head did not', () => {
+    const session = finishedStackReview([stackEntry(202, 'g1')])
+    session.layers[1] = { ...session.layers[1]!, baseSha: 'base-new' }
+
+    const brief = stackBrief(session)
+
+    expect(brief?.layers.map((layer) => layer.current)).toEqual([true, false, true])
+    expect(brief?.stale).toEqual([
+      {
+        layer: 202,
+        entries: ['#202/g1'],
+        reason:
+          "PR #202's base moved since its panel reviewed it on `base-20`; it is on `base-ne` now, so its diff may differ.",
       },
     ])
   })

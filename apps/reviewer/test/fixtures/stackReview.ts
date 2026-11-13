@@ -27,6 +27,7 @@ export function stackEntry(
     disposition: 'fix',
     rank: 1,
     triage: 'Corrects a confirmed defect.',
+    followUp: false,
     reason: 'The code shows it.',
     plan: `Fix ${id}.`,
     evidence: ['src/job.ts:4'],

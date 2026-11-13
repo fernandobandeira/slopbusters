@@ -31,7 +31,7 @@ describe('cross-layer output validation', () => {
         duplicates: [
           { entries: ['#201/g1', '#202/g1', '#202/earlier/g4'], owner: '#201/g1', reason: 'Same.' },
         ],
-        chains: [{ cause: '#203/g2', unnecessary: ['#202/g1'], reason: 'The job goes.' }],
+        chains: [{ cause: '#203/g2', unnecessary: ['#201/g1'], reason: 'The job goes.' }],
         ownership: [{ entry: '#203/g2', layer: 201, reason: 'The code is on the bottom.' }],
         derived: [
           {
@@ -74,7 +74,40 @@ describe('cross-layer output validation', () => {
       'duplicates: #202/earlier/g4 is from an earlier round and cannot take this role.',
     ])
   })
+})
 
+describe('cross-layer relations that contradict each other', () => {
+  it('makes chains and moves name a duplicate group by its owner', () => {
+    const duplicates = [{ entries: ['#201/g1', '#202/g1'], owner: '#201/g1', reason: 'Same.' }]
+
+    expect(
+      problems({
+        duplicates,
+        chains: [{ cause: '#203/g2', unnecessary: ['#202/g1'], reason: 'The job goes.' }],
+        ownership: [{ entry: '#202/g1', layer: 203, reason: 'Elsewhere.' }],
+      }),
+    ).toEqual([
+      'chains: #202/g1 is merged into a duplicate group; name its owner instead.',
+      'ownership: #202/g1 is merged into a duplicate group; name its owner instead.',
+    ])
+  })
+
+  it('takes one proposal per layer, and never a fold into the same layer', () => {
+    expect(
+      problems({
+        structure: [
+          { layer: 202, action: 'drop', reason: 'Nothing uses it.', cost: 'small' },
+          { layer: 202, action: 'fold', into: 202, reason: 'Thin.', cost: 'small' },
+        ],
+      }),
+    ).toEqual([
+      'structure: PR #202 has more than one proposal; keep one.',
+      'structure: PR #202 cannot fold into itself.',
+    ])
+  })
+})
+
+describe('cross-layer derived findings', () => {
   it('refuses a derived finding without the entries it came from', () => {
     expect(
       problems({

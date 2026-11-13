@@ -116,4 +116,22 @@ describe('reviewing the whole stack', () => {
     })
     expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy()
   })
+
+  it('says which decisions and chains the second model did not approve', async () => {
+    const exhausted = structuredClone(finished)
+    if (!exhausted.pass) throw new Error('Missing pass.')
+    exhausted.pass.outcome = 'exhausted'
+    exhausted.pass.contested = ['chain #203/g2', 'chain #202/g3']
+    vi.mocked(call).mockImplementation((route: ApiContract) =>
+      route === routes.latestStackReview
+        ? Promise.resolve({ session: exhausted })
+        : Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`)),
+    )
+    render(<StackReview url={layerUrl(201)} reviewers={['unclebob']} />)
+
+    expect(
+      await screen.findByText(/Nothing else reads it\. The second model did not approve this\./),
+    ).toBeTruthy()
+    expect(screen.getByText(/Cost: small · The second model did not approve this/)).toBeTruthy()
+  })
 })

@@ -59,6 +59,8 @@ export const stackEntrySchema = z.object({
   /** The triage policy's rank within the disposition, lowest first. */
   rank: z.number().int().nonnegative(),
   triage: z.string(),
+  /** Triage left it out of the PR as a follow-up: real, but already there or an edge case. */
+  followUp: z.boolean(),
   reason: z.string(),
   plan: z.string().optional(),
   question: z.string().optional(),
@@ -236,6 +238,16 @@ export interface CrossLayerScope {
 export function crossLayerProblems(turn: CrossLayerResult, scope: CrossLayerScope): string[] {
   const known = new Map(scope.entries.map((entry) => [entry.id, entry]))
   const check = relationChecker(known, scope.layers)
+  const merged = new Set(
+    turn.duplicates.flatMap((group) => group.entries.filter((id) => id !== group.owner)),
+  )
+  const owned = (relation: string, ids: readonly string[]) => {
+    for (const id of ids)
+      if (merged.has(id))
+        check.problem(
+          `${relation}: ${id} is merged into a duplicate group; name its owner instead.`,
+        )
+  }
   for (const group of turn.duplicates) {
     check.ids('duplicates', group.entries)
     if (!group.entries.includes(group.owner))
@@ -245,16 +257,24 @@ export function crossLayerProblems(turn: CrossLayerResult, scope: CrossLayerScop
   for (const chain of turn.chains) {
     check.ids('chains', [chain.cause, ...chain.unnecessary])
     for (const id of [chain.cause, ...chain.unnecessary]) check.current('chains', id)
+    owned('chains', [chain.cause, ...chain.unnecessary])
     if (!chain.unnecessary.length)
       check.problem(`chains: ${chain.cause} needs the entries it makes unnecessary.`)
   }
   for (const item of turn.ownership) {
     check.ids('ownership', [item.entry])
     check.current('ownership', item.entry)
+    owned('ownership', [item.entry])
     check.layer('ownership', item.layer)
   }
   derivedProblems(turn, check)
+  const reshaped = new Set<number>()
   for (const item of turn.structure) {
+    if (reshaped.has(item.layer))
+      check.problem(`structure: PR #${String(item.layer)} has more than one proposal; keep one.`)
+    reshaped.add(item.layer)
+    if (item.into === item.layer)
+      check.problem(`structure: PR #${String(item.layer)} cannot fold into itself.`)
     check.layer('structure', item.layer)
     if (item.into !== undefined) check.layer('structure', item.into)
     if ((item.action === 'fold') !== (item.into !== undefined))

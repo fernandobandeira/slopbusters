@@ -33,6 +33,7 @@ export function StackBriefView({ brief, repository }: { brief: StackBrief; repos
               <p className="stack-brief-detail">
                 Recommendation: {item.recommendation ?? 'Leave it as it is.'} · Cost:{' '}
                 {item.cost ?? 'not recorded'}
+                {item.contested && ' · The second model did not approve this'}
               </p>
             </li>
           ))}
@@ -89,6 +90,7 @@ function BriefNotes({ brief }: { brief: StackBrief }) {
               <li key={chain.cause.id}>
                 <code>{chain.cause.id}</code> makes{' '}
                 {chain.unnecessary.map((item) => item.id).join(', ')} unnecessary. {chain.reason}
+                {chain.contested && ' The second model did not approve this.'}
               </li>
             ))}
           </ul>

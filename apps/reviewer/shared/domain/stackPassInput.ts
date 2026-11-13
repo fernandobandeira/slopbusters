@@ -80,6 +80,7 @@ function entriesOf(layer: number, result: PanelResult, earlier: boolean): StackE
       disposition: decision.disposition,
       rank: decision.rank,
       triage: decision.reason,
+      followUp: decision.followUp,
       reason: entry.reason,
       evidence: entry.evidence,
       raisedBy: entry.raisedBy,
