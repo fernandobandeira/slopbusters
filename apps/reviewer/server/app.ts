@@ -16,6 +16,7 @@ import { chatRouter } from './http/chatRouter'
 import { teammatesRouter } from './http/teammatesRouter'
 import { panelRouter } from './http/panelRouter'
 import { splitRouter } from './http/splitRouter'
+import { stackReviewRouter } from './http/stackReviewRouter'
 import { openMcpEndpoint, type McpEndpoint } from './http/mcpEndpoint'
 import { panelMcpServer } from './http/mcpTools'
 import { MCP_PORT } from './features/mcp/limits'
@@ -45,6 +46,7 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
     teammatesRouter(services),
     panelRouter(services),
     splitRouter(services),
+    stackReviewRouter(services),
     sourceRouter(services),
     settingsRouter(services, () => ({ url: mcp?.url, problem: mcp?.problem })),
   )

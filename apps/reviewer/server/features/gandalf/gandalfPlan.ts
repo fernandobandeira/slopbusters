@@ -31,7 +31,8 @@ export function createGandalfPlanner(
   }
 }
 
-function validateStack(stack: PullStack, url: string) {
+/** Refuse a stack whose layers are ambiguous, closed under an open layer, or not one chain. */
+export function validateStack(stack: PullStack, url: string) {
   const selected = parsePullUrl(url)
   const repository = `${selected.owner}/${selected.repo}`.toLowerCase()
   if (

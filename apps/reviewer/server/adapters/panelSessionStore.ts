@@ -5,7 +5,7 @@ import {
   type PanelFinding,
   type PanelReviewSummary,
 } from '../../shared/domain/panel'
-import type { PanelSession } from '../../shared/domain/panelSession'
+import type { PanelResult, PanelSession } from '../../shared/domain/panelSession'
 
 const MAX_SAVED_PANEL_REVIEWS = 500
 
@@ -73,6 +73,25 @@ export class PanelSessionStore {
       )
       .all(repository)
     return rows.map((row) => ({ url: String(row.url), session: readSession(row.session) }))
+  }
+  /** A PR's newest panel results, newest first, with the session each belongs to. */
+  results(
+    repository: string,
+    url: string,
+    limit: number,
+  ): { session: string; result: PanelResult }[] {
+    const rows = this.database
+      .prepare(
+        `SELECT sessions.id, result.value FROM panel_sessions AS sessions,
+          json_each(sessions.session, '$.results') AS result
+        WHERE sessions.repository = ? AND json_extract(result.value, '$.pull.url') = ?
+        ORDER BY sessions.created_at DESC, sessions.rowid DESC LIMIT ?`,
+      )
+      .all(repository, url, limit)
+    return rows.map((row) => ({
+      session: String(row.id),
+      result: JSON.parse(String(row.value)) as PanelResult,
+    }))
   }
   /** The latest judged result of each PR in a repository. */
   reviews(repository: string): PanelReviewSummary[] {

@@ -59,6 +59,9 @@ import { PanelFollowups } from './features/panel/panelFollowups'
 import { PanelRoutes } from './features/panel/panelRoutes'
 import { loadBuiltInSkill } from './features/panel/builtInSkills'
 import { PanelTools } from './features/mcp/panelTools'
+import { StackReviewJobs } from './features/stack-review/stackReviewJobs'
+import { createStackResolver } from './features/stack-review/stackResolution'
+import { parsePullUrl } from '../shared/domain/pullUrl'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   dataDirectory: string
@@ -188,6 +191,16 @@ export function createServices(options: ReviewerServerOptions) {
     turns: retryingTurns,
     skillDirectory: options.linusSkillDirectory,
   })
+  const stackReviewJobs = new StackReviewJobs({
+    store: store.stackReview,
+    turns: retryingTurns,
+    sessions: agentSessions,
+    panels: panelJobs,
+    results: (name, url) => store.panel.results(name, url, 3),
+    resolve: createStackResolver(stacks.getStackMetadata),
+    revision: (url) => pulls.fetchPullRevision(parsePullUrl(url)),
+    judges,
+  })
   const organizationJobs = new OrganizationJobs(dependencies)
   const panelGates = new PanelGates(panel)
   const panelRoutes = new PanelRoutes({ ...panel, jobs: panelJobs })
@@ -237,6 +250,7 @@ export function createServices(options: ReviewerServerOptions) {
     panelRoutes,
     panelFollowups: new PanelFollowups({ ...panel, linear, linked: tickets.forPull }),
     fixChecks,
+    stackReviewJobs,
     panelTools: new PanelTools({ jobs: panelJobs, teammates }),
     chats: {
       continueInT3Code: async (request: ContinueChatRequest) => {
@@ -278,7 +292,9 @@ export function createServices(options: ReviewerServerOptions) {
       await organizationJobs.close()
       linearAuth.close()
       await Promise.all(
-        [linusJobs, gandalfJobs, splitJobs, jobs, panelJobs].map((job) => job.close()),
+        [linusJobs, gandalfJobs, splitJobs, jobs, stackReviewJobs, panelJobs].map((job) =>
+          job.close(),
+        ),
       )
       await pruning.stop()
       await Promise.all([languageNavigation.close(), typeScriptNavigation.close()])

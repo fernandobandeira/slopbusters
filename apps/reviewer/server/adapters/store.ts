@@ -24,6 +24,7 @@ import { migratePanelSessions, PanelSessionStore } from './panelSessionStore'
 import { LinusSessionStore, migrateLinusSessions } from './linusSessionStore'
 import { GandalfSessionStore, migrateGandalfSessions } from './gandalfSessionStore'
 import { migrateSplitSessions, SplitSessionStore } from './splitSessionStore'
+import { migrateStackReviewSessions, StackReviewSessionStore } from './stackReviewSessionStore'
 
 export class ReviewNotFoundError extends UserError {
   constructor() {
@@ -45,6 +46,7 @@ export class ReviewerStore {
   readonly linus: LinusSessionStore
   readonly gandalf: GandalfSessionStore
   readonly split: SplitSessionStore
+  readonly stackReview: StackReviewSessionStore
   constructor({ dataDirectory }: { dataDirectory: string }) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 })
     const filename = join(dataDirectory, 'reviewer.sqlite')
@@ -54,7 +56,7 @@ export class ReviewerStore {
       'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;',
     )
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
-    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(version)) {
+    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(version)) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
     }
@@ -75,22 +77,14 @@ export class ReviewerStore {
         CREATE TABLE draft_writers (snapshot_id TEXT NOT NULL REFERENCES snapshots(id), writer_id TEXT NOT NULL, sequence INTEGER NOT NULL, PRIMARY KEY(snapshot_id, writer_id));
         PRAGMA user_version = 2; COMMIT;`)
     }
-    // Each step sets the next version; their order is the schema's history and must not change.
-    if (version < 3) migrateLinusSessions(this.database)
-    // Version 4 added solo Uncle Bob reviews; version 10 removes them.
-    if (version < 4) this.database.exec('PRAGMA user_version = 4')
-    if (version < 5) migrateGandalfSessions(this.database)
-    if (version < 6) migrateReviewProgress(this.database)
-    if (version < 7) migrateTicketStore(this.database)
-    if (version < 8) migratePanelSessions(this.database)
-    if (version < 9) migrateSplitSessions(this.database)
-    if (version < 10) dropSoloBobReviews(this.database)
+    migrateFrom(this.database, version)
     this.tickets = new TicketStore(this.database)
     this.engine = new EngineCredentialStore(this.database)
     this.panel = new PanelSessionStore(this.database)
     this.linus = new LinusSessionStore(this.database)
     this.gandalf = new GandalfSessionStore(this.database)
     this.split = new SplitSessionStore(this.database)
+    this.stackReview = new StackReviewSessionStore(this.database)
   }
   savePull(pull: PullRequest): void {
     this.database
@@ -229,6 +223,20 @@ export class ReviewerStore {
       }
     }
   }
+}
+
+/** Each step sets the next version; their order is the schema's history and must not change. */
+function migrateFrom(database: DatabaseSync, version: number): void {
+  if (version < 3) migrateLinusSessions(database)
+  // Version 4 added solo Uncle Bob reviews; version 10 removes them.
+  if (version < 4) database.exec('PRAGMA user_version = 4')
+  if (version < 5) migrateGandalfSessions(database)
+  if (version < 6) migrateReviewProgress(database)
+  if (version < 7) migrateTicketStore(database)
+  if (version < 8) migratePanelSessions(database)
+  if (version < 9) migrateSplitSessions(database)
+  if (version < 10) dropSoloBobReviews(database)
+  if (version < 11) migrateStackReviewSessions(database)
 }
 
 /**

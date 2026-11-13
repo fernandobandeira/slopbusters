@@ -70,7 +70,9 @@ export function createPullService(
     cacheable: () => false,
   })
   /** Check the current revision without downloading patches or starting a provider. */
-  async function fetchPullRevision(pr: PullRequest): Promise<PullRevision> {
+  async function fetchPullRevision(
+    pr: Pick<PullRequest, 'owner' | 'repo' | 'number'>,
+  ): Promise<PullRevision> {
     const metadata = z
       .object({
         state: z.enum(['open', 'closed']),
