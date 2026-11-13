@@ -9,10 +9,8 @@ import { handle } from './contractRouter'
 export function panelRouter({
   panelJobs,
   panelGates,
-  panelFixes,
   panelRoutes,
   panelFollowups,
-  fixChecks,
   store,
 }: Services) {
   const router = Router()
@@ -58,20 +56,12 @@ export function panelRouter({
   handle(router, routes.planPanelFix, ({ params, body }) =>
     panelGates.plan(params.id, body.url, body.entry),
   )
-  handle(router, routes.proceedPanelFixes, ({ params, body }) =>
-    panelFixes.proceed(params.id, body.url, body.revision),
-  )
   handle(router, routes.routePanelLayer, ({ params, body }) =>
     panelRoutes.toLayer(params.id, body.url, body.pull),
   )
   handle(router, routes.draftPanelMetadata, ({ params, body }) =>
     panelRoutes.draftMetadata(params.id, body.url, body.field),
   )
-  handle(router, routes.reviewLocalFixes, ({ params, body }, _request, response) => {
-    response.status(202)
-    return panelFixes.reviewLocal(params.id, body.url)
-  })
-  handle(router, routes.checkLocalFixes, ({ params, body }) => fixChecks.check(params.id, body.url))
   handle(router, routes.cancelPanel, ({ params }) => panelJobs.cancel(params.id))
   return router
 }

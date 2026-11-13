@@ -13,12 +13,7 @@ import {
 } from '../domain/panel'
 import { groundingStateSchema } from '../domain/grounding'
 import { gateSchema } from '../domain/panelGate'
-import {
-  fixHandoffSchema,
-  layerRouteSchema,
-  localRoundSchema,
-  metadataDraftSchema,
-} from '../domain/panelFix'
+import { layerRouteSchema, localRoundSchema, metadataDraftSchema } from '../domain/panelFix'
 import type { PanelSession } from '../domain/panelSession'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, pullUrlSchema, repositoryQuery } from './contract'
@@ -57,7 +52,6 @@ const session = z.object({
       reviews: z.array(review),
       grounding: groundingStateSchema.optional(),
       gate: gateSchema.optional(),
-      handoff: fixHandoffSchema.optional(),
       routed: z.array(layerRouteSchema).optional(),
       followUps: z.array(followUpTicketSchema).optional(),
       metadataDrafts: z.array(metadataDraftSchema).optional(),
@@ -133,15 +127,6 @@ export const planPanelFix = defineRoute('POST', '/panel/:id/plan', {
   request: z.object({ url: pullUrlSchema, entry: z.string().min(1).max(40) }).strict(),
   response: session,
 })
-/**
- * Send the ready fixes for one reviewed PR to a T3 Code thread, from the gate revision the author
- * saw. Repeating it for the same revision returns the launch already made.
- */
-export const proceedPanelFixes = defineRoute('POST', '/panel/:id/proceed', {
-  params: idParams,
-  request: z.object({ url: pullUrlSchema, revision: z.string().min(1).max(100) }).strict(),
-  response: session,
-})
 /** Start a round on another layer of the stack, carrying the ready findings chosen for it. */
 export const routePanelLayer = defineRoute('POST', '/panel/:id/route-layer', {
   params: idParams,
@@ -152,18 +137,6 @@ export const routePanelLayer = defineRoute('POST', '/panel/:id/route-layer', {
 export const draftPanelMetadata = defineRoute('POST', '/panel/:id/metadata', {
   params: idParams,
   request: z.object({ url: pullUrlSchema, field: z.enum(['title', 'description']) }).strict(),
-  response: session,
-})
-/** Review the committed local fixes of a PR's fix thread in a new round; nothing is pushed. */
-export const reviewLocalFixes = defineRoute('POST', '/panel/:id/review-local', {
-  params: idParams,
-  request: z.object({ url: pullUrlSchema }).strict(),
-  response: session,
-})
-/** Ask the other provider's model whether the committed local fixes applied the sent plans. */
-export const checkLocalFixes = defineRoute('POST', '/panel/:id/check-local', {
-  params: idParams,
-  request: z.object({ url: pullUrlSchema }).strict(),
   response: session,
 })
 export const cancelPanel = defineRoute('DELETE', '/panel/:id', {

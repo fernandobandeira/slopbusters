@@ -1,6 +1,5 @@
 import { createLayerFixJobs } from './layerFixServices'
 import { LayerFixTools } from './features/mcp/layerFixTools'
-import { join } from 'node:path'
 import { AgentSessionStore } from './adapters/agentSessionStore'
 import { AgentSessions } from './features/agent-sessions/agentSessions'
 import { ReviewerStore } from './adapters/store'
@@ -14,7 +13,6 @@ import {
   createSourceProjectLoader,
 } from './features/navigation/fileContent'
 import { LocalSourceRepository } from './adapters/sourceRepository'
-import { prepareFixWorktree } from './adapters/fixWorktrees'
 import { ReviewWorkspaces, type ReviewCheckout } from './adapters/reviewWorkspaces'
 import { LanguageServers } from './adapters/languageServers'
 import { LanguageServerNavigation } from './adapters/lspNavigation'
@@ -53,8 +51,6 @@ import { Teammates } from './features/teammates/teammates'
 import { PanelMembers } from './features/panel/panelMembers'
 import { PanelJobs } from './features/panel/panelJobs'
 import { RetryingTurns } from './adapters/t3Engine/retryingTurns'
-import { PanelFixes } from './features/panel/panelFixes'
-import { FixChecks } from './features/panel/fixCheck'
 import { localSnapshotLoader } from './features/panel/localRound'
 import { PanelGates } from './features/panel/panelGates'
 import { PanelFollowups } from './features/panel/panelFollowups'
@@ -218,19 +214,7 @@ export function createServices(options: ReviewerServerOptions) {
   const organizationJobs = new OrganizationJobs(dependencies)
   const panelGates = new PanelGates(panel)
   const panelRoutes = new PanelRoutes({ ...panel, jobs: panelJobs })
-  const fixChecks = new FixChecks({ ...panel, checker: () => models().companion, loadLocal })
   const chatModel = () => models().primary
-  const panelFixes = new PanelFixes({
-    ...panel,
-    hosts: chatHosts,
-    model: chatModel,
-    jobs: panelJobs,
-    prepareWorktree: (checkout, pull, sha) =>
-      prepareFixWorktree(checkout, pull, sha, {
-        root: join(options.dataDirectory, 'fix-worktrees'),
-        remoteUrl: options.sourceRemoteUrl,
-      }),
-  })
   const removeWorkspace = async (identity: { owner: string; repo: string; sha: string }) => {
     await typeScriptNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
     await languageNavigation.closeRevision(identity.owner, identity.repo, identity.sha)
@@ -260,10 +244,8 @@ export function createServices(options: ReviewerServerOptions) {
     teammates,
     panelJobs,
     panelGates,
-    panelFixes,
     panelRoutes,
     panelFollowups: new PanelFollowups({ ...panel, linear, linked: tickets.forPull }),
-    fixChecks,
     stackReviewJobs,
     layerFixJobs,
     layerFixTools: new LayerFixTools(layerFixJobs, stackReviewJobs),

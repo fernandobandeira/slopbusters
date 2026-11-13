@@ -1,7 +1,7 @@
 import type { FollowUpTicket } from './panelFollowups'
 import type { GroundingState } from './grounding'
 import type { Gate } from './panelGate'
-import type { CarriedFinding, FixHandoff, LayerRoute, LocalRound, MetadataDraft } from './panelFix'
+import type { CarriedFinding, LayerRoute, LocalRound, MetadataDraft } from './panelFix'
 import type { JudgeAdvice, PanelAdvice, PanelReviewer, UnplacedFinding } from './panel'
 import type { OrganizationPreferences } from './preferences'
 import type { PullRequest, PullReviewBody, ReviewThread } from './types'
@@ -35,7 +35,6 @@ export interface PanelResult {
   /** What the author chose to fix; absent until they change the default selection. */
   gate?: Gate
   /** The fixes the author sent to a T3 Code thread; absent until they Proceed. */
-  handoff?: FixHandoff
   /** Findings the author sent to another layer's round. */
   routed?: LayerRoute[]
   /** Follow-up tickets filed in Linear for findings triage set aside, one per entry. */

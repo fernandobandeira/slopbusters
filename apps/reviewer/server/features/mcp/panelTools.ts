@@ -127,10 +127,6 @@ function review(session: PanelSession, result: PanelResult): string {
     notes.push(
       'The author has not chosen fixes in Slopbusters yet. "The fixes the author chose" below is the default selection, in order: removals of code nothing needs, then confirmed defects and repository rules, then product and wording, then tests. Edge cases that need several things to go wrong are left out unless several reviewers raised them and the fix is small. Problems that were already there are left for a follow-up. A question for the author takes the panel’s recommendation unless it goes against the linked ticket. "Needs your decision" lists those conflicts and what the two models could not agree on; do not act on them until the author answers.',
     )
-  if (result.handoff?.state === 'sent')
-    notes.push(
-      'The author already sent fixes from this review to a fix thread; ask before fixing the same findings here.',
-    )
   return [...notes, panelBriefMarkdown(result, session.reviewers)].join('\n\n')
 }
 
