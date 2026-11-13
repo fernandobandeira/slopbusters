@@ -92,7 +92,8 @@ describe('the panel review copied for an agent', () => {
     const context = brief.slice(brief.indexOf('## Other grounded findings'))
     expect(context).toContain('do not fix them unless asked')
     expect(context).toContain('**Rename the guard**')
-    expect(context).toContain('Question for the author: Per day?')
+    expect(brief).toContain('## Needs your decision')
+    expect(brief).toContain('Question for the author: Per day?')
     expect(brief.indexOf('### 1. Reuse the audit helper')).toBeLessThan(brief.indexOf(context))
   })
 
@@ -178,5 +179,29 @@ describe('one finding copied for an agent', () => {
 
     expect(panelFindingBrief(result([]), finding)).not.toContain('Grounding')
     expect(panelFindingPlan(result([]), finding)).toBeUndefined()
+  })
+})
+
+describe('triage in the agent brief', () => {
+  it('ranks fixes and gives decisions a recommendation and cost', () => {
+    const brief = panelBriefMarkdown(
+      result([
+        entry('g1', 'f1', { kind: 'test', effort: 'medium' }),
+        entry('g2', 'f2', { kind: 'simplification', effort: 'small' }),
+        entry('g3', 'f3', {
+          verdict: 'authorsCall',
+          kind: 'product',
+          effort: 'large',
+          question: 'Keep it?',
+        }),
+      ]),
+      reviewers,
+    )
+    expect(brief).toContain('### 1. Rename the guard')
+    expect(brief).toContain('### 2. Reuse the audit helper')
+    expect(brief).toContain('Kind: Simplification. Effort: small.')
+    expect(brief).toContain('Do not act on these until the author answers.')
+    expect(brief).toContain('Recommendation: Plan for g3.')
+    expect(brief).toContain('Cost: large.')
   })
 })

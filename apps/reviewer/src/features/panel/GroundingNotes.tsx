@@ -1,3 +1,4 @@
+import { dispositionLabels, triage } from '../../../shared/domain/triage'
 import {
   groundingKindLabels,
   groundingOriginLabels,
@@ -17,10 +18,15 @@ import { reviewerName } from './PanelFaces'
 export function GroundingVerdict({ result, id }: { result: PanelResult; id: string }) {
   const entry = result.grounding?.resolved?.find((item) => item.id === id)
   if (!entry) return null
+  const decision = triage(entry)
   return (
     <div className="panel-grounding">
       <p className="finding-severity">
+        {dispositionLabels[decision.disposition]}: {decision.reason}
+      </p>
+      <p className="finding-severity">
         {entry.kind && `${groundingKindLabels[entry.kind]} · `}
+        {entry.effort && `${entry.effort} change · `}
         {verdictLabel(entry)} · {groundingResolutionLabels[entry.resolution]}
         {entry.origin && ` · ${groundingOriginLabels[entry.origin]}`}
       </p>

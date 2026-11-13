@@ -1,5 +1,7 @@
+import { triage } from './triage'
 import { anchorLabel } from './anchors'
 import {
+  groundingKindLabels,
   groundingOriginLabels,
   groundingResolutionLabels,
   groundingVerdictLabels,
@@ -36,7 +38,12 @@ export function fixSection(
   const lines = [`### ${String(index + 1)}. ${title}`, '', `Plan: ${item.plan ?? ''}`]
   if (entry.question && action.answer)
     lines.push('', `The author's answer to "${entry.question}": ${action.answer}`)
-  lines.push('', `Why: ${entry.reason}`)
+  lines.push(
+    '',
+    `Kind: ${entry.kind ? groundingKindLabels[entry.kind] : 'Not recorded'}. Effort: ${entry.effort ?? 'Not recorded'}.`,
+    `Triage: ${triage(entry).reason}`,
+    `Why: ${entry.reason}`,
+  )
   if (entry.evidence.length) lines.push(`Evidence: ${entry.evidence.join(', ')}`)
   if (entry.origin) lines.push(`Origin: ${groundingOriginLabels[entry.origin]}`)
   lines.push('', 'What the reviewers wrote:')
@@ -60,9 +67,16 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
     return [revisionHeader(result), panelReviewMarkdown(result.advice, reviewers)].join('\n\n')
   const candidates = result.grounding?.candidates ?? []
   const items = gateItems(resolved, result.gate, result.pull.number)
-  const chosen = items.filter((item) => item.action.selected && item.plan && !item.problem)
+  const chosen = items
+    .filter((item) => item.action.selected && item.plan && !item.problem)
+    .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
+  const decisions = items
+    .filter((item) => triage(item.entry).disposition === 'ask' && !chosen.includes(item))
+    .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
   const blocked = items.filter((item) => item.action.selected && item.problem)
-  const rest = items.filter((item) => !item.action.selected && !settledRejection(item.entry))
+  const rest = items.filter(
+    (item) => !item.action.selected && !decisions.includes(item) && !settledRejection(item.entry),
+  )
   return [
     `Panel review of ${pullName(result.pull)}, "${result.pull.title}" (${result.pull.url}). Reviewers raised findings, two models grounded them against the code, and the author chose which to fix.`,
     revisionHeader(result),
@@ -70,6 +84,14 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
     chosen.length
       ? `## Rules\n\n${fixRules.join('\n')}\n\n## The fixes the author chose\n\n${chosen.map((item, index) => withRoute(fixSection(item, index, candidates), item.route)).join('\n\n')}`
       : '## The fixes the author chose\n\nNone yet. Treat the findings below as context, and ask before changing code.',
+    section(
+      'Needs your decision',
+      'Do not act on these until the author answers.',
+      decisions.map(
+        (item) =>
+          `${entryBrief(item, candidates)}\n  Question: ${item.entry.question ?? 'Which position should be taken?'}\n  Recommendation: ${item.entry.plan ?? 'No recommendation recorded.'}\n  Cost: ${item.entry.effort ?? 'Not recorded'}.`,
+      ),
+    ),
     section(
       'Chosen but not ready',
       'Do not act on these until the author resolves what blocks them.',
@@ -155,6 +177,7 @@ function entryBrief(item: GateItem, candidates: readonly GroundingCandidate[]): 
   const where = lead ? ` (\`${anchorLabel(lead.finding.anchor)}\`)` : ''
   const verdict = entry.verdict ? groundingVerdictLabels[entry.verdict] : 'No verdict yet'
   const details = [
+    `Triage: ${triage(entry).reason}`,
     `${verdict}, ${groundingResolutionLabels[entry.resolution].toLowerCase()}: ${entry.reason}`,
     item.plan ? `Plan: ${item.plan}` : '',
     entry.question ? `Question for the author: ${entry.question}` : '',
@@ -178,6 +201,7 @@ function revisionHeader(result: PanelResult): string {
 
 function settledRejection(entry: ResolvedEntry): boolean {
   return (
+    triage(entry).disposition === 'skip' &&
     entry.resolution === 'agreed' &&
     ['notTrue', 'overEngineering', 'tasteSkip', 'handledUpstack'].includes(entry.verdict ?? '')
   )

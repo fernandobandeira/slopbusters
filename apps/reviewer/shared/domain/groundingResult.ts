@@ -1,3 +1,4 @@
+import { triage } from './triage'
 import {
   entryRevision,
   groundingVerdictLabels,
@@ -101,12 +102,12 @@ const MAX_LIMITATIONS = 16
 
 const rejections = new Set(['notTrue', 'overEngineering', 'tasteSkip', 'handledUpstack'])
 
-/** Fix first, then questions, then what is still open, then disputed rejections. */
+/** Fixes by policy rank, then author decisions, then the remaining context. */
 function displayGroup(entry: ResolvedEntry): number {
-  if (entry.verdict === 'legit') return entry.resolution === 'agreed' ? 0 : 2
-  if (entry.verdict === 'authorsCall') return 1
-  if (!entry.verdict) return 3
-  return 4
+  const decision = triage(entry)
+  if (decision.disposition === 'fix') return decision.rank
+  if (decision.disposition === 'ask') return 10 + decision.rank
+  return 20
 }
 
 /**
@@ -120,7 +121,10 @@ export function groundedAdvice(
 ): JudgeAdvice {
   const resolved = state.resolved ?? []
   const settled = (entry: ResolvedEntry) =>
-    entry.resolution === 'agreed' && entry.verdict !== undefined && rejections.has(entry.verdict)
+    triage(entry).disposition === 'skip' &&
+    entry.resolution === 'agreed' &&
+    entry.verdict !== undefined &&
+    rejections.has(entry.verdict)
   const order = (entry: ResolvedEntry) =>
     Math.min(...entry.sources.map(keyOrder)) + displayGroup(entry) * 1000
   const findings = resolved
@@ -162,7 +166,7 @@ function asSetAside(state: GroundingState, entry: ResolvedEntry): SetAside[] {
       ...(location.kind === 'description' ? {} : { path: location.path, line: location.line }),
       raisedBy: entry.raisedBy,
       reason: clip(
-        `${groundingVerdictLabels[entry.verdict]}: ${entry.reason}`,
+        `${groundingVerdictLabels[entry.verdict]}${entry.settledBy ? ` (PR #${String(entry.settledBy.pull)})` : ''}: ${entry.reason}`,
         setAsideSchema.shape.reason.maxLength,
       ),
     }),

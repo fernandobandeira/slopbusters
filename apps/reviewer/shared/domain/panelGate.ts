@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { ResolvedEntry } from './grounding'
 import { stableId } from './findings'
+import { triage } from './triage'
 
 const MAX_GATE_TEXT = 2000
 
@@ -44,18 +45,12 @@ export interface GateItem {
   problem?: string
 }
 
-/**
- * The gate before the author has touched it: entries both models agree are worth fixing, except
- * problems that were there before this PR, which the author picks up only by choice.
- */
+/** The gate before the author has touched it: select exactly the policy's fixes. */
 export function initialGate(entries: readonly ResolvedEntry[]): Gate {
   return {
     actions: entries.map((entry) => ({
       entry: entry.id,
-      selected:
-        entry.verdict === 'legit' &&
-        entry.resolution === 'agreed' &&
-        entry.origin !== 'preexisting',
+      selected: triage(entry).disposition === 'fix',
     })),
   }
 }
@@ -101,7 +96,7 @@ function planFor(entry: ResolvedEntry, action: GateAction): string | undefined {
       ? undefined
       : action.plan
   if (entry.resolution === 'disputed') return disputedPlan(entry, action)
-  return entry.verdict === 'legit' ? entry.plan : undefined
+  return entry.verdict === 'legit' || triage(entry).disposition === 'fix' ? entry.plan : undefined
 }
 
 function disputedPlan(entry: ResolvedEntry, action: GateAction): string | undefined {

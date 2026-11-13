@@ -331,6 +331,45 @@ describe('a debate that runs out of turns', () => {
 })
 
 describe('a grounded round as a review', () => {
+  it('orders policy fixes before decisions and context, keeping source order within ranks', () => {
+    const grounding = state(
+      selectCandidates(12, [{ reviewer: 'seat-a', advice: findings('source', 8) }], 40),
+    )
+    grounding.resolved = [
+      { ...entry(['f1']), kind: 'test', resolution: 'agreed', raisedBy: ['seat-a'] },
+      { ...entry(['f2']), kind: 'defect', resolution: 'agreed', raisedBy: ['seat-a'] },
+      { ...entry(['f3']), kind: 'simplification', resolution: 'agreed', raisedBy: ['seat-a'] },
+      {
+        ...entry(['f4']),
+        verdict: 'tasteSkip',
+        effort: 'small',
+        resolution: 'agreed',
+        raisedBy: ['seat-a', 'seat-b'],
+      },
+      { ...entry(['f5']), verdict: 'authorsCall', resolution: 'agreed', raisedBy: ['seat-a'] },
+      { ...entry(['f6']), kind: 'edgeCase', resolution: 'agreed', raisedBy: ['seat-a'] },
+      { ...entry(['f7']), verdict: 'tasteSkip', resolution: 'agreed', raisedBy: ['seat-a'] },
+      {
+        ...entry(['f8']),
+        verdict: 'handledUpstack',
+        settledBy: { pull: 2 },
+        resolution: 'agreed',
+        raisedBy: ['seat-a'],
+      },
+    ]
+    const advice = groundedAdvice(grounding, { summary: 'Checked.', limitations: [] })
+    expect(advice.findings.map((finding) => finding.id)).toEqual([
+      'g-f3',
+      'g-f2',
+      'g-f4',
+      'g-f1',
+      'g-f5',
+      'g-f6',
+    ])
+    expect(advice.setAside).toHaveLength(2)
+    expect(advice.setAside[1]?.reason).toContain('PR #2')
+  })
+
   it('never calls a PR clean while it has limits, and sets agreed rejections aside', () => {
     const candidates = selectCandidates(
       12,

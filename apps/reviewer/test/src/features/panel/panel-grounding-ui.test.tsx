@@ -141,6 +141,7 @@ describe('a grounded panel result', () => {
     )
 
     expect(await screen.findByRole('heading', { name: 'Reuse the audit helper' })).toBeTruthy()
+    expect(screen.getByText('Fix: Both models agree this is worth fixing.')).toBeTruthy()
     expect(
       screen.getByText('Worth fixing · Both models agree · Caused by this change'),
     ).toBeTruthy()
