@@ -135,6 +135,8 @@ describe('the MCP endpoint for coding agents', () => {
       'get_stack_review',
       'retry_stack_review',
       'cancel_stack_review',
+      'apply_layer_fixes',
+      'get_layer_fixes',
     ])
     expect(started).toEqual({
       text: expect.stringContaining('The panel is reviewing PR #128') as string,

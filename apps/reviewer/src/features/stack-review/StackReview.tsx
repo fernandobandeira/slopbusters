@@ -31,7 +31,9 @@ export function StackReview({ url, reviewers }: { url: string; reviewers: PanelS
         </p>
       )}
       {session && !brief && <LayerProgress session={session} />}
-      {session && brief && <StackBriefView brief={brief} repository={session.repository} />}
+      {session && brief && (
+        <StackBriefView brief={brief} repository={session.repository} sessionId={session.id} />
+      )}
     </section>
   )
 }

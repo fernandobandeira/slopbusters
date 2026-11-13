@@ -1,3 +1,4 @@
+import type { LayerFixTools } from '../features/mcp/layerFixTools'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
@@ -19,12 +20,40 @@ const pullRequest = pullUrlSchema.describe(
 )
 
 /** The panel as MCP tools: each tool's name, what it tells the agent, and what it takes. */
-export function panelMcpServer(tools: PanelTools, stack: StackReviewTools): McpServer {
+export function panelMcpServer(
+  tools: PanelTools,
+  stack: StackReviewTools,
+  fixes?: LayerFixTools,
+): McpServer {
   const server = new McpServer({ name: 'slopbusters', version: '1.0.0' }, { instructions })
   for (const register of [listReviewers, startPanelReview, getPanelReview, retryOrCancel])
     register(server, tools)
   for (const register of [startStackReview, getStackReview, retryOrCancelStack])
     register(server, stack)
+  if (fixes) {
+    server.registerTool(
+      'apply_layer_fixes',
+      {
+        title: 'Apply layer fixes',
+        description:
+          'Apply all selected layer plans from the newest stack brief. Commits locally in an app-owned worktree and pushes nothing. Returns immediately; use get_layer_fixes to follow progress.',
+        inputSchema: { pull_request: pullRequest },
+      },
+      ({ pull_request }) => answer(() => fixes.apply(pull_request)),
+    )
+    server.registerTool(
+      'get_layer_fixes',
+      {
+        title: 'Get layer fixes',
+        description:
+          'Follow the local fix worker and read its observed checks, commits and remaining work. The worker commits locally in an app-owned worktree and pushes nothing.',
+        inputSchema: { pull_request: pullRequest, wait_seconds: waitSeconds },
+        annotations: { readOnlyHint: true },
+      },
+      ({ pull_request, wait_seconds }, { signal }) =>
+        answer(() => fixes.read(pull_request, wait_seconds ?? DEFAULT_PANEL_WAIT_SECONDS, signal)),
+    )
+  }
   return server
 }
 

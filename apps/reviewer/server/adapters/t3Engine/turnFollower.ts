@@ -57,6 +57,7 @@ const TOOL_ITEMS: ReadonlySet<OrchestrationV2TurnItem['type']> = new Set([
  * skipped.
  */
 export class TurnFollower {
+  stopForApprovals = false
   private sequence = -1
   private started = false
   private running = false

@@ -1,10 +1,19 @@
+import { LayerFixWorker } from './LayerFixWorker'
 import { groundingKindLabels } from '../../../shared/domain/grounding'
 import { short, type BriefFix, type StackBrief } from '../../../shared/domain/stackBrief'
 import { stackBriefMarkdown } from '../../../shared/domain/stackBriefMarkdown'
 import { CopyButton } from '../../components/CopyButton'
 
 /** The stack brief: the decision queue first, then each layer's fixes bottom to top. */
-export function StackBriefView({ brief, repository }: { brief: StackBrief; repository: string }) {
+export function StackBriefView({
+  brief,
+  repository,
+  sessionId,
+}: {
+  brief: StackBrief
+  repository: string
+  sessionId?: string
+}) {
   return (
     <div className="stack-brief">
       <div className="stack-brief-tools">
@@ -52,6 +61,14 @@ export function StackBriefView({ brief, repository }: { brief: StackBrief; repos
               <FixItem key={item.id} fix={item} />
             ))}
           </ol>
+          {sessionId && (
+            <LayerFixWorker
+              stack={sessionId}
+              url={layer.url}
+              fixes={items}
+              current={layer.current}
+            />
+          )}
         </section>
       ))}
       <BriefNotes brief={brief} />

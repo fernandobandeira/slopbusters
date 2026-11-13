@@ -15,6 +15,7 @@ export interface FixWorktree {
 export interface FixWorktreeOptions {
   /** Where fix worktrees live, outside every checkout. */
   readonly root: string
+  readonly run?: string
   readonly remoteUrl?: (owner: string, repo: string) => string
 }
 
@@ -29,8 +30,14 @@ export async function prepareFixWorktree(
   options: FixWorktreeOptions,
 ): Promise<FixWorktree> {
   validateSourceIdentity(pull.owner, pull.repo, sha)
-  const branch = fixBranch(pull, sha)
-  const path = join(options.root, pull.owner, pull.repo, `${String(pull.number)}-${sha}`)
+  if (options.run && !/^[a-zA-Z0-9-]+$/.test(options.run)) throw new Error('Invalid fix run id.')
+  const branch = options.run ? `slopbusters/fix-${options.run}` : fixBranch(pull, sha)
+  const path = join(
+    options.root,
+    pull.owner,
+    pull.repo,
+    `${String(pull.number)}-${options.run ?? sha}`,
+  )
   if (await exists(path)) {
     await verifyFixWorktree(path, sha)
     return { path: await realpath(path), branch }

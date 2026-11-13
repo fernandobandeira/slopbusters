@@ -32,7 +32,26 @@ export function followTurn(
     Stream.mapEffect((item) => {
       const step = follower.receive(item)
       const commands = [...(step.start ? [start] : []), ...step.responses]
-      return Effect.forEach(commands, dispatch, { discard: true }).pipe(Effect.as(step.outcome))
+      return Effect.forEach(commands, dispatch, { discard: true }).pipe(
+        Effect.flatMap(() => {
+          if (!follower.stopForApprovals || !follower.declinedApprovals)
+            return Effect.succeed(step.outcome)
+          const interrupt = follower.run
+            ? dispatch({
+                type: 'run.interrupt',
+                ...commandBase(start.threadId),
+                runId: RunId.make(follower.run),
+              }).pipe(Effect.ignore)
+            : Effect.void
+          return interrupt.pipe(
+            Effect.as<TurnOutcome>({
+              status: 'failed',
+              error:
+                'The worker could not run commands in approval-required mode. Approvals were declined.',
+            }),
+          )
+        }),
+      )
     }),
     Stream.filter((outcome): outcome is TurnOutcome => outcome !== undefined),
     Stream.runHead,

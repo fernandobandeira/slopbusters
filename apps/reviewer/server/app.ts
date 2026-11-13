@@ -1,3 +1,4 @@
+import { layerFixRouter } from './http/layerFixRouter'
 import express from 'express'
 import { resolve } from 'node:path'
 import { createServices, type ReviewerServerOptions } from './services'
@@ -47,6 +48,7 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
     panelRouter(services),
     splitRouter(services),
     stackReviewRouter(services),
+    layerFixRouter(services),
     sourceRouter(services),
     settingsRouter(services, () => ({ url: mcp?.url, problem: mcp?.problem })),
   )
@@ -68,7 +70,7 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
   )
   if (options.mcp)
     mcp = await openMcpEndpoint(
-      () => panelMcpServer(services.panelTools, services.stackReviewTools),
+      () => panelMcpServer(services.panelTools, services.stackReviewTools, services.layerFixTools),
       options.mcp.port ?? MCP_PORT,
     )
   return {

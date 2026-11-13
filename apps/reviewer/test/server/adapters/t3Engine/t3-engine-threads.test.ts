@@ -303,3 +303,17 @@ describe('a PR branch the project checkout already has', () => {
     await expect(prepare(unreadable)).rejects.toThrow('already checked out in the main repo')
   })
 })
+
+it('returns the effective runtime mode and the known first message identity', async () => {
+  const { threads, encoded } = engineWithSettings({
+    defaultRuntimeMode: 'full-access',
+    projectSettingsOverrides: {},
+  })
+  const result = await threads.startThread({ ...chatStart, messageId: 'worker-first-message' })
+  expect(result).toEqual({
+    threadId: chatStart.threadId,
+    messageId: 'worker-first-message',
+    runtimeMode: 'full-access',
+  })
+  expect(encoded().at(-1)?.messageId).toBe('worker-first-message')
+})

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { LocalRound } from '../../../shared/domain/panelFix'
 import type { ChangedFile, PullRequest } from '../../../shared/domain/types'
+import { fixHead } from '../../adapters/fixVerification'
 import { hardenedGit } from '../../adapters/git'
 import type { LocalSourceRepository } from '../../adapters/sourceRepository'
 import { UserError } from '../../errors'
@@ -55,15 +56,9 @@ export function roundLoader(
 
 /** The fix branch's committed head, once it has fixes and nothing left unsaved. */
 export async function committedFixes(worktreePath: string, reviewedSha: string): Promise<string> {
-  await requireClean(worktreePath)
-  const head = (await git(worktreePath, ['rev-parse', '--verify', 'HEAD'])).trim()
+  const head = await fixHead(worktreePath, reviewedSha)
   if (head === reviewedSha)
     throw new UserError('The fix thread has not committed anything yet. Review it once it has.')
-  try {
-    await git(worktreePath, ['merge-base', '--is-ancestor', reviewedSha, head])
-  } catch {
-    throw new UserError('The fix branch no longer starts from the reviewed commit.')
-  }
   return head
 }
 

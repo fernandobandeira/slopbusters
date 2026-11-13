@@ -17,6 +17,7 @@ import { TurnFollower } from './turnFollower'
 export interface ObservedCommand {
   readonly id: string
   readonly input: string
+  readonly output?: string
   readonly exitCode?: number
   readonly outputIndicatesFailure?: boolean
 }
@@ -31,7 +32,7 @@ export interface ThreadTurnRequest<T> {
   /** Follow the first message already dispatched by startThread rather than sending another. */
   readonly first?: boolean
   /** Called after every turn, including JSON correction, before another message is sent. */
-  readonly settled?: () => Promise<void>
+  readonly settled?: (turn: ThreadTurnResult<T>) => Promise<void>
 }
 
 export interface ThreadTurnResult<T> {
@@ -56,7 +57,7 @@ export class EngineThreadTurns implements ThreadTurns {
     for (let round = 0; round < 2; round++) {
       const result = await this.turn(request, message, deadline, round === 0 && request.first)
       commands.push(...result.commands)
-      await request.settled?.()
+      await request.settled?.({ ...result, commands })
       if (result.outcome.status !== 'completed' || result.error) return { ...result, commands }
       const parsed = parseStructuredReply(result.outcome.replies, request.schema)
       if (parsed.success) return { outcome: result.outcome, commands, report: parsed.data }
@@ -75,6 +76,7 @@ export class EngineThreadTurns implements ThreadTurns {
   ): Promise<ThreadTurnResult<T>> {
     const messageId = first ? request.thread.messageId : randomUUID()
     const follower = new TurnFollower(request.thread.threadId, messageId, new Set())
+    follower.stopForApprovals = request.thread.runtimeMode === 'approval-required'
     const start: TurnStart = {
       type: 'message.dispatch',
       ...commandBase(request.thread.threadId),
@@ -94,12 +96,15 @@ export class EngineThreadTurns implements ThreadTurns {
       request.thread.runtimeMode === 'approval-required' && follower.declinedApprovals > 0
     return {
       outcome,
-      commands: follower.commands.map(({ id, input, exitCode, outputIndicatesFailure }) => ({
-        id,
-        input,
-        ...(exitCode !== undefined ? { exitCode } : {}),
-        ...(outputIndicatesFailure !== undefined ? { outputIndicatesFailure } : {}),
-      })),
+      commands: follower.commands.map(
+        ({ id, input, output, exitCode, outputIndicatesFailure }) => ({
+          id,
+          input,
+          ...(output !== undefined ? { output } : {}),
+          ...(exitCode !== undefined ? { exitCode } : {}),
+          ...(outputIndicatesFailure !== undefined ? { outputIndicatesFailure } : {}),
+        }),
+      ),
       ...(blocked
         ? {
             error:

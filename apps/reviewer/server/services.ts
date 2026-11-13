@@ -1,3 +1,5 @@
+import { createLayerFixJobs } from './layerFixServices'
+import { LayerFixTools } from './features/mcp/layerFixTools'
 import { join } from 'node:path'
 import { AgentSessionStore } from './adapters/agentSessionStore'
 import { AgentSessions } from './features/agent-sessions/agentSessions'
@@ -202,6 +204,17 @@ export function createServices(options: ReviewerServerOptions) {
     revision: (url) => pulls.fetchPullRevision(parsePullUrl(url)),
     judges,
   })
+  const layerFixJobs = createLayerFixJobs({
+    store: store.layerFixes,
+    stackReviewJobs,
+    models,
+    engines,
+    options,
+    pulls,
+    turns,
+    loadLocal,
+    openRepository,
+  })
   const organizationJobs = new OrganizationJobs(dependencies)
   const panelGates = new PanelGates(panel)
   const panelRoutes = new PanelRoutes({ ...panel, jobs: panelJobs })
@@ -252,6 +265,8 @@ export function createServices(options: ReviewerServerOptions) {
     panelFollowups: new PanelFollowups({ ...panel, linear, linked: tickets.forPull }),
     fixChecks,
     stackReviewJobs,
+    layerFixJobs,
+    layerFixTools: new LayerFixTools(layerFixJobs, stackReviewJobs),
     panelTools: new PanelTools({ jobs: panelJobs, teammates }),
     stackReviewTools: new StackReviewTools({ jobs: stackReviewJobs }),
     chats: {
@@ -294,8 +309,8 @@ export function createServices(options: ReviewerServerOptions) {
       await organizationJobs.close()
       linearAuth.close()
       await Promise.all(
-        [linusJobs, gandalfJobs, splitJobs, jobs, stackReviewJobs, panelJobs].map((job) =>
-          job.close(),
+        [linusJobs, gandalfJobs, splitJobs, jobs, stackReviewJobs, panelJobs, layerFixJobs].map(
+          (job) => job.close(),
         ),
       )
       await pruning.stop()

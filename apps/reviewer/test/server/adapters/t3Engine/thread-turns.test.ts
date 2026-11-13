@@ -75,3 +75,21 @@ it('interrupts on timeout and cancellation', async () => {
   expect(cancelled.outcome.status).toBe('cancelled')
   expect(fake.types()).toContain('run.interrupt')
 })
+
+it('declines an approval and interrupts an approval-required worker immediately', async () => {
+  const fake = fakeEngine((command, thread) => {
+    if (command.type !== 'message.dispatch') return
+    thread.startTurn(command)
+    thread.request('command-approval', 'command')
+    thread.item('approval_request', { requestId: 'command-approval', requestKind: 'command' })
+  })
+  const result = await fake.threadTurns.run({
+    ...request(),
+    thread: { ...request().thread, runtimeMode: 'approval-required' },
+  })
+  expect(result.error).toContain('could not run commands in approval-required mode')
+  expect(fake.commands).toContainEqual(
+    expect.objectContaining({ type: 'runtime-request.respond', decision: 'decline' }),
+  )
+  expect(fake.types()).toContain('run.interrupt')
+})

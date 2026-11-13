@@ -1,4 +1,5 @@
 import { mkdirSync, readdirSync, readFileSync, chmodSync, existsSync } from 'node:fs'
+import { LayerFixStore, migrateLayerFixes } from './layerFixStore'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { UserError } from '../errors'
@@ -46,6 +47,7 @@ export class ReviewerStore {
   readonly linus: LinusSessionStore
   readonly gandalf: GandalfSessionStore
   readonly split: SplitSessionStore
+  readonly layerFixes: LayerFixStore
   readonly stackReview: StackReviewSessionStore
   constructor({ dataDirectory }: { dataDirectory: string }) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 })
@@ -56,7 +58,10 @@ export class ReviewerStore {
       'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;',
     )
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
-    if (typeof version !== 'number' || ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(version)) {
+    if (
+      typeof version !== 'number' ||
+      ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(version)
+    ) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
     }
@@ -84,6 +89,7 @@ export class ReviewerStore {
     this.linus = new LinusSessionStore(this.database)
     this.gandalf = new GandalfSessionStore(this.database)
     this.split = new SplitSessionStore(this.database)
+    this.layerFixes = new LayerFixStore(this.database)
     this.stackReview = new StackReviewSessionStore(this.database)
   }
   savePull(pull: PullRequest): void {
@@ -237,6 +243,7 @@ function migrateFrom(database: DatabaseSync, version: number): void {
   if (version < 9) migrateSplitSessions(database)
   if (version < 10) dropSoloBobReviews(database)
   if (version < 11) migrateStackReviewSessions(database)
+  if (version < 12) migrateLayerFixes(database)
 }
 
 /**

@@ -75,6 +75,19 @@ export class EngineChatHosts implements ChatHosts {
     }
   }
 
+  /** Workers always use the app-owned clone, including when the user's engine is available. */
+  async workerWorkspace(repository: { owner: string; repo: string }): Promise<ChatWorkspace> {
+    const bundled = this.bundled
+    if (!bundled) throw new UserError('The bundled engine is unavailable.')
+    const key = `github.com/${repository.owner}/${repository.repo}`.toLowerCase()
+    return {
+      location: 'slopbusters',
+      threads: bundled.threads,
+      project: await this.bundledProject(bundled, repository, key),
+      open: (threadId) => openBundledThread(bundled, threadId),
+    }
+  }
+
   /** The user's matching project, or undefined when their T3 Code cannot take the chat. */
   private async userProject(key: string): Promise<EngineProject | undefined> {
     try {

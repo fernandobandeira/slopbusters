@@ -18,3 +18,5 @@ export const MAX_SYMBOL_SOURCE_CHARS = 500_000
 export const SOURCE_WORKSPACE_TIMEOUT_MS = 60_000
 export const MAX_SOURCE_TREE_CACHE_ENTRIES = 20
 export const MAX_WORKSPACE_STATUS_OUTPUT_BYTES = 1024 * 1024
+/** A retained fix worker may install dependencies, build and run the repository's tests. */
+export const LAYER_FIX_TIMEOUT_MS = 30 * 60_000
