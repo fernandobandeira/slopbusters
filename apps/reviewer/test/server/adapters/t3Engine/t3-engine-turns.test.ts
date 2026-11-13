@@ -270,7 +270,8 @@ it('interrupts the turn and reports a timeout when the agent runs too long', asy
     if (command.type === 'message.dispatch') thread.startTurn(command)
   })
 
-  const run = fake.turns.run(request({ timeoutMs: 20 }))
+  // Long enough for the copy and dispatch under a busy test run, so the turn starts first.
+  const run = fake.turns.run(request({ timeoutMs: 500 }))
 
   await expect(run).rejects.toBeInstanceOf(CommandTimeoutError)
   expect(fake.types()).toContain('run.interrupt')
