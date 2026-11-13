@@ -53,6 +53,7 @@ import { OrganizationSettings } from '../features/settings/OrganizationSettings'
 import { TeammateSettings } from '../features/teammates/TeammateSettings'
 
 import { StackDialog } from '../features/stacks/StackPanel'
+import { renderStackReview } from './StackReviewSlot'
 import { PullStatusDialog } from '../features/pull-status/PullStatusDialog'
 import { type PullStatusSection } from '../components/PullStatusIcons'
 
@@ -601,6 +602,7 @@ export function App() {
         )}
         <StackDialog
           url={stackTarget?.url}
+          renderReview={renderStackReview}
           currentNumber={stackTarget?.number ?? 0}
           filter={filter}
           onClose={() => {

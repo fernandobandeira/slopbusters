@@ -1,0 +1,57 @@
+.stack-review {
+  margin: 16px 8px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.stack-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.stack-review-progress {
+  margin: 0;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+.stack-review-layers,
+.stack-brief-list {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+.stack-review-note,
+.stack-brief-detail {
+  display: block;
+  color: var(--muted-foreground);
+}
+.stack-review-stopped .stack-review-note,
+.stack-brief-stale {
+  color: var(--warning);
+}
+.stack-brief h3 {
+  margin: 14px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.stack-brief p {
+  margin: 2px 0 0;
+  line-height: 1.5;
+}
+.stack-brief-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.stack-brief-summary {
+  color: var(--muted-foreground);
+}
+.stack-brief-details {
+  margin-top: 14px;
+}
+.stack-brief-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}

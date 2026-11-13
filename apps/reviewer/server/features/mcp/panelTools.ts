@@ -93,7 +93,7 @@ export class PanelTools {
 }
 
 /** The repository and canonical URL of a PR, whichever of its pages the agent passed. */
-function target(pullRequest: string) {
+export function target(pullRequest: string) {
   const { owner, repo, number } = parsePullUrl(pullRequest)
   return {
     repository: `${owner}/${repo}`,
@@ -135,7 +135,7 @@ function review(session: PanelSession, result: PanelResult): string {
 }
 
 /** Resolves after `milliseconds`, or as soon as the caller stops waiting. */
-function pause(milliseconds: number, signal: AbortSignal): Promise<void> {
+export function pause(milliseconds: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const done = () => {
       clearTimeout(timer)

@@ -68,7 +68,7 @@ export async function startReviewerServer(options: ReviewerServerOptions) {
   )
   if (options.mcp)
     mcp = await openMcpEndpoint(
-      () => panelMcpServer(services.panelTools),
+      () => panelMcpServer(services.panelTools, services.stackReviewTools),
       options.mcp.port ?? MCP_PORT,
     )
   return {

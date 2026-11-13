@@ -364,3 +364,19 @@ function canonical(value: unknown): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value
   return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
 }
+
+/** Where one layer stands in a stack review, in words. */
+export function layerProgress(layer: StackLayer): string {
+  switch (layer.state) {
+    case 'waiting':
+      return 'Not looked at yet.'
+    case 'reused':
+      return 'Reuses its panel result, reviewed at its current head.'
+    case 'reviewing':
+      return 'The panel is reviewing it.'
+    case 'reviewed':
+      return 'The panel reviewed it.'
+    case 'stopped':
+      return layer.note ?? 'Its panel stopped.'
+  }
+}

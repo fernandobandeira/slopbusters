@@ -59,6 +59,7 @@ import { PanelFollowups } from './features/panel/panelFollowups'
 import { PanelRoutes } from './features/panel/panelRoutes'
 import { loadBuiltInSkill } from './features/panel/builtInSkills'
 import { PanelTools } from './features/mcp/panelTools'
+import { StackReviewTools } from './features/mcp/stackReviewTools'
 import { StackReviewJobs } from './features/stack-review/stackReviewJobs'
 import { createStackResolver } from './features/stack-review/stackResolution'
 import { parsePullUrl } from '../shared/domain/pullUrl'
@@ -252,6 +253,7 @@ export function createServices(options: ReviewerServerOptions) {
     fixChecks,
     stackReviewJobs,
     panelTools: new PanelTools({ jobs: panelJobs, teammates }),
+    stackReviewTools: new StackReviewTools({ jobs: stackReviewJobs }),
     chats: {
       continueInT3Code: async (request: ContinueChatRequest) => {
         const model = chatModel()

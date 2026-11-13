@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { Link } from 'react-router'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import type { PullStack, PullStackResult, StackPull } from '../../../shared/domain/stacks'
 import { reviewPath, type InboxFilter } from '../../lib/routes'
 import { call, message } from '../../lib/api'
@@ -142,6 +142,8 @@ interface StackDialogProps {
   stack?: PullStack
   currentNumber: number
   filter: InboxFilter
+  /** What else the dialog shows under a loaded stack, such as a review of the whole stack. */
+  renderReview?: (url: string) => ReactNode
 }
 
 interface StackQuery {
@@ -159,6 +161,7 @@ function StackDialogView({
   stack: suppliedStack,
   currentNumber,
   filter,
+  renderReview,
 }: StackDialogProps) {
   const [query, setQuery] = useState<StackQuery | undefined>(() =>
     url && suppliedStack
@@ -299,6 +302,7 @@ function StackDialogView({
               onOpenLayer={onClose}
             />
           )}
+          {stack && url && renderReview?.(url)}
           {!loading && !error && !stack && (
             <p className="stack-message">No stack is available for this pull request.</p>
           )}

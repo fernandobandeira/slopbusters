@@ -7,6 +7,7 @@ import { ReviewWorkspace } from '../features/review/ReviewWorkspace'
 import { SourceContextDialog } from '../features/source-navigation/SourceContextDialog'
 import { SymbolContextMenu } from '../features/source-navigation/SymbolContextMenu'
 import { StackDialog } from '../features/stacks/StackPanel'
+import { renderStackReview } from './StackReviewSlot'
 import { usePullStack } from '../features/stacks/usePullStack'
 import { readRoute } from '../lib/routes'
 
@@ -54,6 +55,7 @@ export function ReviewPage(props: Props) {
       />
       <StackDialog
         url={stackOpen ? pull.url : undefined}
+        renderReview={renderStackReview}
         stack={stack ?? undefined}
         currentNumber={pull.number}
         filter={inboxFilter}
