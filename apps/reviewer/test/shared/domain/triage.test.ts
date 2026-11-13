@@ -28,10 +28,22 @@ describe('fixed triage policy', () => {
     ['disproof precedes repetition', { ...repeated, verdict: 'notTrue' }, 'skip'],
     ['over-engineering precedes repetition', { ...repeated, verdict: 'overEngineering' }, 'skip'],
     ['another layer precedes repetition', { ...repeated, verdict: 'handledUpstack' }, 'skip'],
+    ['a legacy author decision is asked', { verdict: 'authorsCall', origin: 'preexisting' }, 'ask'],
+    ['a recommendation is taken', { verdict: 'authorsCall', kind: 'product' }, 'fix'],
     [
-      'author decision precedes follow-up',
-      { verdict: 'authorsCall', origin: 'preexisting' },
+      'a recommendation against the ticket is asked',
+      { verdict: 'authorsCall', kind: 'product', ticketConflict: 'Done means: limits are daily.' },
       'ask',
+    ],
+    [
+      'a recommendation to leave the code is skipped',
+      { verdict: 'authorsCall', kind: 'product', plan: undefined },
+      'skip',
+    ],
+    [
+      'a recommendation for old code waits for a follow-up',
+      { verdict: 'authorsCall', kind: 'product', origin: 'preexisting' },
+      'skip',
     ],
     ['follow-up precedes repetition', { ...repeated, origin: 'preexisting' }, 'skip'],
     ['cheap repetition precedes taste', { ...repeated, verdict: 'tasteSkip' }, 'fix'],
@@ -72,11 +84,14 @@ describe('fixed triage policy', () => {
   })
 
   it('puts simplification decisions first', () => {
-    expect(triage({ ...base, verdict: 'authorsCall', kind: 'simplification' }).rank).toBeLessThan(
-      triage({ ...base, resolution: 'disputed' }).rank,
-    )
+    const conflict = { ticketConflict: 'Not in scope: removing the job.' }
+    expect(
+      triage({ ...base, ...conflict, verdict: 'authorsCall', kind: 'simplification' }).rank,
+    ).toBeLessThan(triage({ ...base, resolution: 'disputed' }).rank)
   })
+})
 
+describe('the default selection', () => {
   it('selects policy fixes and carries the promoted taste plan without allowing rejected plans', () => {
     const entries = [
       { ...base, ...repeated, verdict: 'tasteSkip' as const },
@@ -88,5 +103,23 @@ describe('fixed triage policy', () => {
     expect(items[0]?.plan).toBe(base.plan)
     expect(items[0]?.problem).toBeUndefined()
     expect(items[2]?.plan).toBeUndefined()
+  })
+
+  it('sends a taken recommendation without an answer, but holds a conflict for one', () => {
+    const question = {
+      verdict: 'authorsCall' as const,
+      kind: 'product' as const,
+      question: 'Daily?',
+    }
+    const entries = [
+      { ...base, ...question },
+      { ...base, ...question, id: 'conflict', ticketConflict: 'Done means: limits are monthly.' },
+    ]
+    const selected = { actions: entries.map((entry) => ({ entry: entry.id, selected: true })) }
+    const items = gateItems(entries, selected, 1)
+    expect(initialGate(entries).actions.map((a) => a.selected)).toEqual([true, false])
+    expect(items[0]?.problem).toBeUndefined()
+    expect(items[0]?.plan).toBe(base.plan)
+    expect(items[1]?.problem).toBe('Answer the question first.')
   })
 })

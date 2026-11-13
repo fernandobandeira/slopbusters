@@ -119,6 +119,11 @@ export const groundedEntrySchema = z
     plan: z.string().min(1).max(400).optional(),
     /** Required for `authorsCall`: the decision only the author can make. */
     question: z.string().min(1).max(300).optional(),
+    /**
+     * On `authorsCall`: the passage of the linked ticket or its parent that the recommendation, the
+     * plan or leaving the code as it is, goes against. Only these need the author's answer.
+     */
+    ticketConflict: z.string().min(1).max(400).optional(),
     /** Absent only on lists grounded before origins were recorded. */
     origin: z.enum(groundingOrigins).optional(),
     /** Absent only on lists grounded before kinds and efforts were recorded. */
@@ -338,6 +343,8 @@ function verdictProblems(entry: GroundedEntry): string[] {
   if (entry.verdict === 'legit' && !entry.plan) problems.push('a legit entry needs a plan.')
   if (entry.verdict === 'authorsCall' && !entry.question)
     problems.push("an author's call needs the question to ask.")
+  if (entry.verdict !== 'authorsCall' && entry.ticketConflict)
+    problems.push("ticketConflict is only for an author's call.")
   return problems
 }
 

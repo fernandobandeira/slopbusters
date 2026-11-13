@@ -193,6 +193,7 @@ describe('triage in the agent brief', () => {
           kind: 'product',
           effort: 'large',
           question: 'Keep it?',
+          ticketConflict: 'Done means: the job stays.',
         }),
       ]),
       reviewers,
@@ -201,6 +202,7 @@ describe('triage in the agent brief', () => {
     expect(brief).toContain('### 2. Reuse the audit helper')
     expect(brief).toContain('Kind: Simplification. Effort: small.')
     expect(brief).toContain('Do not act on these until the author answers.')
+    expect(brief).toContain('Goes against the ticket: Done means: the job stays.')
     expect(brief).toContain('Recommendation: Plan for g3.')
     expect(brief).toContain('Cost: large.')
   })

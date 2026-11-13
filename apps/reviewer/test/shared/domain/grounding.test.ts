@@ -346,7 +346,13 @@ describe('a grounded round as a review', () => {
         resolution: 'agreed',
         raisedBy: ['seat-a', 'seat-b'],
       },
-      { ...entry(['f5']), verdict: 'authorsCall', resolution: 'agreed', raisedBy: ['seat-a'] },
+      {
+        ...entry(['f5']),
+        verdict: 'authorsCall',
+        ticketConflict: 'Not in scope: retries.',
+        resolution: 'agreed',
+        raisedBy: ['seat-a'],
+      },
       { ...entry(['f6']), kind: 'edgeCase', resolution: 'agreed', raisedBy: ['seat-a'] },
       { ...entry(['f7']), verdict: 'tasteSkip', resolution: 'agreed', raisedBy: ['seat-a'] },
       {

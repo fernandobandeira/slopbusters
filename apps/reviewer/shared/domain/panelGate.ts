@@ -109,7 +109,8 @@ function disputedPlan(entry: ResolvedEntry, action: GateAction): string | undefi
 function blocker(entry: ResolvedEntry, action: GateAction, plan?: string): string | undefined {
   if (!entry.verdict)
     return `It needs evidence before it can be fixed: ${entry.missing ?? 'see the reason.'}`
-  if (entry.verdict === 'authorsCall' && !action.answer) return 'Answer the question first.'
+  if (entry.verdict === 'authorsCall' && !action.answer && triage(entry).disposition !== 'fix')
+    return 'Answer the question first.'
   if (plan) return undefined
   if (action.plan && action.planBy === 'planner')
     return 'The answer changed after the plan was written; write or ask for a new plan.'

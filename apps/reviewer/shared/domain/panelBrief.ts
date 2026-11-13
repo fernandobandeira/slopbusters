@@ -38,6 +38,8 @@ export function fixSection(
   const lines = [`### ${String(index + 1)}. ${title}`, '', `Plan: ${item.plan ?? ''}`]
   if (entry.question && action.answer)
     lines.push('', `The author's answer to "${entry.question}": ${action.answer}`)
+  else if (entry.question)
+    lines.push('', `On "${entry.question}", this takes the panel's recommendation.`)
   lines.push(
     '',
     `Kind: ${entry.kind ? groundingKindLabels[entry.kind] : 'Not recorded'}. Effort: ${entry.effort ?? 'Not recorded'}.`,
@@ -89,7 +91,7 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
       'Do not act on these until the author answers.',
       decisions.map(
         (item) =>
-          `${entryBrief(item, candidates)}\n  Question: ${item.entry.question ?? 'Which position should be taken?'}\n  Recommendation: ${item.entry.plan ?? 'No recommendation recorded.'}\n  Cost: ${item.entry.effort ?? 'Not recorded'}.`,
+          `${entryBrief(item, candidates)}\n  Question: ${item.entry.question ?? 'Which position should be taken?'}${item.entry.ticketConflict ? `\n  Goes against the ticket: ${item.entry.ticketConflict}` : ''}\n  Recommendation: ${item.entry.plan ?? 'No recommendation recorded.'}\n  Cost: ${item.entry.effort ?? 'Not recorded'}.`,
       ),
     ),
     section(
