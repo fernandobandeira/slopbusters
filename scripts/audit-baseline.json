@@ -6,5 +6,13 @@
     "expires": "2026-11-04T00:00:00Z",
     "reason": "Existing Electron build-only download cache dependency; the app does not expose this shared HTTP cache to users. No patched release exists as of 2026-10-04. Review upstream fix before expiry.",
     "url": "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+  },
+  {
+    "id": "GHSA-fc5q-39xc-vjpf",
+    "version": "4.0.7",
+    "paths": ["apps__desktop>electron-builder>app-builder-lib>@electron/rebuild>node-gyp>tinyglobby>picomatch"],
+    "expires": "2026-12-18T00:00:00Z",
+    "reason": "Electron build-only native rebuild dependency; globs come from the build, not from users. No patched release exists as of 2026-11-18. Review upstream fix before expiry.",
+    "url": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf"
   }
 ]
