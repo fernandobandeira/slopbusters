@@ -125,7 +125,7 @@ describe('automatic organization API', () => {
         organization: { provider: Provider.codex, model: 'custom-model' },
       })
       await organize(url)
-      const next = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+      const next = { provider: Provider.codex, model: 'gpt-6.2-sol' }
       expect(organizePull).toHaveBeenLastCalledWith(turns, fixturePull(), next, {
         signal: anySignal,
         observer: anyObserver,

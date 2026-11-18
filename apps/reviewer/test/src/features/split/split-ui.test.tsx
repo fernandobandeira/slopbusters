@@ -32,7 +32,7 @@ function split(overrides: Partial<SplitSession> = {}): SplitSession {
     baseBranch: 'main',
     headSha: pull.headSha,
     baseSha: 'merge-base',
-    primary: { provider: Provider.codex, model: 'gpt-6.1-sol' },
+    primary: { provider: Provider.codex, model: 'gpt-6.2-sol' },
     companion: { provider: Provider.claude, model: 'claude-opus-5-5' },
     status: 'running',
     progress: 'Secondary model reviewing the cut · turn 2…',

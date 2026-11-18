@@ -13,7 +13,7 @@ import { fixturePull } from '../../fixtures/pull'
 
 const pull = fixturePull()
 const repository = `${pull.owner}/${pull.repo}`
-const model = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+const model = { provider: Provider.codex, model: 'gpt-6.2-sol' }
 
 vi.mock('../../../src/lib/api', async (original) => ({ ...(await original()), call: vi.fn() }))
 vi.mock('../../../src/lib/usePreferences', () => ({

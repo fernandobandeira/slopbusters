@@ -44,8 +44,8 @@ export const providerModels: Record<
   Record<ModelRole, { model: string; label: string }>
 > = {
   [Provider.codex]: {
-    review: { model: 'gpt-6.1-sol', label: 'Sol 6.1' },
-    judge: { model: 'gpt-6-astra', label: 'Astra 6' },
+    review: { model: 'gpt-6.2-sol', label: 'Sol 6.2' },
+    judge: { model: 'gpt-6.2-astra', label: 'Astra 6.2' },
   },
   [Provider.claude]: {
     review: { model: 'claude-opus-5-5', label: 'Opus 5.5' },

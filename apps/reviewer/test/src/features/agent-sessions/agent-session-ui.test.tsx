@@ -27,7 +27,7 @@ const root = {
 const first: AgentRun = {
   id: 'primary',
   sessionId: root.id,
-  model: { provider: Provider.codex, model: 'gpt-6.1-sol' },
+  model: { provider: Provider.codex, model: 'gpt-6.2-sol' },
   label: 'Primary review',
   status: 'complete',
   startedAt: root.createdAt,
@@ -89,12 +89,12 @@ it('opens the current pass and lets the user revisit a previous model run', asyn
   )
   expect(await screen.findByText('Secondary findings')).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Open PR' }).getAttribute('href')).toContain('/pulls/2')
-  fireEvent.click(screen.getByRole('link', { name: /Codex Sol 6.1.*Primary review/ }))
+  fireEvent.click(screen.getByRole('link', { name: /Codex Sol 6.2.*Primary review/ }))
   expect(await screen.findByText('Primary findings')).toBeTruthy()
   expect(screen.queryByText('Secondary findings')).toBeNull()
   expect(
     screen
-      .getByRole('link', { name: /Codex Sol 6.1.*Primary review/ })
+      .getByRole('link', { name: /Codex Sol 6.2.*Primary review/ })
       .getAttribute('aria-current'),
   ).toBe('page')
 })
@@ -153,7 +153,7 @@ it('ignores a late transcript response after selecting a different pass', async 
   await waitFor(() => {
     expect(finish).toBeTypeOf('function')
   })
-  fireEvent.click(screen.getByRole('link', { name: /Codex Sol 6.1.*Primary review/ }))
+  fireEvent.click(screen.getByRole('link', { name: /Codex Sol 6.2.*Primary review/ }))
   await screen.findByText('Primary findings')
   finish(Response.json(transcript(second, 'Late secondary output')))
   await waitFor(() => {
@@ -251,7 +251,7 @@ it.each(['gandalf', 'linus'] as const)(
   },
 )
 it('names the grounding models the way settings does', () => {
-  expect(modelName({ provider: Provider.codex, model: 'gpt-6-astra' })).toBe('Astra 6')
+  expect(modelName({ provider: Provider.codex, model: 'gpt-6.2-astra' })).toBe('Astra 6.2')
   expect(modelName({ provider: Provider.claude, model: 'claude-fable-5-2' })).toBe('Fable 5.2')
 })
 

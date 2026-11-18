@@ -143,7 +143,7 @@ describe('a grounding debate that stops', () => {
     })
 
     expect(jobs.get(session.id).error).toBe(
-      'Grounding turn 2 on gpt-6-astra ran out of time after 20 minutes. Retry continues from the last finished turn.',
+      'Grounding turn 2 on gpt-6.2-astra ran out of time after 20 minutes. Retry continues from the last finished turn.',
     )
     expect(requests.find(isGrounding)?.timeoutMs).toBe(20 * 60 * 1000)
     expect(jobs.get(session.id).pending?.grounding?.turns).toHaveLength(1)

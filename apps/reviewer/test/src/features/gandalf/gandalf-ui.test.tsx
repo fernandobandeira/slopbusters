@@ -38,7 +38,7 @@ const pull: InboxPull = {
     warnings: [],
   },
 }
-const model = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+const model = { provider: Provider.codex, model: 'gpt-6.2-sol' }
 const session: GandalfSession = {
   id: 'resolution',
   repository: 'example/project',

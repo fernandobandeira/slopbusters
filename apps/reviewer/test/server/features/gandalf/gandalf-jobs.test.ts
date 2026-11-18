@@ -12,7 +12,7 @@ import { fixturePull } from '../../../fixtures/pull'
 import { recordingTurns } from '../../../fixtures/turns'
 import { gandalfMove, idleWorkspaceParts } from '../../../fixtures/gandalf'
 
-const primary = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+const primary = { provider: Provider.codex, model: 'gpt-6.2-sol' }
 const companion = { provider: Provider.claude, model: 'claude-opus-5-5' }
 const { turns } = recordingTurns()
 const clean = gandalfMove()

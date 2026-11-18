@@ -19,9 +19,9 @@ import { fixturePull } from './pull'
 import { installSkill, temporarySkillRoots } from './skills'
 
 export const primary = { provider: Provider.claude, model: 'claude-opus-5-5' }
-export const companion = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+export const companion = { provider: Provider.codex, model: 'gpt-6.2-sol' }
 export const judge = { provider: Provider.claude, model: 'claude-fable-5-2' }
-export const companionJudge = { provider: Provider.codex, model: 'gpt-6-astra' }
+export const companionJudge = { provider: Provider.codex, model: 'gpt-6.2-astra' }
 export const repository = 'review-room/example'
 export const url = fixturePull().url
 export const everyone: ReviewerId[] = ['unclebob', 'terminator', 'teammate:avery']

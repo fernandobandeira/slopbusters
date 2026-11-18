@@ -11,7 +11,7 @@ export const agentNames: Record<AgentSession['kind'], string> = {
   split: 'Linus split',
   stack: 'Stack review',
 }
-/** The model's short name, such as "Astra 6"; a model the app no longer runs shows its id. */
+/** The model's short name, such as "Astra 6.2"; a model the app no longer runs shows its id. */
 export function modelName(model: OrganizationPreferences) {
   const known = Object.values(providerModels)
     .flatMap((roles) => Object.values(roles))

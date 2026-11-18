@@ -22,7 +22,7 @@ vi.mock('../../../../server/features/jobs/ticketReview', () => ({
   reconcileTicket: vi.fn(),
   foldAnswers: vi.fn(),
 }))
-const primary = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+const primary = { provider: Provider.codex, model: 'gpt-6.2-sol' }
 const companion = { provider: Provider.claude, model: 'claude-opus-5-5' }
 let directory: string
 let store: ReviewerStore

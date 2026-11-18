@@ -12,7 +12,7 @@ import { AgentSessions } from '../../../../server/features/agent-sessions/agentS
 import { Provider } from '../../../../shared/domain/types'
 
 const id = 'a'.repeat(32)
-const model = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+const model = { provider: Provider.codex, model: 'gpt-6.2-sol' }
 let directory: string
 let store: AgentSessionStore
 let sessions: AgentSessions

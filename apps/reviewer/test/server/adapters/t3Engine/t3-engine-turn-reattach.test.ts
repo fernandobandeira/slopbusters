@@ -7,7 +7,7 @@ import { fakeEngine } from './fixtures/fakeEngine'
 const filesSchema = z.object({ files: z.array(z.string()) })
 
 const request = () => ({
-  model: { provider: Provider.codex, model: 'gpt-6-astra' },
+  model: { provider: Provider.codex, model: 'gpt-6.2-astra' },
   prompt: 'List the top-level files.',
   schema: filesSchema,
   signal: new AbortController().signal,

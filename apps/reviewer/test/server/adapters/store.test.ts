@@ -57,7 +57,7 @@ describe('SQLite review storage', () => {
     store.saveDraft(pull.id, draft)
     store.savePreferences({
       theme: 'nord',
-      organization: { provider: Provider.codex, model: 'gpt-6.1-sol' },
+      organization: { provider: Provider.codex, model: 'gpt-6.2-sol' },
     })
     close(store)
     store = open(path)
@@ -72,7 +72,7 @@ describe('SQLite review storage', () => {
     })
     expect(store.getPreferences()).toEqual({
       theme: 'nord',
-      organization: { provider: Provider.codex, model: 'gpt-6.1-sol' },
+      organization: { provider: Provider.codex, model: 'gpt-6.2-sol' },
     })
   })
   it('carries unchanged review proof to a new revision while keeping notes and comments on the old revision', () => {

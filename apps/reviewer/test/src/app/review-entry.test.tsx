@@ -16,7 +16,7 @@ import type { Preferences } from '../../../shared/domain/preferences'
 
 const pull = fixturePull()
 const repository = `${pull.owner}/${pull.repo}`
-const model = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+const model = { provider: Provider.codex, model: 'gpt-6.2-sol' }
 const job = {
   session: undefined,
   loading: false,

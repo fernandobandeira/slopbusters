@@ -14,7 +14,7 @@ import { recordingTurns } from '../../fixtures/turns'
 
 const block =
   'export function slug(value: string) {\n  return value.trim()\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, "-")\n    .replace(/^-|-$/g, "");\n}\n'
-const model = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+const model = { provider: Provider.codex, model: 'gpt-6.2-sol' }
 const signal = new AbortController().signal
 const keep: LinusAdvice = {
   verdict: 'keep',

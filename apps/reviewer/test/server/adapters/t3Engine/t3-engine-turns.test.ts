@@ -94,11 +94,11 @@ it('starts Codex in the workspace-write sandbox of its throwaway copy', async ()
     if (command.type === 'message.dispatch') thread.reply(command, '{"files":[]}')
   })
 
-  await fake.turns.run(request({ model: { provider: Provider.codex, model: 'gpt-6.1-sol' } }))
+  await fake.turns.run(request({ model: { provider: Provider.codex, model: 'gpt-6.2-sol' } }))
 
   const create = fake.commands.find((command) => command.type === 'thread.create')
   expect(create).toMatchObject({
-    modelSelection: { instanceId: 'codex', model: 'gpt-6.1-sol' },
+    modelSelection: { instanceId: 'codex', model: 'gpt-6.2-sol' },
     runtimeMode: 'auto-accept-edits',
   })
 })

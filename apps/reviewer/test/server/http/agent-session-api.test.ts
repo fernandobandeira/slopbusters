@@ -16,7 +16,7 @@ it('validates session API responses, repository filters and transcript ownership
   sessions.start('abc', 'linus', { repository: 'example/project', urls: [] })
   await sessions.run(
     'abc',
-    { model: { provider: Provider.codex, model: 'gpt-6.1-sol' }, label: 'Review' },
+    { model: { provider: Provider.codex, model: 'gpt-6.2-sol' }, label: 'Review' },
     (emit) => {
       emit({ id: 'text', kind: 'assistant', text: 'Reviewed' })
       return Promise.resolve({ summary: 'Done' })

@@ -26,7 +26,7 @@ const session: SplitSession = {
   baseBranch: 'main',
   headSha: 'head',
   baseSha: 'merge-base',
-  primary: { provider: Provider.codex, model: 'gpt-6.1-sol' },
+  primary: { provider: Provider.codex, model: 'gpt-6.2-sol' },
   companion: { provider: Provider.claude, model: 'claude-opus-5-5' },
   status: 'running',
   progress: '',

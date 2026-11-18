@@ -252,7 +252,7 @@ describe('base branches that gain commits during resolution', () => {
 function recoveryFixture(networkRetryDelaysMs = [0, 0]) {
   const directory = mkdtempSync(join(tmpdir(), 'gandalf-recovery-'))
   const store = new ReviewerStore({ dataDirectory: directory })
-  store.savePreferences({ organization: { provider: Provider.codex, model: 'gpt-6.1-sol' } })
+  store.savePreferences({ organization: { provider: Provider.codex, model: 'gpt-6.2-sol' } })
   const traces = new AgentSessionStore(directory)
   const pulls = [1, 2].map((number) => ({
     ...fixturePull(),

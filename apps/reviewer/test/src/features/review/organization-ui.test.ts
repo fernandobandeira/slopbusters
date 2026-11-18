@@ -58,7 +58,7 @@ describe('organization before review', () => {
 
       expect(markup.match(/id="organization-title"/g)).toHaveLength(1)
       expect(markup).toContain('Organizing changes…')
-      expect(markup).toContain('gpt-6.1-sol')
+      expect(markup).toContain('gpt-6.2-sol')
       expect(markup).toContain('role="status"')
       expect(markup).not.toContain('name="organization-provider"')
       expect(markup).toContain('Back to inbox')

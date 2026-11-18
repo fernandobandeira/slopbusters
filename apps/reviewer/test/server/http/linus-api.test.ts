@@ -45,7 +45,7 @@ afterEach(() => {
   vi.resetAllMocks()
   for (const path of directories.splice(0)) rmSync(path, { recursive: true, force: true })
 })
-const primary = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+const primary = { provider: Provider.codex, model: 'gpt-6.2-sol' }
 const companion = { provider: Provider.claude, model: 'claude-opus-5-5' }
 const advice: LinusAdvice = {
   verdict: 'keep',

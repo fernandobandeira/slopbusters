@@ -13,7 +13,7 @@ import { Provider } from '../../../../shared/domain/types'
 
 function request(signal = new AbortController().signal): StructuredTurnRequest<{ ok: boolean }> {
   return {
-    model: { provider: Provider.codex, model: 'gpt-6.1-sol' },
+    model: { provider: Provider.codex, model: 'gpt-6.2-sol' },
     prompt: 'Review it.',
     schema: z.object({ ok: z.boolean() }),
     signal,

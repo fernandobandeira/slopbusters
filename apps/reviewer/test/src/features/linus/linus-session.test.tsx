@@ -7,7 +7,7 @@ import { useLinusSession } from '../../../../src/features/linus/useLinusSession'
 const repository = 'review-room/example'
 const url = `https://github.com/${repository}/pull/128`
 function session(id: string) {
-  const model = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+  const model = { provider: Provider.codex, model: 'gpt-6.2-sol' }
   return {
     id,
     repository,

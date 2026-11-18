@@ -43,7 +43,7 @@ describe('linked tickets as review evidence', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ticket-context-'))
     const store = new ReviewerStore({ dataDirectory: directory })
     store.savePreferences({
-      organization: { provider: Provider.codex, model: 'gpt-6.1-sol' },
+      organization: { provider: Provider.codex, model: 'gpt-6.2-sol' },
       companion: { provider: Provider.claude, model: 'claude-opus-5-5' },
     })
     vi.mocked(loadLinusSkill).mockResolvedValue('Linus')

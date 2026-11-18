@@ -108,7 +108,7 @@ describe('Linus evidence and recommendations', () => {
         pull,
         advice,
         fingerprint: pullFingerprint(pull),
-        reviewers: [{ provider: Provider.codex, model: 'gpt-6.1-sol' }],
+        reviewers: [{ provider: Provider.codex, model: 'gpt-6.2-sol' }],
       },
     ])
     for (const text of [

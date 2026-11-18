@@ -34,7 +34,7 @@ const advice: LinusAdvice = {
   disagreements: [],
   steps: [{ text: 'Keep it together.', emotion: 'happy', target: 'overview', reference: '' }],
 }
-const primary = { provider: Provider.codex, model: 'gpt-6.1-sol' }
+const primary = { provider: Provider.codex, model: 'gpt-6.2-sol' }
 const companion = { provider: Provider.claude, model: 'claude-opus-5-5' }
 const repository = 'review-room/example'
 const anySignal: unknown = expect.any(AbortSignal)

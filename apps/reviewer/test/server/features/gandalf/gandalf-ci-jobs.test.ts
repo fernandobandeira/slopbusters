@@ -27,7 +27,7 @@ beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'gandalf-ci-'))
   store = new ReviewerStore({ dataDirectory: directory })
   store.savePreferences({
-    organization: { provider: Provider.codex, model: 'gpt-6.1-sol' },
+    organization: { provider: Provider.codex, model: 'gpt-6.2-sol' },
     companion: { provider: Provider.claude, model: 'claude-opus-5-5' },
   })
   resolve.mockResolvedValue(clean)
