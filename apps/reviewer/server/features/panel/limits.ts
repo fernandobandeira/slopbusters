@@ -30,3 +30,9 @@ export const GROUNDING_TURN_TIMEOUT_MS = 20 * 60 * 1000
 export const PANEL_REVIEW_TIMEOUT_MS = 15 * 60 * 1000
 /** A planning pass checks one finding. */
 export const PLANNING_TIMEOUT_MS = 10 * 60 * 1000
+
+/** How much of a blind seat's own explanation its failure message keeps. */
+export const MAX_BLIND_SEAT_ERROR_CHARS = 600
+
+/** How much of one seat's own limitations the grounded review repeats. */
+export const MAX_SEAT_NOTE_CHARS = 500

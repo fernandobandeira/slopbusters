@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest'
 import { z } from 'zod'
 import {
-  instructionsInFile,
+  instructionsInFiles,
+  overflowFiles,
   parseStructuredReply,
   withOutputContract,
   wrapLongLines,
@@ -77,12 +78,32 @@ it('wraps only lines longer than the read tools show whole, keeping every charac
 })
 
 it('tells each agent how to read instructions that live in a file', () => {
-  const claude = instructionsInFile('.slopbusters/instructions.md', 'one\ntwo', Provider.claude)
-  const codex = instructionsInFile('.slopbusters/instructions.md', 'one\ntwo', Provider.codex)
+  const claude = instructionsInFiles(overflowFiles('one\ntwo', Provider.claude), Provider.claude)
+  const codex = instructionsInFiles(overflowFiles('one\ntwo', Provider.codex), Provider.codex)
 
   expect(claude).toContain(
     'in the file .slopbusters/instructions.md in the working directory (2 lines)',
   )
   expect(claude).toContain('Read tool, 150 lines at a time')
-  expect(codex).toContain("sed -n 'START,ENDp'")
+  expect(codex).toContain('one `cat` command in its own tool call')
+})
+
+it('gives Codex long instructions as parts one read shows whole, and Claude one file', () => {
+  const line = 'x'.repeat(399)
+  const text = Array.from({ length: 200 }, () => line).join('\n')
+
+  const codex = overflowFiles(text, Provider.codex)
+  const claude = overflowFiles(text, Provider.claude)
+
+  expect(codex.map((part) => part.path)).toEqual([
+    '.slopbusters/instructions-1.md',
+    '.slopbusters/instructions-2.md',
+    '.slopbusters/instructions-3.md',
+  ])
+  expect(codex.every((part) => part.text.length <= 32_000)).toBe(true)
+  expect(codex.map((part) => part.text).join('\n')).toBe(text)
+  expect(claude).toEqual([{ path: '.slopbusters/instructions.md', text }])
+  expect(instructionsInFiles(codex, Provider.codex)).toContain(
+    'in 3 files in the working directory, 200 lines in all',
+  )
 })

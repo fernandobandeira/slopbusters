@@ -123,3 +123,30 @@ describe('the panel for a coding agent', () => {
     expect(reviewers).toContain('Without a choice, a panel is Uncle Bob and Terminator.')
   })
 })
+
+describe('a panel review the branch moved past', () => {
+  it('says first when the branch moved past the reviewed head with fixes still unconfirmed', async () => {
+    const jobs = harness.panel(recordingTurns(reply).turns)
+    const moved = new PanelTools({
+      jobs,
+      teammates: harness.teammates,
+      pollMs: 5,
+      revision: () => Promise.resolve({ headSha: 'f'.repeat(40) }),
+    })
+    const still = new PanelTools({
+      jobs,
+      teammates: harness.teammates,
+      pollMs: 5,
+      revision: (pull) =>
+        Promise.resolve({ headSha: jobs.latest(repository, pull)?.results[0]?.pull.headSha ?? '' }),
+    })
+
+    await moved.start(url)
+    const review = await moved.read(url, 5, listening())
+
+    expect(review).toMatch(
+      /^The branch moved since the panel reviewed it: it was at `\w+` and is at `fffffffff` now\. Nothing records whether the fix in the default selection is in it\./,
+    )
+    expect(await still.read(url, 0, listening())).not.toContain('The branch moved')
+  })
+})

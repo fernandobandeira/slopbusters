@@ -96,7 +96,8 @@ function planFor(entry: ResolvedEntry, action: GateAction): string | undefined {
       ? undefined
       : action.plan
   if (entry.resolution === 'disputed') return disputedPlan(entry, action)
-  return entry.verdict === 'legit' || triage(entry).disposition === 'fix' ? entry.plan : undefined
+  const planned = ['legit', 'predicted'].includes(entry.verdict ?? '')
+  return planned || triage(entry).disposition === 'fix' ? entry.plan : undefined
 }
 
 function disputedPlan(entry: ResolvedEntry, action: GateAction): string | undefined {

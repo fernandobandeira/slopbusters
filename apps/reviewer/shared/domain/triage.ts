@@ -19,7 +19,8 @@ interface Decision {
  * it goes against the ticket, so only those and the models' disagreements come back to them.
  */
 export function triage(entry: ResolvedEntry): Decision & { followUp: boolean } {
-  const decision = unsettled(entry) ?? rejected(entry) ?? question(entry) ?? worth(entry)
+  const decision =
+    unsettled(entry) ?? rejected(entry) ?? prediction(entry) ?? question(entry) ?? worth(entry)
   const real = entry.verdict === 'legit' || (entry.verdict === 'authorsCall' && !!entry.plan)
   const followUp =
     decision.disposition === 'skip' &&
@@ -46,6 +47,21 @@ const rejections: Partial<Record<NonNullable<ResolvedEntry['verdict']>, string>>
 function rejected(entry: ResolvedEntry): Decision | undefined {
   const reason = entry.verdict && rejections[entry.verdict]
   return reason ? skip(reason) : undefined
+}
+
+/**
+ * The reviewer will likely ask for it though the models would not. A small change costs less than
+ * a review round, so it is made; anything bigger is the author's to make or to answer, the
+ * biggest first because being caught by it costs most.
+ */
+function prediction(entry: ResolvedEntry): Decision | undefined {
+  if (entry.verdict !== 'predicted') return undefined
+  if (entry.effort === 'small') return fix(entry, 'Small, and the reviewer will likely ask for it.')
+  return {
+    disposition: 'ask',
+    rank: entry.effort === 'large' ? 0 : 1,
+    reason: 'The reviewer will likely ask for this; change it or have the reply ready.',
+  }
 }
 
 /**

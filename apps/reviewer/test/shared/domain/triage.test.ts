@@ -61,6 +61,13 @@ describe('fixed triage policy', () => {
       'skip',
     ],
     ['combined edge cases are skipped', { kind: 'edgeCase' }, 'skip'],
+    ['a small predicted comment is fixed', { verdict: 'predicted', effort: 'small' }, 'fix'],
+    ['a larger predicted comment is asked', { verdict: 'predicted', effort: 'large' }, 'ask'],
+    [
+      'a predicted comment on old code is still asked',
+      { verdict: 'predicted', effort: 'medium', origin: 'preexisting' },
+      'ask',
+    ],
   ] as const)('%s', (_name, changes, disposition) => {
     expect(
       triage({
@@ -121,6 +128,14 @@ describe('the default selection', () => {
     expect(items[0]?.problem).toBeUndefined()
     expect(items[0]?.plan).toBe(base.plan)
     expect(items[1]?.problem).toBe('Answer the question first.')
+  })
+
+  it('leaves a larger predicted comment unselected, with its plan ready when chosen', () => {
+    const entries = [{ ...base, verdict: 'predicted' as const, effort: 'large' as const }]
+    expect(initialGate(entries).actions.map((a) => a.selected)).toEqual([false])
+    const items = gateItems(entries, { actions: [{ entry: 'entry', selected: true }] }, 1)
+    expect(items[0]?.plan).toBe(base.plan)
+    expect(items[0]?.problem).toBeUndefined()
   })
 })
 

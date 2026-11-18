@@ -15,6 +15,7 @@ export const groundingVerdicts = [
   'tasteSkip',
   'authorsCall',
   'handledUpstack',
+  'predicted',
 ] as const
 export type GroundingVerdict = (typeof groundingVerdicts)[number]
 export const groundingVerdictLabels: Record<GroundingVerdict, string> = {
@@ -24,6 +25,12 @@ export const groundingVerdictLabels: Record<GroundingVerdict, string> = {
   tasteSkip: 'Taste, safe to skip',
   authorsCall: "Author's call",
   handledUpstack: 'Handled by another layer',
+  predicted: 'The reviewer will likely ask',
+}
+
+/** A teammate seat predicts what a real reviewer will say, so its findings are graded differently. */
+export function isTeammateSeat(seat: string): boolean {
+  return seat.startsWith('teammate:')
 }
 export const groundingRoles = ['primary', 'secondary'] as const
 export type GroundingRole = (typeof groundingRoles)[number]
@@ -115,7 +122,10 @@ export const groundedEntrySchema = z
     /** `path:line` for code, or `title: …`/`description: …` quoting the PR's metadata. */
     evidence: z.array(z.string().min(1).max(200)).max(4),
     missing: z.string().min(1).max(300).optional(),
-    /** Required for `legit`: the change to make, in one to three lines. */
+    /**
+     * Required for `legit` and `predicted`: the change to make, in one to three lines. On
+     * `predicted`, the change that would answer the reviewer.
+     */
     plan: z.string().min(1).max(400).optional(),
     /** Required for `authorsCall`: the decision only the author can make. */
     question: z.string().min(1).max(300).optional(),
@@ -289,10 +299,14 @@ function entryProblems(
     )
   if (!entry.kind) problems.push('say in kind what the finding asks for.')
   if (!entry.effort) problems.push('say in effort whether the change is small, medium or large.')
-  if (entry.kind === 'simplification' && entry.verdict === 'tasteSkip')
+  if (
+    entry.kind === 'simplification' &&
+    (entry.verdict === 'tasteSkip' || entry.verdict === 'notTrue')
+  )
     problems.push(
-      'removing something is never taste: legit when nothing needs it, notTrue when something does, authorsCall when removing it changes what users or operators get.',
+      'removing something is never taste or untrue: legit when nothing needs it, authorsCall naming what depends on it otherwise.',
     )
+  problems.push(...predictionProblems(entry, selected))
   if (entry.destination.kind !== 'unresolved' && !scope.pulls.includes(entry.destination.pull))
     problems.push(`PR #${String(entry.destination.pull)} is not this PR or a loaded layer.`)
   const decisions = entry.sources.every((key) => selected.get(key)?.finding.tag === 'decision')
@@ -304,12 +318,32 @@ function entryProblems(
 }
 
 /**
+ * A teammate's finding predicts what its reviewer will ask. Whether the models would ask for it
+ * does not decide whether the reviewer will, so it is never dismissed as taste or
+ * over-engineering: when its facts hold and the models disagree with the ask, it is predicted.
+ * Only a teammate's finding can be.
+ */
+function predictionProblems(
+  entry: GroundedEntry,
+  selected: ReadonlyMap<string, GroundingCandidate>,
+): string[] {
+  const teammate = entry.sources.some((key) => isTeammateSeat(selected.get(key)?.seat ?? ''))
+  if (teammate && (entry.verdict === 'tasteSkip' || entry.verdict === 'overEngineering'))
+    return [
+      `a teammate's finding predicts what its reviewer will ask, so it is never ${entry.verdict}: predicted when its facts hold and you would not ask for it, notTrue only when a fact it states is false.`,
+    ]
+  if (entry.verdict === 'predicted' && !teammate)
+    return ["predicted is only for a teammate's finding."]
+  return []
+}
+
+/**
  * A question for the author that the code can answer after all: it is disproved, a layer above
  * settles it, or it asks whether something can go and nothing needs that thing.
  */
 function settlesQuestion(entry: GroundedEntry): boolean {
   if (entry.verdict === 'legit') return entry.kind === 'simplification'
-  return ['authorsCall', 'notTrue', 'handledUpstack'].includes(entry.verdict ?? '')
+  return ['authorsCall', 'notTrue', 'handledUpstack', 'predicted'].includes(entry.verdict ?? '')
 }
 
 /** `handledUpstack` names another loaded layer and what was read there; no other verdict does. */
@@ -341,6 +375,8 @@ function verdictProblems(entry: GroundedEntry): string[] {
       'missing is only for an entry the evidence cannot settle; drop it or the verdict.',
     )
   if (entry.verdict === 'legit' && !entry.plan) problems.push('a legit entry needs a plan.')
+  if (entry.verdict === 'predicted' && !entry.plan)
+    problems.push('a predicted entry needs a plan: the change that would answer the reviewer.')
   if (entry.verdict === 'authorsCall' && !entry.question)
     problems.push("an author's call needs the question to ask.")
   if (entry.verdict !== 'authorsCall' && entry.ticketConflict)

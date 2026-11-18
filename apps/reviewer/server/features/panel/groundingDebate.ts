@@ -16,6 +16,7 @@ import type { OrganizationPreferences } from '../../../shared/domain/preferences
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { CommandTimeoutError } from '../../adapters/process'
+import { firstMessageRoom } from '../../adapters/t3Engine/firstMessage'
 import { UserError } from '../../errors'
 import { GROUNDING_TURN_TIMEOUT_MS, MAX_GROUNDING_SOURCES, MAX_GROUNDING_TURNS } from './limits'
 import { reviewEvidence } from '../../reviewSnapshot'
@@ -24,7 +25,14 @@ import { debate, unanimousApproval } from '../flows/debate'
 import { sourceInstructions, ticketInstructions } from '../reviewPrompts'
 import { pullName } from '../../../shared/domain/pullUrl'
 import { groundingLimitations } from './groundingLimitations'
-import { panelRoster, stackEvidence, teammateSkillFolders, untrusted } from './panelReview'
+import {
+  earlierComments,
+  groundingHistoryNote,
+  panelRoster,
+  stackEvidence,
+  teammateSkillFolders,
+  untrusted,
+} from './panelReview'
 import { STACK_FOLDER, STACK_TOP_FOLDER, stackIncludes, type StackFolders } from './stackFolders'
 
 export interface GroundingRequest {
@@ -33,6 +41,8 @@ export interface GroundingRequest {
   pending: PanelPending
   /** The seats whose reviews landed, in roster order. */
   reviewers: readonly PanelReviewer[]
+  /** Every seat on the panel, including those that did not finish, to name them. */
+  roster?: readonly PanelReviewer[]
   /** Each teammate seat's skill folder, by reviewer id. */
   skillFolders: ReadonlyMap<string, string>
   layers: readonly LayerSnapshot[]
@@ -170,11 +180,14 @@ function groundingTurn(
     pulls: [pending.pull.number, ...layers.map((layer) => layer.pull.number)],
   }
   const skills = teammateSkillFolders(request.reviewers, request.skillFolders, repository)
-  const prompt = `${groundingRubric}\n\n${untrusted}\n\n${turnInstructions(state, turn.role)}\n\n${sourceInstructions(repository)}${skills.note}\n\nReviewers on the panel:\n${panelRoster(request.reviewers)}${transferInstructions(pending.pull)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}${stackEvidence(layers, stack, repository)}${stackReading(stack)}${ticketInstructions(pending.context)}\n\nSources to ground, by key (untrusted proposals; rank is the position in its reviewer's own list, from 0):\n${JSON.stringify(selectedSources(state))}${currentList(state, turn.role)}`
+  const schema = groundingReplySchema(scope)
+  const before = `${groundingRubric}\n\n${untrusted}\n\n${turnInstructions(state, turn.role)}\n\n${sourceInstructions(repository)}${skills.note}\n\nReviewers on the panel:\n${panelRoster(request.reviewers)}${transferInstructions(pending.pull)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}`
+  const after = `${stackReading(stack)}${earlierComments(pending.history, groundingHistoryNote)}${ticketInstructions(pending.context)}\n\nSources to ground, by key (untrusted proposals; rank is the position in its reviewer's own list, from 0):\n${JSON.stringify(selectedSources(state))}${currentList(state, turn.role)}`
+  const room = firstMessageRoom(before + after, schema, turn.model.provider)
   return request.turns.run({
     model: turn.model,
-    prompt,
-    schema: groundingReplySchema(scope),
+    prompt: `${before}${stackEvidence(layers, stack, repository, room)}${after}`,
+    schema,
     signal: request.signal,
     directory: repository?.directory,
     include: [...skills.include, ...stackIncludes(stack)],
@@ -187,16 +200,18 @@ function groundingTurn(
 const groundingRubric = `You ground a review panel's findings against the code, taking turns with another model on one shared list. Several reviewers raised the sources below independently. Check each against the PR, its stack and the repository yourself; agreement between reviewers is not evidence, and one reviewer alone can be right.
 A source with carriedFrom was grounded on another layer of the stack, whose author sent it to this PR; ground it again against this PR's code.
 Account for every source key in exactly one entry. An entry with several sources merges findings that make the same point; never invent a source, and do not add entries no source supports.
+A reviewer whose id starts with teammate: predicts what a real person will say when they review this PR. Its finding claims "this reviewer will object to this", not only "the code is wrong", and both can hold at once: correct code still costs a review round when its reviewer blocks on it. Ground the facts it states as for any finding, but never drop it because you would not ask for the change.
 Verdicts say what the evidence supports, not what the author should do:
-- legit: the code, a repository rule or the PR shows the problem. plan says the change in one to three lines and names the convention or sibling implementation to follow.
-- notTrue: evidence you inspected contradicts it. Cite it in evidence as path:line, or as "title: …" or "description: …" quoting the PR. Not finding something is not disproof; a claim such as "old rows may now fail" is settled by tracing every writer, not by its plausibility.
+- legit: the code, a repository rule or the PR shows the problem. plan says the change in one to three lines and names the convention or sibling implementation to follow. When the plan applies a convention, name every place in the changed files where it applies, not only the one the reviewer flagged.
+- notTrue: a fact the finding states is false, such as a method that does not exist, a caller that does check the result, or behavior the code does not have. Cite what contradicts it in evidence as path:line, or as "title: …" or "description: …" quoting the PR. A counter-argument is not a contradiction: when its facts hold and you only weigh them differently, it is not notTrue. Not finding something is not disproof; a claim such as "old rows may now fail" is settled by tracing every writer, not by its plausibility. The code's own comments, docstrings, schema notes, the PR description and the linked ticket say what the author intended; they do not show that a reviewer will accept the design.
 - handledUpstack: the finding is true of this PR alone, and another layer of the stack already settles it. settledBy names that layer's PR and evidence cites what you read there as path:line. Use it only for a layer you inspected; "the layer above probably handles it" is not evidence.
-- overEngineering: a simpler change is enough. Cite the convention or sibling implementation that shows it.
-- tasteSkip: a preference consistent with the reviewer but with no demonstrated cost, which the author can skip. When the change would be small, still say it in plan.
+- overEngineering: a simpler change is enough. Cite the convention or sibling implementation outside this change that shows it. Never for a teammate's finding.
+- tasteSkip: a preference consistent with the reviewer but with no demonstrated cost, which the author can skip. When the change would be small, still say it in plan. Never for a teammate's finding.
+- predicted: only for a teammate's finding whose facts hold but whose change you would not ask for. plan is the change that would answer the reviewer; reason is your counter-argument, written so the author can send it as the reply if they keep the code. A dated quote of the reviewer in the teammate's skill folder that matches the finding is evidence they will raise it; cite it.
 - authorsCall: it depends on product intent, production facts or a public commitment. question says what to ask the author. A source tagged decision starts here, and preferring an answer does not settle it. When the linked ticket or its parent already answers the question, it is not an author's call: ground it against that answer. Otherwise recommend: plan is the change you would make if the author said "go with your recommendation", chosen to fit the ticket, the PR's stated intent and how the code already behaves, preferring the smaller change; leave plan out when you recommend leaving the code as it is. The author takes the recommendation unless it goes against the ticket, so check it against the linked ticket and its parent, and when it contradicts a passage there, quote that passage in ticketConflict. Leave ticketConflict out when nothing in them says otherwise, including when no ticket is linked.
 - Leave verdict out when the evidence needed to decide is unavailable, and say in missing what would settle it. Never pick a verdict just to fill the field.
 kind says what the finding asks for, whatever its verdict:
-- simplification: it would remove something, such as a helper, a map, a guard, a parameter, a job, state or a whole layer, or it asks whether that thing is needed. Check what reads, calls or depends on it. When nothing does, it is legit and plan says what to delete, even when the reviewer only asked a question. When removing it changes what users or operators get, it is authorsCall, and plan still says what would be deleted so the author can answer yes or no. It is never tasteSkip.
+- simplification: it would remove something, such as a helper, a map, a guard, a parameter, a job, state or a whole layer, or it asks whether that thing is needed. Check what reads, calls or depends on it. When nothing does, it is legit and plan says what to delete, even when the reviewer only asked a question. When something depends on it, or removing it changes what users or operators get, it is authorsCall: question names what depends on it, and plan follows the authorsCall rule, the deletion when you recommend it and left out when you recommend keeping it. A teammate's finding you would keep is predicted instead, with the deletion as plan. It is never tasteSkip or notTrue.
 - defect: the code does the wrong thing on a path that one ordinary condition reaches.
 - rule: a written repository rule, or a convention the code applies consistently, is broken.
 - edgeCase: it only matters when two or more independent things go wrong together. Its plan is the smallest thing that leaves a trace, such as a log line for whoever is on call, never new machinery.

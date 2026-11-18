@@ -24,7 +24,7 @@ export function stackBriefMarkdown(brief: StackBrief, repository: string): strin
           `- **${item.title}** (${item.id}, PR #${String(item.layer)})${mark(item.contested)}`,
           `  Question: ${item.question}`,
           `  Recommendation: ${item.recommendation ?? 'Leave it as it is.'}`,
-          `  Cost: ${item.cost ?? 'Not recorded'}.`,
+          ...(item.cost ? [`  Cost: ${item.cost}.`] : []),
           `  Why it is yours: ${item.why}`,
         ].join('\n'),
       ),
@@ -68,7 +68,7 @@ function fixLines(fix: BriefFix, index: number): string {
   const lines = [
     `${String(index + 1)}. **${fix.title}** (${fix.id})${fix.derivedFrom ? ` · derived from ${fix.derivedFrom.join(', ')}` : ''}${mark(fix.contested)}`,
     `   Plan: ${fix.plan ?? 'None recorded.'}`,
-    `   Kind: ${fix.kind ? groundingKindLabels[fix.kind] : 'Not recorded'}. Effort: ${fix.effort ?? 'Not recorded'}. Triage: ${fix.triage}`,
+    `   ${[fix.kind ? `Kind: ${groundingKindLabels[fix.kind]}.` : '', fix.effort ? `Effort: ${fix.effort}.` : '', `Triage: ${fix.triage}`].filter(Boolean).join(' ')}`,
   ]
   if (fix.field) lines.push(`   This changes the PR ${fix.field}, not the code.`)
   if (fix.alsoRaised.length) lines.push(`   Also raised as: ${fix.alsoRaised.join(', ')}.`)

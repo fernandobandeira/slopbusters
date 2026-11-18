@@ -255,6 +255,21 @@ describe('a layer too large for the prompt', () => {
     expect(session.results[0]?.advice.limitations.join(' ')).not.toMatch(/too large/)
   })
 
+  it('keeps a filed layer out of the prompt when it would push the task out of one message', async () => {
+    const midsize = (loaded: string) =>
+      loaded === layerUrl(131)
+        ? Promise.resolve({ ...layer(131), warnings: ['w'.repeat(150_000)] })
+        : loadLayer(loaded)
+    const { turns, requests } = recordingTurns(reply)
+
+    await finish(panel(turns, { loadPull: midsize, stack }))
+
+    expect(requests[0]?.prompt).toContain(
+      'PR #131 (diff left out for size; its whole diff is in `.slopbusters/stack/131.json`):',
+    )
+    expect(requests[0]?.prompt).not.toContain('w'.repeat(150_000))
+  })
+
   it('discloses the outline when its file could not be written', async () => {
     writes.fail = true
     const { turns, requests } = recordingTurns(reply)

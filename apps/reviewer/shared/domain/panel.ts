@@ -208,6 +208,16 @@ export function reachedCap(advice: Pick<PanelAdvice, 'findings'>, maxFindings: n
   return advice.findings.length >= maxFindings
 }
 
+/**
+ * A seat that returned no findings, was uncertain and said why saw too little to have reviewed:
+ * typically it could not read its whole task. It counts as a seat that did not finish.
+ */
+export function blindReview(
+  advice: Pick<PanelAdvice, 'findings' | 'verdict' | 'limitations'>,
+): boolean {
+  return !advice.findings.length && advice.verdict === 'uncertain' && advice.limitations.length > 0
+}
+
 /** A finding whose anchor the evidence cannot place, and why. */
 export interface UnplacedFinding<F extends PanelFinding = PanelFinding> {
   finding: F

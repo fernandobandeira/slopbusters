@@ -4,11 +4,12 @@ import { PROVIDER_SEND_TURN_MAX_INPUT_CHARS } from '@t3tools/contracts'
 import { T3_ENGINE_TURN_INPUT_MARGIN_CHARS } from './limits'
 import type { z } from 'zod'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
+import { Provider } from '../../../shared/domain/types'
 import {
-  instructionsInFile,
+  instructionsInFiles,
   OVERFLOW_DIRECTORY,
+  overflowFiles,
   withOutputContract,
-  wrapLongLines,
   type CopyAccess,
   type FileListing,
   type InspectionFiles,
@@ -32,8 +33,7 @@ export async function firstMessage(
   workspace: { readonly root: string; readonly files?: InspectionFiles },
 ): Promise<string> {
   const agent = request.model.provider
-  const fits = (message: string) =>
-    message.length <= PROVIDER_SEND_TURN_MAX_INPUT_CHARS - T3_ENGINE_TURN_INPUT_MARGIN_CHARS
+  const fits = (message: string) => message.length <= FIRST_MESSAGE_MAX_CHARS
   const contract = (prompt: string, files: FileListing | undefined) =>
     withOutputContract(prompt, request.schema, agent, { files, access: request.copy })
   const inline = contract(request.prompt, workspace.files)
@@ -48,8 +48,20 @@ export async function firstMessage(
     const listed = contract(request.prompt, files)
     if (fits(listed)) return listed
   }
-  const path = `${OVERFLOW_DIRECTORY}/instructions.md`
-  const instructions = wrapLongLines(request.prompt)
-  await writeFile(join(workspace.root, path), instructions)
-  return contract(instructionsInFile(path, instructions, agent), files)
+  const parts = overflowFiles(request.prompt, agent)
+  await Promise.all(parts.map((part) => writeFile(join(workspace.root, part.path), part.text)))
+  return contract(instructionsInFiles(parts, agent), files)
+}
+
+/** The longest first message the engine takes, with room for what it adds. */
+const FIRST_MESSAGE_MAX_CHARS =
+  PROVIDER_SEND_TURN_MAX_INPUT_CHARS - T3_ENGINE_TURN_INPUT_MARGIN_CHARS
+
+/**
+ * How many more characters `prompt` can grow before its first message no longer fits and moves
+ * to a file; negative when it already does not fit. Lets a caller inline optional evidence only
+ * while the agent still gets the whole task in one message.
+ */
+export function firstMessageRoom(prompt: string, schema: z.ZodType, agent: Provider): number {
+  return FIRST_MESSAGE_MAX_CHARS - withOutputContract(prompt, schema, agent).length
 }

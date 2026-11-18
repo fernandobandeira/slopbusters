@@ -368,3 +368,54 @@ describe('starting a panel', () => {
     ])
   })
 })
+
+describe('a panel reviewer that could not read its task', () => {
+  it('runs a reviewer that could not read its task once more, then counts it as not finished', async () => {
+    const blind = {
+      ...fixturePanelAdvice([]),
+      verdict: 'uncertain' as const,
+      limitations: ['The instruction file output was truncated.'],
+    }
+    const { turns, requests } = recordingTurns((request) =>
+      request.purpose?.startsWith('Terminator') ? blind : reply(request),
+    )
+    const jobs = panel(turns)
+
+    const session = await jobs.start(repository, [url], everyone)
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('partial')
+    })
+
+    expect(requests.filter((request) => request.purpose?.startsWith('Terminator'))).toHaveLength(2)
+    expect(jobs.get(session.id).error).toBe(
+      'Terminator: Terminator returned no review twice. It said: The instruction file output was truncated.',
+    )
+    jobs.continue(session.id)
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
+    expect(jobs.get(session.id).results[0]?.advice.limitations).toContain(
+      'Terminator did not finish, so grounding saw 2 of 3 reviews.',
+    )
+  })
+})
+
+describe('what a panel reviewer could not read', () => {
+  it('repeats what a seat could not read in the review’s limitations', async () => {
+    const { turns } = recordingTurns((request) =>
+      request.purpose?.startsWith('Terminator')
+        ? { ...fixturePanelAdvice(), limitations: ['Part of the diff was truncated.'] }
+        : reply(request),
+    )
+    const jobs = panel(turns)
+
+    const session = await jobs.start(repository, [url], everyone)
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
+
+    expect(jobs.get(session.id).results[0]?.advice.limitations).toContain(
+      'Terminator noted: Part of the diff was truncated.',
+    )
+  })
+})

@@ -40,11 +40,17 @@ export function fixSection(
     lines.push('', `The author's answer to "${entry.question}": ${action.answer}`)
   else if (entry.question)
     lines.push('', `On "${entry.question}", this takes the panel's recommendation.`)
+  const facts = [
+    entry.kind ? `Kind: ${groundingKindLabels[entry.kind]}.` : '',
+    entry.effort ? `Effort: ${entry.effort}.` : '',
+  ].filter(Boolean)
   lines.push(
     '',
-    `Kind: ${entry.kind ? groundingKindLabels[entry.kind] : 'Not recorded'}. Effort: ${entry.effort ?? 'Not recorded'}.`,
+    ...(facts.length ? [facts.join(' ')] : []),
     `Triage: ${triage(entry).reason}`,
-    `Why: ${entry.reason}`,
+    entry.verdict === 'predicted'
+      ? `The models would not ask for this; the reviewer likely will. Their reasoning, should the author keep the code: ${entry.reason}`
+      : `Why: ${entry.reason}`,
   )
   if (entry.evidence.length) lines.push(`Evidence: ${entry.evidence.join(', ')}`)
   if (entry.origin) lines.push(`Origin: ${groundingOriginLabels[entry.origin]}`)
@@ -69,14 +75,12 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
     return [revisionHeader(result), panelReviewMarkdown(result.advice, reviewers)].join('\n\n')
   const candidates = result.grounding?.candidates ?? []
   const items = gateItems(resolved, result.gate, result.pull.number)
-  const chosen = items
-    .filter(
-      (item) => item.action.selected && item.plan && !item.problem && !triage(item.entry).followUp,
-    )
-    .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
-  const decisions = items
+  const chosen = chosenFixes(items)
+  const open = items
     .filter((item) => triage(item.entry).disposition === 'ask' && !chosen.includes(item))
     .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
+  const predicted = open.filter((item) => predictedComment(item.entry))
+  const decisions = open.filter((item) => !predicted.includes(item))
   const blocked = items.filter(
     (item) => item.action.selected && item.problem && !triage(item.entry).followUp,
   )
@@ -99,7 +103,15 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
       'Do not act on these until the author answers.',
       decisions.map(
         (item) =>
-          `${entryBrief(item, candidates)}\n  Question: ${item.entry.question ?? 'Which position should be taken?'}${item.entry.ticketConflict ? `\n  Goes against the ticket: ${item.entry.ticketConflict}` : ''}\n  Recommendation: ${item.entry.plan ?? 'No recommendation recorded.'}\n  Cost: ${item.entry.effort ?? 'Not recorded'}.`,
+          `${entryBrief(item, candidates)}\n  Question: ${item.entry.question ?? 'Which position should be taken?'}${item.entry.ticketConflict ? `\n  Goes against the ticket: ${item.entry.ticketConflict}` : ''}\n  Recommendation: ${item.entry.plan ?? 'No recommendation recorded.'}${item.entry.effort ? `\n  Cost: ${item.entry.effort}.` : ''}`,
+      ),
+    ),
+    section(
+      'Predicted reviewer comments',
+      'The reviewer will likely ask for these, though both models would leave the code as it is. Do not act on them until the author decides whether to make the change or keep the code and reply.',
+      predicted.map(
+        (item) =>
+          `${entryBrief(item, candidates)}\n  Change that answers the reviewer: ${item.entry.plan ?? 'None recorded.'}${item.entry.effort ? `\n  Cost: ${item.entry.effort}.` : ''}\n  Reply if the code stays: ${item.entry.reason}`,
       ),
     ),
     section(
@@ -133,6 +145,15 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
   ]
     .filter(Boolean)
     .join('\n\n')
+}
+
+/** The fixes ready to carry out, as the author chose them or by default, in triage order. */
+export function chosenFixes(items: readonly GateItem[]): GateItem[] {
+  return items
+    .filter(
+      (item) => item.action.selected && item.plan && !item.problem && !triage(item.entry).followUp,
+    )
+    .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
 }
 
 /** One finding with what grounding and the author decided about it, for the clipboard. */
@@ -218,6 +239,11 @@ function withRoute(text: string, route: GateRoute | undefined): string {
 
 function revisionHeader(result: PanelResult): string {
   return `Reviewed head \`${result.pull.headSha}\` (base \`${result.pull.baseSha}\`). Check whether the branch has moved past this commit before editing.`
+}
+
+/** An agreed prediction the author has to decide on; a disputed one is an ordinary decision. */
+function predictedComment(entry: ResolvedEntry): boolean {
+  return entry.verdict === 'predicted' && entry.resolution === 'agreed'
 }
 
 function settledRejection(entry: ResolvedEntry): boolean {

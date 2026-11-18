@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import type { ProviderObserver } from '../../../shared/domain/agentSession'
 import type { LayerSnapshot } from '../../../shared/domain/anchors'
-import type { PanelReviewer, PanelSeatRequest } from '../../../shared/domain/panel'
+import {
+  blindReview,
+  type PanelReviewer,
+  type PanelSeatRequest,
+} from '../../../shared/domain/panel'
 import type { CarriedFinding, LocalRound } from '../../../shared/domain/panelFix'
 import type {
   PanelPending,
@@ -19,7 +23,11 @@ import type { PanelSessionStore } from '../../adapters/panelSessionStore'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
-import { PANEL_PULL_CONCURRENCY, PANEL_REVIEWER_CONCURRENCY } from './limits'
+import {
+  MAX_BLIND_SEAT_ERROR_CHARS,
+  PANEL_PULL_CONCURRENCY,
+  PANEL_REVIEWER_CONCURRENCY,
+} from './limits'
 import type { JobDependencies } from '../jobDependencies'
 import { FlowJobs } from '../flows/flowJobs'
 import { failedSeats, reviewSeats } from '../flows/panel'
@@ -256,6 +264,7 @@ export class PanelJobs {
       turns: this.options.turns,
       pending,
       reviewers,
+      roster: session.reviewers,
       carried: session.carried,
       skillFolders: await this.options.members.skillFolders(reviewers, session.model.provider),
       models: {
@@ -345,7 +354,18 @@ export class PanelJobs {
         context: pending.context,
       })
     const label = `${reviewer.name} review`
-    return this.track(session, { label, url: pending.pull.url, model }, execute)
+    const url = pending.pull.url
+    const first = await this.track(session, { label, url, model }, execute)
+    if (!blindReview(first.advice)) return first
+    // A seat that could not read its task usually reads it on a second try.
+    const second = await this.track(session, { label: `${label} · retry`, url, model }, execute)
+    if (!blindReview(second.advice)) return second
+    throw new UserError(
+      clip(
+        `${reviewer.name} returned no review twice. It said: ${second.advice.limitations.join(' ')}`,
+        MAX_BLIND_SEAT_ERROR_CHARS,
+      ),
+    )
   }
   private canGround(session: PanelSession, pending: PanelPending, mode: RunMode): boolean {
     const failed = failedSeats(
@@ -391,6 +411,10 @@ export class PanelJobs {
     session.progress = progress
     this.save(session)
   }
+}
+
+function clip(text: string, length: number): string {
+  return text.length > length ? `${text.slice(0, length - 1)}…` : text
 }
 
 function sameRequest(session: PanelSession, urls: string[], reviewers: PanelReviewer[]) {

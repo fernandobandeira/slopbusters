@@ -209,6 +209,36 @@ describe('triage in the agent brief', () => {
   })
 })
 
+describe('predicted reviewer comments in the agent brief', () => {
+  it('lists them apart from rejections, with the change and the reply', () => {
+    const brief = panelBriefMarkdown(
+      result([
+        entry('g1', 'f1', {
+          verdict: 'predicted',
+          kind: 'defect',
+          effort: 'large',
+          plan: 'Add an issuing status.',
+          reason: 'The schema documents the claim.',
+          raisedBy: ['teammate:avery'],
+        }),
+        entry('g2', 'f2', { verdict: 'notTrue', plan: undefined }),
+      ]),
+      reviewers,
+    )
+    const predicted = brief.slice(brief.indexOf('## Predicted reviewer comments'))
+    expect(predicted).toContain('Change that answers the reviewer: Add an issuing status.')
+    expect(predicted).toContain('Reply if the code stays: The schema documents the claim.')
+    expect(brief.slice(brief.indexOf('## Rejected by both models'))).not.toContain(
+      'Reuse the audit helper',
+    )
+  })
+
+  it('leaves out what was not recorded rather than saying so', () => {
+    const brief = panelBriefMarkdown(result([entry('g1', 'f1')]), reviewers)
+    expect(brief).not.toContain('Not recorded')
+  })
+})
+
 it('separates follow-ups from other context and includes filed tickets', () => {
   const review = result([
     entry('g1', 'f1', { origin: 'preexisting' }),

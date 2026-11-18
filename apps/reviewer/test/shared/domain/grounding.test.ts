@@ -188,7 +188,7 @@ describe('what a grounded entry asks for', () => {
     expect(problems).toEqual([
       'g-f1: say in kind what the finding asks for.',
       'g-f1: say in effort whether the change is small, medium or large.',
-      'g-f2: removing something is never taste: legit when nothing needs it, notTrue when something does, authorsCall when removing it changes what users or operators get.',
+      'g-f2: removing something is never taste or untrue: legit when nothing needs it, authorsCall naming what depends on it otherwise.',
     ])
   })
 
@@ -401,5 +401,46 @@ describe('a grounded round as a review', () => {
     expect(advice.summary).toBe('No further accepted fixes in this round. Nothing holds up.')
     expect(advice.findings).toEqual([])
     expect(advice.setAside[0]?.reason).toBe('Not true: The helper is already used.')
+  })
+})
+
+describe('a teammate’s prediction', () => {
+  it('never dismisses a teammate’s prediction as taste, and keeps predicted for teammates', () => {
+    const teammate = selectCandidates(
+      12,
+      [
+        { reviewer: 'teammate:avery', advice: findings('avery', 1) },
+        { reviewer: 'unclebob', advice: findings('bob', 1) },
+      ],
+      2,
+    )
+    const predicted = { verdict: 'predicted' as const, plan: 'Add an issuing status.' }
+
+    expect(
+      groundingProblems(
+        turn([entry(['f1'], { verdict: 'tasteSkip' }), entry(['f2'], { verdict: 'tasteSkip' })]),
+        scope(teammate),
+      ),
+    ).toEqual([
+      "g-f1: a teammate's finding predicts what its reviewer will ask, so it is never tasteSkip: predicted when its facts hold and you would not ask for it, notTrue only when a fact it states is false.",
+    ])
+    expect(
+      groundingProblems(
+        turn([entry(['f1', 'f2'], { verdict: 'overEngineering' })]),
+        scope(teammate),
+      ),
+    ).toHaveLength(1)
+    expect(
+      groundingProblems(turn([entry(['f1'], predicted), entry(['f2'])]), scope(teammate)),
+    ).toEqual([])
+    expect(
+      groundingProblems(
+        turn([entry(['f1'], { ...predicted, plan: undefined }), entry(['f2'], predicted)]),
+        scope(teammate),
+      ),
+    ).toEqual([
+      'g-f1: a predicted entry needs a plan: the change that would answer the reviewer.',
+      "g-f2: predicted is only for a teammate's finding.",
+    ])
   })
 })

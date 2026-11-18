@@ -249,7 +249,11 @@ export function createServices(options: ReviewerServerOptions) {
     stackReviewJobs,
     layerFixJobs,
     layerFixTools: new LayerFixTools(layerFixJobs, stackReviewJobs),
-    panelTools: new PanelTools({ jobs: panelJobs, teammates }),
+    panelTools: new PanelTools({
+      jobs: panelJobs,
+      teammates,
+      revision: (url) => pulls.fetchPullRevision(parsePullUrl(url)),
+    }),
     stackReviewTools: new StackReviewTools({ jobs: stackReviewJobs }),
     chats: {
       continueInT3Code: async (request: ContinueChatRequest) => {

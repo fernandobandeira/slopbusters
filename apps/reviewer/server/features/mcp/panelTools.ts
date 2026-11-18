@@ -5,12 +5,13 @@ import {
   teammateReviewerId,
   type ReviewerId,
 } from '../../../shared/domain/panel'
-import { panelBriefMarkdown } from '../../../shared/domain/panelBrief'
+import { chosenFixes, panelBriefMarkdown } from '../../../shared/domain/panelBrief'
+import { gateItems } from '../../../shared/domain/panelGate'
 import type { PanelResult, PanelSession } from '../../../shared/domain/panelSession'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import { blocksNewReview } from '../../../shared/domain/reviewSession'
 import { availabilityLabels, skillAvailability } from '../../../shared/domain/teammates'
-import { UserError } from '../../errors'
+import { logError, UserError } from '../../errors'
 import type { PanelJobs } from '../panel/panelJobs'
 import type { Teammates } from '../teammates/teammates'
 import { PANEL_POLL_MS } from './limits'
@@ -18,6 +19,8 @@ import { PANEL_POLL_MS } from './limits'
 interface Options {
   jobs: Pick<PanelJobs, 'start' | 'latest' | 'retry' | 'continue' | 'cancel'>
   teammates: Pick<Teammates, 'list'>
+  /** The PR's current head, to tell whether the branch moved since the review. */
+  revision?: (url: string) => Promise<{ headSha: string }>
   /** How often a wait looks at the panel again. */
   pollMs?: number
 }
@@ -62,7 +65,11 @@ export class PanelTools {
       const session = this.options.jobs.latest(repository, url)
       if (!session) return `No panel has reviewed ${name}. Call start_panel_review to ask for one.`
       const remaining = deadline - Date.now()
-      if (!reviewing(session, url) || signal.aborted || remaining <= 0) return report(session, url)
+      if (!reviewing(session, url) || signal.aborted || remaining <= 0) {
+        const result = session.results.find((entry) => entry.pull.url === url)
+        const moved = result ? await this.movedNotice(result) : undefined
+        return [moved, report(session, url)].filter(Boolean).join('\n\n')
+      }
       await pause(Math.min(this.options.pollMs ?? PANEL_POLL_MS, remaining), signal)
     }
   }
@@ -82,6 +89,31 @@ export class PanelTools {
     const { url, name, session } = this.latest(pullRequest)
     if (!blocksNewReview(session)) throw new UserError(`No panel is working on ${name}.`)
     return report(this.options.jobs.cancel(session.id), url)
+  }
+
+  /**
+   * When the branch moved past the reviewed head, whether the fixes the review chose reached it is
+   * unknown, and a later review round would hold the author to them. Say so first.
+   */
+  private async movedNotice(result: PanelResult): Promise<string | undefined> {
+    const { revision } = this.options
+    if (!revision || !result.grounding?.resolved?.length) return undefined
+    const reviewed = result.pull.headSha
+    const head = await Promise.resolve()
+      .then(async () => (await revision(result.pull.url)).headSha)
+      .catch((error: unknown) => {
+        logError('Could not check whether the PR moved.', error)
+        return undefined
+      })
+    if (head === undefined)
+      return 'Could not check whether the branch moved since the panel reviewed it; compare its head with the reviewed head below.'
+    if (head === reviewed) return undefined
+    const fixes = chosenFixes(gateItems(result.grounding.resolved, result.gate, result.pull.number))
+    const where = `The branch moved since the panel reviewed it: it was at \`${reviewed.slice(0, 9)}\` and is at \`${head.slice(0, 9)}\` now.`
+    if (!fixes.length) return `${where} Findings below may no longer hold.`
+    const one = fixes.length === 1
+    const which = `the ${one ? 'fix' : `${String(fixes.length)} fixes`} ${result.gate ? 'the author chose' : 'in the default selection'}`
+    return `${where} Nothing records whether ${which} ${one ? 'is' : 'are'} in it. Before other work, check each against the current code and apply the ones still missing, or tell the author which are left; a reviewer is likely to raise them.`
   }
 
   private latest(pullRequest: string) {

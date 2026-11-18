@@ -259,12 +259,19 @@ function decision(entry: StackEntry, contested: boolean): BriefDecision {
     id: entry.id,
     layer: entry.layer,
     title: entry.title,
-    question: entry.question ?? 'The two models disagree on this. Which position should be taken?',
+    question: decisionQuestion(entry),
     ...(entry.plan ? { recommendation: entry.plan } : {}),
     ...(entry.effort ? { cost: entry.effort } : {}),
     why: entry.triage,
     contested,
   }
+}
+
+function decisionQuestion(entry: StackEntry): string {
+  if (entry.question) return entry.question
+  if (entry.verdict === 'predicted' && entry.resolution === 'agreed')
+    return `The reviewer will likely ask for this, though both models would leave the code as it is. Make the change, or keep the code and reply: ${entry.reason}`
+  return 'The two models disagree on this. Which position should be taken?'
 }
 
 /**

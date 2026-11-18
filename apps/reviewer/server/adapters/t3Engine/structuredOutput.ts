@@ -58,10 +58,17 @@ export const OVERFLOW_DIRECTORY = '.slopbusters'
 /** Longest line in an overflow file; Claude's Read and Codex's command output show it whole. */
 const MAX_OVERFLOW_LINE_CHARS = 500
 
-/** How each agent reads a long file: in order, in chunks its tool shows without truncating. */
+/**
+ * Codex runs its commands from a script and truncates the output of one tool call as a whole,
+ * so reads it combines are cut short. Its instructions come as parts that one read shows whole.
+ */
+const MAX_OVERFLOW_PART_CHARS = 32_000
+
+/** How each agent reads long instructions: in order, in reads its tool shows without truncating. */
 const chunkedReading: Record<Provider, string> = {
   claude: 'Read it with the Read tool, 150 lines at a time, using offset and limit.',
-  codex: "Read it with `sed -n 'START,ENDp'`, 20 lines at a time.",
+  codex:
+    'Read each part whole with one `cat` command in its own tool call, with max_output_tokens of at least 12000, and read all of its output before the next part. Never read two parts, or a part and anything else, in one call or script: output combined from several commands is truncated, and you would miss part of the task.',
 }
 
 /** The prompt, followed by the contract the agent's reply must meet. */
@@ -106,13 +113,52 @@ function fileListing(files: FileListing): string[] {
 }
 
 /**
- * The message that stands in for instructions too long for one engine message; they are written
- * to `path`, wrapped by `wrapLongLines`.
+ * Instructions too long for one engine message, as the files they are written to: one file for
+ * Claude, and for Codex as many parts as one read each shows whole. Lines are wrapped by
+ * `wrapLongLines` and never split between parts.
  */
-export function instructionsInFile(path: string, instructions: string, agent: Provider): string {
-  const lines = instructions.split('\n').length
+export function overflowFiles(
+  instructions: string,
+  agent: Provider,
+): { path: string; text: string }[] {
+  const wrapped = wrapLongLines(instructions)
+  const parts = agent === Provider.codex ? partsOf(wrapped) : [wrapped]
+  if (parts.length === 1) return [{ path: `${OVERFLOW_DIRECTORY}/instructions.md`, text: wrapped }]
+  return parts.map((text, index) => ({
+    path: `${OVERFLOW_DIRECTORY}/instructions-${String(index + 1)}.md`,
+    text,
+  }))
+}
+
+function partsOf(text: string): string[] {
+  const parts: string[] = []
+  let part: string[] = []
+  let size = 0
+  for (const line of text.split('\n')) {
+    if (part.length && size + line.length + 1 > MAX_OVERFLOW_PART_CHARS) {
+      parts.push(part.join('\n'))
+      part = []
+      size = 0
+    }
+    part.push(line)
+    size += line.length + 1
+  }
+  parts.push(part.join('\n'))
+  return parts
+}
+
+/** The message that stands in for instructions written to `files` by `overflowFiles`. */
+export function instructionsInFiles(
+  files: readonly { path: string; text: string }[],
+  agent: Provider,
+): string {
+  const lines = files.reduce((sum, file) => sum + file.text.split('\n').length, 0)
+  const where =
+    files.length === 1
+      ? `in the file ${files[0]?.path ?? ''} in the working directory (${String(lines)} lines). Read the whole file, in order, before you answer; it is the task.`
+      : `in ${String(files.length)} files in the working directory, ${String(lines)} lines in all. Read every part whole, in this order, before you answer; together they are the task:\n${files.map((file) => `- ${file.path}`).join('\n')}`
   return [
-    `Your instructions are too long to send in one message, so they are in the file ${path} in the working directory (${String(lines)} lines). Read the whole file, in order, before you answer; it is the task.`,
+    `Your instructions are too long to send in one message, so they are ${where}`,
     chunkedReading[agent],
     `Lines longer than ${String(MAX_OVERFLOW_LINE_CHARS)} characters continue on the next line: join them back when you read JSON.`,
   ].join('\n\n')

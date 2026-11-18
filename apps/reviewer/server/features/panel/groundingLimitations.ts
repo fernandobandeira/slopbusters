@@ -3,32 +3,35 @@ import type { GroundingState } from '../../../shared/domain/grounding'
 import type { PanelReviewer } from '../../../shared/domain/panel'
 import type { PanelPending } from '../../../shared/domain/panelSession'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
-import { MAX_GROUNDING_TURNS } from './limits'
+import { MAX_GROUNDING_TURNS, MAX_SEAT_NOTE_CHARS } from './limits'
 import { layersWithoutDiffs } from './panelReview'
 import type { StackFolders } from './stackFolders'
 
 /**
  * What the round could not cover, most fundamental first: missing source, incomplete patches,
  * seats that did not finish or may have had more, layers seen without diffs, deferred findings,
- * and entries the two models did not settle. Any of them means the PR is not called clean.
+ * entries the two models did not settle, and what each seat said it could not read. Any of them
+ * means the PR is not called clean.
  */
 export function groundingLimitations(
   state: GroundingState,
   {
     pending,
     reviewers,
+    roster = reviewers,
     repository,
     layers,
     stack = {},
   }: {
     pending: PanelPending
     reviewers: readonly PanelReviewer[]
+    roster?: readonly PanelReviewer[]
     repository?: ReviewCheckout
     layers: readonly LayerSnapshot[]
     stack?: StackFolders
   },
 ): string[] {
-  const name = (id: string) => reviewers.find((seat) => seat.id === id)?.name ?? id
+  const name = (id: string) => roster.find((seat) => seat.id === id)?.name ?? id
   const missing = pending.reviews.filter((review) => !review.advice)
   const capped = pending.reviews.filter((review) => review.advice && review.capped)
   return [
@@ -42,7 +45,7 @@ export function groundingLimitations(
       : []),
     ...(missing.length
       ? [
-          `Not every reviewer finished; grounding saw ${String(pending.reviews.length - missing.length)} of ${String(pending.reviews.length)} reviews.`,
+          `${listed(missing.map((review) => name(review.reviewer)))} did not finish, so grounding saw ${String(pending.reviews.length - missing.length)} of ${String(pending.reviews.length)} reviews.`,
         ]
       : []),
     ...(capped.length
@@ -53,7 +56,23 @@ export function groundingLimitations(
     ...stackLimitations(layers, stack),
     ...deferredLimitation(state),
     ...settlementLimitations(state),
+    ...pending.reviews.flatMap((review) =>
+      review.advice?.limitations.length
+        ? [clip(`${name(review.reviewer)} noted: ${review.advice.limitations.join(' ')}`)]
+        : [],
+    ),
   ]
+}
+
+function listed(names: readonly string[]): string {
+  return names.length > 1
+    ? `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}`
+    : (names[0] ?? '')
+}
+
+/** What a seat says it could not read, kept short so every seat's note fits. */
+function clip(text: string): string {
+  return text.length > MAX_SEAT_NOTE_CHARS ? `${text.slice(0, MAX_SEAT_NOTE_CHARS - 1)}…` : text
 }
 
 /**
