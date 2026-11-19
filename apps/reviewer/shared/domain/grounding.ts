@@ -1,7 +1,8 @@
 import { z } from 'zod'
+import { consistencySchema, earlierRequestsSchema } from './consistency'
 import { stableId } from './findings'
 import { panelFindingSchema, seatIdSchema, type PanelFinding } from './panel'
-import { organizationSchema } from './preferences'
+import { organizationSchema, type ModelPair, type OrganizationPreferences } from './preferences'
 
 /**
  * Grounding checks the panel's findings against the code. Two models, one per provider, take
@@ -188,6 +189,10 @@ export const resolvedEntrySchema = groundedEntrySchema.extend({
       objections: z.array(z.string()),
     })
     .optional(),
+  /** The check found its plan would undo this earlier request, by key. */
+  reverses: z.object({ earlier: z.string(), reason: z.string() }).optional(),
+  /** The check found these entries ask for the opposite change. */
+  opposes: z.object({ entries: z.array(z.string()).min(1), reason: z.string() }).optional(),
 })
 export type ResolvedEntry = z.infer<typeof resolvedEntrySchema>
 
@@ -204,6 +209,8 @@ export const groundingStateSchema = z.object({
    * holds only while its layer is still at that head.
    */
   stack: z.array(z.object({ pull: z.number().int().positive(), headSha: z.string() })).optional(),
+  /** What earlier panel rounds asked for on this PR, read when grounding started. */
+  earlier: earlierRequestsSchema.optional(),
   turns: z.array(turnRecordSchema),
   /** The last valid list. */
   entries: z.array(groundedEntrySchema),
@@ -211,6 +218,8 @@ export const groundingStateSchema = z.object({
   outcome: z.enum(groundingOutcomes).optional(),
   /** The entries with their resolution, once the debate ended. */
   resolved: z.array(resolvedEntrySchema).optional(),
+  /** What the consistency check found after the debate; saved so a retry does not run it again. */
+  consistency: consistencySchema.optional(),
 })
 export type GroundingState = z.infer<typeof groundingStateSchema>
 
@@ -437,4 +446,14 @@ export function leadSource(
 
 export function keyOrder(key: string): number {
   return Number(key.slice(1))
+}
+
+/** The grounding judges as debate roles: the companion is second only on another provider. */
+export function judgeRoles(
+  judges: Pick<ModelPair, 'primary'> & Partial<Pick<ModelPair, 'companion'>>,
+): { primary: OrganizationPreferences; secondary?: OrganizationPreferences } {
+  const { primary, companion } = judges
+  return companion && companion.provider !== primary.provider
+    ? { primary, secondary: companion }
+    : { primary }
 }

@@ -5,6 +5,7 @@ import type {
   StackPassInput,
   StackReviewSession,
 } from './stackReview'
+import { contestedDoubts, entryDecisions, type BriefDecision } from './stackDecisions'
 import { triage } from './triage'
 
 /**
@@ -34,16 +35,6 @@ export interface BriefLayer {
   currentBase?: string
   /** False when the layer's head or base moved since its panel reviewed it. */
   current: boolean
-}
-export interface BriefDecision {
-  id: string
-  layer: number
-  title: string
-  question: string
-  recommendation?: string
-  cost?: string
-  why: string
-  contested: boolean
 }
 export interface BriefFix {
   id: string
@@ -104,15 +95,18 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
     ...(pass?.turns.at(-1)?.summary ? { summary: pass.turns.at(-1)?.summary } : {}),
     decisions: [
       // A question stays even when a chain would make it unnecessary: that change is not settled.
-      ...unmerged
-        .filter(
-          (entry) =>
-            entry.disposition === 'ask' || (entry.disposition === 'fix' && doubts.has(entry.id)),
-        )
-        .map((entry) => decision(entry, doubts.get(entry.id), entryContested(entry.id, contested))),
-      ...derived
-        .filter(({ item, entry }) => entry.disposition === 'fix' && doubts.has(item.id))
-        .map(({ entry }) => decision(entry, doubts.get(entry.id), true)),
+      ...entryDecisions(
+        [
+          ...unmerged.filter(
+            (entry) =>
+              entry.disposition === 'ask' || (entry.disposition === 'fix' && doubts.has(entry.id)),
+          ),
+          ...derived
+            .filter(({ item, entry }) => entry.disposition === 'fix' && doubts.has(item.id))
+            .map(({ entry }) => entry),
+        ],
+        { doubts, contested, entry: plan.entry },
+      ),
       ...result.structure.map((item) => ({
         id: `#${String(item.layer)}`,
         layer: item.layer,
@@ -161,52 +155,6 @@ function approved(result: CrossLayerResult, contested: ReadonlySet<string>): Cro
     derived: result.derived.filter((item) => !contested.has(`derived ${item.id}`)),
     structure: result.structure,
   }
-}
-
-/**
- * What a conclusion the second model did not approve leaves for the author to decide, by the
- * entry it would have changed: which layer a moved change belongs on, whether a change a chain
- * would retire or a duplicate would absorb is still to be made, and whether to make a derived one.
- */
-function contestedDoubts(
-  result: CrossLayerResult,
-  contested: ReadonlySet<string>,
-  plan: ReturnType<typeof placement>,
-): Map<string, string[]> {
-  const doubts = new Map<string, string[]>()
-  const add = (id: string, doubt: string) => doubts.set(id, [...(doubts.get(id) ?? []), doubt])
-  const named = (id: string) => `${id} (${plan.title(id)})`
-  const unapproved = 'The second model did not approve that.'
-  for (const item of result.ownership)
-    if (contested.has(`ownership ${item.entry}`)) {
-      const entry = plan.entry(item.entry)
-      const from = entry?.destination?.pull ?? entry?.layer
-      add(
-        item.entry,
-        `Which layer does this change belong on: PR #${String(from)}, where its panel put it, or PR #${String(item.layer)}, where the cross-layer pass moved it? ${item.reason} ${unapproved}`,
-      )
-    }
-  for (const chain of result.chains)
-    if (contested.has(`chain ${chain.cause}`))
-      for (const id of chain.unnecessary)
-        add(
-          id,
-          `${named(chain.cause)} may make this unnecessary: ${chain.reason} ${unapproved} Still make this change?`,
-        )
-  for (const group of result.duplicates)
-    if (contested.has(`duplicate ${group.owner}`))
-      for (const id of group.entries.filter((other) => other !== group.owner))
-        add(
-          id,
-          `This may repeat ${named(group.owner)}: ${group.reason} ${unapproved} Make it separately?`,
-        )
-  for (const item of result.derived)
-    if (contested.has(`derived ${item.id}`))
-      add(
-        item.id,
-        `Only the whole stack shows this, derived from ${item.from.join(', ')}. The second model did not approve it. Make this change?`,
-      )
-  return doubts
 }
 
 function briefLayers(session: StackReviewSession, input: StackPassInput): BriefLayer[] {
@@ -301,11 +249,6 @@ function fixesOn(
   return [...own, ...derived].sort((a, b) => a.entry.rank - b.entry.rank).map(({ fix }) => fix)
 }
 
-/** Whether the other model did not approve a conclusion the entry leads. */
-function entryContested(id: string, contested: ReadonlySet<string>): boolean {
-  return ['duplicate', 'ownership', 'chain'].some((kind) => contested.has(`${kind} ${id}`))
-}
-
 function fixOf(entry: StackEntry): Omit<BriefFix, 'alsoRaised'> {
   return {
     id: entry.id,
@@ -316,32 +259,6 @@ function fixOf(entry: StackEntry): Omit<BriefFix, 'alsoRaised'> {
     ...(entry.effort ? { effort: entry.effort } : {}),
     ...(entry.destination?.field ? { field: entry.destination.field } : {}),
   }
-}
-
-/** An entry for the author: its own question when triage asks one, then any doubts about it. */
-function decision(
-  entry: StackEntry,
-  doubts: readonly string[] = [],
-  contested = false,
-): BriefDecision {
-  const asked = entry.disposition === 'ask'
-  return {
-    id: entry.id,
-    layer: entry.layer,
-    title: entry.title,
-    question: [...(asked ? [decisionQuestion(entry)] : []), ...doubts].join(' '),
-    ...(entry.plan ? { recommendation: entry.plan } : {}),
-    ...(entry.effort ? { cost: entry.effort } : {}),
-    why: asked ? entry.triage : 'The second model did not approve a conclusion about it.',
-    contested: contested || doubts.length > 0,
-  }
-}
-
-function decisionQuestion(entry: StackEntry): string {
-  if (entry.question) return entry.question
-  if (entry.verdict === 'predicted' && entry.resolution === 'agreed')
-    return `The reviewer will likely ask for this, though both models would leave the code as it is. Make the change, or keep the code and reply: ${entry.reason}`
-  return 'The two models disagree on this. Which position should be taken?'
 }
 
 /**

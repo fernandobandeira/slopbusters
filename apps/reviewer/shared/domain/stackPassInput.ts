@@ -1,3 +1,4 @@
+import type { EarlierRequest } from './consistency'
 import { leadSource, type ResolvedEntry } from './grounding'
 import type { PanelResult } from './panelSession'
 import {
@@ -64,6 +65,7 @@ function passLayer({ layer, current }: LayerRounds): StackPassLayer {
 
 function entriesOf(layer: number, result: PanelResult): StackEntry[] {
   const candidates = result.grounding?.candidates ?? []
+  const requests = result.grounding?.earlier?.requests ?? []
   return (result.grounding?.resolved ?? []).map((entry) => {
     const decision = triage(entry)
     return {
@@ -79,6 +81,7 @@ function entriesOf(layer: number, result: PanelResult): StackEntry[] {
       evidence: entry.evidence,
       raisedBy: entry.raisedBy,
       ...optional(entry),
+      ...marks(layer, entry, requests),
     }
   })
 }
@@ -98,6 +101,33 @@ function optional(entry: ResolvedEntry): Partial<StackEntry> {
       ? { destination: { pull: destination.pull, field: destination.field } }
       : {}),
   }
+}
+
+/** The consistency check's marks, with the earlier request resolved and ids made stack-wide. */
+function marks(
+  layer: number,
+  entry: ResolvedEntry,
+  requests: readonly EarlierRequest[],
+): Partial<StackEntry> {
+  const { reverses, opposes } = entry
+  const request = reverses && requests.find((item) => item.key === reverses.earlier)
+  return {
+    ...(reverses && request
+      ? { reverses: { request: withoutKey(request), reason: reverses.reason } }
+      : {}),
+    ...(opposes
+      ? {
+          opposes: {
+            entries: opposes.entries.map((id) => stackEntryId(layer, id)),
+            reason: opposes.reason,
+          },
+        }
+      : {}),
+  }
+}
+
+function withoutKey({ key: _key, ...request }: EarlierRequest): Omit<EarlierRequest, 'key'> {
+  return request
 }
 
 /** Leave out skipped entries, newest layer first, until the view fits. */

@@ -1,5 +1,6 @@
 import { triage } from './triage'
 import { anchorLabel } from './anchors'
+import type { EarlierRequest } from './consistency'
 import {
   groundingKindLabels,
   groundingOriginLabels,
@@ -79,7 +80,7 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
   const open = items
     .filter((item) => triage(item.entry).disposition === 'ask' && !chosen.includes(item))
     .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
-  const predicted = open.filter((item) => predictedComment(item.entry))
+  const predicted = open.filter((item) => predictedComment(item.entry) && !marked(item.entry))
   const decisions = open.filter((item) => !predicted.includes(item))
   const blocked = items.filter(
     (item) => item.action.selected && item.problem && !triage(item.entry).followUp,
@@ -101,10 +102,7 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
     section(
       'Needs your decision',
       'Do not act on these until the author answers.',
-      decisions.map(
-        (item) =>
-          `${entryBrief(item, candidates)}\n  Question: ${item.entry.question ?? 'Which position should be taken?'}${item.entry.ticketConflict ? `\n  Goes against the ticket: ${item.entry.ticketConflict}` : ''}\n  Recommendation: ${item.entry.plan ?? 'No recommendation recorded.'}${item.entry.effort ? `\n  Cost: ${item.entry.effort}.` : ''}`,
-      ),
+      decisionLines(decisions, result, candidates),
     ),
     section(
       'Predicted reviewer comments',
@@ -145,6 +143,76 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
   ]
     .filter(Boolean)
     .join('\n\n')
+}
+
+/** Each decision for the author, with findings that ask for opposite changes as one item. */
+function decisionLines(
+  decisions: readonly GateItem[],
+  result: PanelResult,
+  candidates: readonly GroundingCandidate[],
+): string[] {
+  const done = new Set<string>()
+  const earlier = result.grounding?.earlier?.requests ?? []
+  return decisions.flatMap((item) => {
+    if (done.has(item.entry.id)) return []
+    done.add(item.entry.id)
+    const { opposes } = item.entry
+    if (!opposes) return [decisionLine(item, candidates, earlier)]
+    const sides = [item.entry, ...opposes.entries.flatMap((id) => resolvedOf(result, id) ?? [])]
+    for (const side of sides) done.add(side.id)
+    return [
+      `- **Opposed changes**: ${opposes.reason}\n  Question: These ask for opposite changes. Which one, if either?\n${sides.map((side) => `  - ${sideLine(side, candidates, earlier)}`).join('\n')}`,
+    ]
+  })
+}
+
+function decisionLine(
+  item: GateItem,
+  candidates: readonly GroundingCandidate[],
+  earlier: readonly EarlierRequest[],
+): string {
+  const { entry } = item
+  const reversal = entry.reverses && reversalLines(entry.reverses, earlier)
+  const lines = [
+    entryBrief(item, candidates),
+    ...(reversal
+      ? [
+          reversal,
+          '  Question: Undo the earlier change, or keep it?',
+          ...(entry.verdict === 'predicted' ? [`  Reply if the code stays: ${entry.reason}`] : []),
+        ]
+      : [`  Question: ${entry.question ?? 'Which position should be taken?'}`]),
+    entry.ticketConflict ? `  Goes against the ticket: ${entry.ticketConflict}` : '',
+    `  Recommendation: ${entry.plan ?? 'No recommendation recorded.'}`,
+    entry.effort ? `  Cost: ${entry.effort}.` : '',
+  ]
+  return lines.filter(Boolean).join('\n')
+}
+
+/** The earlier request an entry's plan would undo, beside why the check says so. */
+function reversalLines(
+  reverses: NonNullable<ResolvedEntry['reverses']>,
+  earlier: readonly EarlierRequest[],
+): string {
+  const request = earlier.find((item) => item.key === reverses.earlier)
+  const asked = request
+    ? `${request.entry} from the round of ${request.round}, "${request.title}": ${request.plan} Its reason: ${request.reason}`
+    : reverses.earlier
+  return `  Would undo what an earlier round asked for: ${asked}\n  The check found: ${reverses.reason}`
+}
+
+function sideLine(
+  entry: ResolvedEntry,
+  candidates: readonly GroundingCandidate[],
+  earlier: readonly EarlierRequest[],
+): string {
+  const title = leadSource(entry, candidates)?.finding.title ?? entry.id
+  const reversal = entry.reverses ? `\n${reversalLines(entry.reverses, earlier)}` : ''
+  return `**${title}** (${entry.id}, raised by ${entry.raisedBy.join(', ')}): ${entry.plan ?? 'No plan recorded.'}${reversal}`
+}
+
+function resolvedOf(result: PanelResult, id: string): ResolvedEntry | undefined {
+  return result.grounding?.resolved?.find((entry) => entry.id === id)
 }
 
 /** The fixes ready to carry out, as the author chose them or by default, in triage order. */
@@ -239,6 +307,11 @@ function withRoute(text: string, route: GateRoute | undefined): string {
 
 function revisionHeader(result: PanelResult): string {
   return `Reviewed head \`${result.pull.headSha}\` (base \`${result.pull.baseSha}\`). Check whether the branch has moved past this commit before editing.`
+}
+
+/** The consistency check found it would undo an earlier request, or another finding opposes it. */
+function marked(entry: ResolvedEntry): boolean {
+  return Boolean(entry.reverses ?? entry.opposes)
 }
 
 /** An agreed prediction the author has to decide on; a disputed one is an ordinary decision. */

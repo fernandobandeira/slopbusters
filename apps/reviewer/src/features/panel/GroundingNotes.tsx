@@ -33,18 +33,43 @@ export function GroundingVerdict({ result, id }: { result: PanelResult; id: stri
       </p>
       <FollowupAction result={result} id={id} />
       <FindingText>{entry.reason}</FindingText>
-      <EntryDetails entry={entry} />
+      <EntryDetails entry={entry} marks={markDetails(result, entry)} />
       {entry.other && <OtherPosition other={entry.other} />}
     </div>
   )
 }
 
-function EntryDetails({ entry }: { entry: GroundedEntry }) {
-  const details = [
+/** What the consistency check found: the earlier request it would undo, the finding it opposes. */
+function markDetails(result: PanelResult, entry: ResolvedEntry): Detail[] {
+  const { reverses, opposes } = entry
+  const details: Detail[] = []
+  if (reverses) {
+    const request = result.grounding?.earlier?.requests.find(
+      (item) => item.key === reverses.earlier,
+    )
+    const asked = request
+      ? `${request.entry} from the round of ${request.round}, "${request.title}": ${request.plan} `
+      : ''
+    details.push(['Would undo an earlier request', `${asked}${reverses.reason}`])
+  }
+  if (opposes) {
+    const title = (id: string) =>
+      result.advice.findings.find((finding) => finding.id === id)?.title ?? id
+    const others = opposes.entries.map(title).join(', ')
+    details.push(['Another finding asks for the opposite', `${others}: ${opposes.reason}`])
+  }
+  return details
+}
+
+type Detail = readonly [string, string | undefined]
+
+function EntryDetails({ entry, marks }: { entry: GroundedEntry; marks: Detail[] }) {
+  const details: Detail[] = [
+    ...marks,
     ['Plan', entry.plan],
     ['Question for the author', entry.question],
     ['Evidence needed', entry.missing],
-  ] as const
+  ]
   return (
     <>
       {details.map(

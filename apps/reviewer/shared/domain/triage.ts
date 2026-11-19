@@ -20,7 +20,12 @@ interface Decision {
  */
 export function triage(entry: ResolvedEntry): Decision & { followUp: boolean } {
   const decision =
-    unsettled(entry) ?? rejected(entry) ?? prediction(entry) ?? question(entry) ?? worth(entry)
+    unsettled(entry) ??
+    rejected(entry) ??
+    marked(entry) ??
+    prediction(entry) ??
+    question(entry) ??
+    worth(entry)
   const real = entry.verdict === 'legit' || (entry.verdict === 'authorsCall' && !!entry.plan)
   const followUp =
     decision.disposition === 'skip' &&
@@ -50,6 +55,23 @@ function rejected(entry: ResolvedEntry): Decision | undefined {
 }
 
 /**
+ * A plan that would undo what an earlier round asked for, or that another finding opposes, is
+ * the author's to decide, first: making it by default is how a review loop flips code back and
+ * forth. A real defect in an earlier fix is fixed without undoing the request, so it is not marked.
+ */
+function marked(entry: ResolvedEntry): Decision | undefined {
+  if (entry.reverses)
+    return {
+      disposition: 'ask',
+      rank: 0,
+      reason: 'Would undo a change an earlier round asked for.',
+    }
+  if (entry.opposes)
+    return { disposition: 'ask', rank: 0, reason: 'Another finding asks for the opposite change.' }
+  return undefined
+}
+
+/**
  * The reviewer will likely ask for it though the models would not. A small change costs less than
  * a review round, so it is made; anything bigger is the author's to make or to answer, the
  * biggest first because being caught by it costs most.
@@ -59,7 +81,7 @@ function prediction(entry: ResolvedEntry): Decision | undefined {
   if (entry.effort === 'small') return fix(entry, 'Small, and the reviewer will likely ask for it.')
   return {
     disposition: 'ask',
-    rank: entry.effort === 'large' ? 0 : 1,
+    rank: entry.effort === 'large' ? 1 : 2,
     reason: 'The reviewer will likely ask for this; change it or have the reply ready.',
   }
 }
@@ -105,7 +127,7 @@ function fix(entry: ResolvedEntry, reason: string): Decision {
 }
 
 function ask(entry: ResolvedEntry, reason: string): Decision {
-  return { disposition: 'ask', rank: entry.kind === 'simplification' ? 0 : 1, reason }
+  return { disposition: 'ask', rank: entry.kind === 'simplification' ? 1 : 2, reason }
 }
 
 function skip(reason: string): Decision {

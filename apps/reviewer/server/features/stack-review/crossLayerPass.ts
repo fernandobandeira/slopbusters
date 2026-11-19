@@ -122,7 +122,7 @@ function prompt(state: CrossLayerState, role: GroundingRole, view: ReturnType<ty
 
 const rubric = `You read a review panel's grounded findings across every layer of a stack of pull requests at once, taking turns with another model on one result. Each layer was reviewed on its own; you see what no single layer's review can. Work only from the entries and layers given. Each entry id names its layer, such as #131/g4.
 Return:
-- duplicates: groups of entries that make the same point. owner is the one entry that owns the change: normally the lowest layer whose code must change.
+- duplicates: groups of entries that make the same point. owner is the one entry that owns the change: normally the lowest layer whose code must change. An entry with reverses or opposes is a decision for the author; when a group holds one, its owner must be an entry with reverses or opposes, so the mark is never merged away.
 - chains: an entry whose change (usually a removal) makes other entries unnecessary, with a one-sentence reason and the entries it makes unnecessary. For an entry merged into a duplicate group, name the group's owner instead.
 - ownership: an entry whose change belongs on a different layer than its destination says, the layer it belongs on, and why. A change belongs on the layer that owns the code, never on the top for convenience. For a merged entry, move its owner.
 - derived: a finding only the whole stack shows, such as "once #140/g2 removes the job, the state #128 adds for it is unused". Give a title, a plan in one to three lines, kind, effort, the layer it changes, and in from the entry ids it was derived from. This is the only place for new findings; never add one without its provenance.

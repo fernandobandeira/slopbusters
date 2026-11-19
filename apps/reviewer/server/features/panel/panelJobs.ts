@@ -6,6 +6,7 @@ import {
   type PanelReviewer,
   type PanelSeatRequest,
 } from '../../../shared/domain/panel'
+import type { PreviousRound } from '../../../shared/domain/earlierRequests'
 import type { CarriedFinding, LocalRound } from '../../../shared/domain/panelFix'
 import type {
   PanelPending,
@@ -14,6 +15,7 @@ import type {
   PanelReview,
   PanelSession,
 } from '../../../shared/domain/panelSession'
+import { judgeRoles } from '../../../shared/domain/grounding'
 import type { ModelPair, OrganizationPreferences } from '../../../shared/domain/preferences'
 import { blocksNewReview, reviewedPullsLabel } from '../../../shared/domain/reviewSession'
 import type { PullStackResult } from '../../../shared/domain/stacks'
@@ -56,6 +58,8 @@ interface Options extends Pick<
   history?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewHistory>
   /** The PR's stack, so seats see its other open layers. */
   stack?: (url: string) => Promise<PullStackResult>
+  /** The PR's newest panel round from another session, which grounding reads requests from. */
+  previousRound?: (repository: string, url: string, session: string) => PreviousRound | undefined
   /** How many panels review at the same time; the rest wait their turn. */
   concurrency?: number
 }
@@ -266,13 +270,10 @@ export class PanelJobs {
       reviewers,
       roster: session.reviewers,
       carried: session.carried,
+      previous: () =>
+        this.options.previousRound?.(session.repository, pending.pull.url, session.id),
       skillFolders: await this.options.members.skillFolders(reviewers, session.model.provider),
-      models: {
-        primary: judges.primary,
-        ...(judges.companion && judges.companion.provider !== judges.primary.provider
-          ? { secondary: judges.companion }
-          : {}),
-      },
+      models: judgeRoles(judges),
       save: () => {
         this.save(session)
       },

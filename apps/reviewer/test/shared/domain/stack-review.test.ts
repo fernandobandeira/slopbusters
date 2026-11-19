@@ -100,6 +100,46 @@ describe('cross-layer relations that contradict each other', () => {
   })
 })
 
+describe('cross-layer duplicates holding a marked entry', () => {
+  const marked: CrossLayerScope = {
+    entries: [
+      { id: '#201/g1' },
+      {
+        id: '#202/g1',
+        reverses: {
+          request: {
+            round: '2026-11-18',
+            entry: '#202/g4',
+            title: 'Embed the read',
+            plan: 'Read it in the query.',
+            reason: 'The lookup races.',
+            asked: 'fix',
+          },
+          reason: 'It moves the read back out.',
+        },
+      },
+      { id: '#203/g2', opposes: { entries: ['#203/g3'], reason: 'Opposite flags.' } },
+    ],
+    layers: [201, 202, 203],
+  }
+  const check = (owner: string, entries: string[]) =>
+    crossLayerProblems(
+      { ...emptyResult, duplicates: [{ entries, owner, reason: 'Same.' }] },
+      marked,
+    )
+
+  it('refuses an unmarked owner, so the mark is never merged away', () => {
+    expect(check('#201/g1', ['#201/g1', '#202/g1'])).toEqual([
+      'duplicates: the group of #201/g1 holds a marked entry, so a marked entry must own it.',
+    ])
+  })
+
+  it('accepts a marked owner', () => {
+    expect(check('#202/g1', ['#201/g1', '#202/g1'])).toEqual([])
+    expect(check('#203/g2', ['#202/g1', '#203/g2'])).toEqual([])
+  })
+})
+
 describe('cross-layer derived findings', () => {
   it('refuses a derived finding without the entries it came from', () => {
     expect(

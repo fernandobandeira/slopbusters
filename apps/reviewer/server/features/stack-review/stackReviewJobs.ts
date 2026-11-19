@@ -5,6 +5,7 @@ import {
   seatRequests,
   type PanelSeatRequest,
 } from '../../../shared/domain/panel'
+import { judgeRoles } from '../../../shared/domain/grounding'
 import type { ModelPair, OrganizationPreferences } from '../../../shared/domain/preferences'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import { stackPassInput } from '../../../shared/domain/stackPassInput'
@@ -165,14 +166,8 @@ export class StackReviewJobs {
       session.input = input
       session.pass = undefined
     }
-    const judges = this.options.judges()
     session.pass ??= {
-      roles: {
-        primary: judges.primary,
-        ...(judges.companion && judges.companion.provider !== judges.primary.provider
-          ? { secondary: judges.companion }
-          : {}),
-      },
+      roles: judgeRoles(this.options.judges()),
       turns: [],
       positions: {},
     }

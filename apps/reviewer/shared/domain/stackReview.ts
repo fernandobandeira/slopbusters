@@ -9,6 +9,7 @@ import {
   groundingVerdicts,
   type GroundingRole,
 } from './grounding'
+import { earlierRequestSchema } from './consistency'
 import { panelSeatRequestSchema } from './panel'
 import { organizationSchema } from './preferences'
 
@@ -70,6 +71,12 @@ export const stackEntrySchema = z.object({
   origin: z.enum(groundingOrigins).optional(),
   settledBy: pullNumberSchema.optional(),
   raisedBy: z.array(z.string()),
+  /** The earlier round's request its plan would undo, as the layer's grounding read it. */
+  reverses: z
+    .object({ request: earlierRequestSchema.omit({ key: true }), reason: z.string() })
+    .optional(),
+  /** The entries of its layer that ask for the opposite change, by stack id. */
+  opposes: z.object({ entries: z.array(entryIdSchema).min(1), reason: z.string() }).optional(),
 })
 export type StackEntry = z.infer<typeof stackEntrySchema>
 
@@ -224,17 +231,21 @@ export type StackReviewSession = z.infer<typeof stackReviewSessionSchema>
 
 /** What the pass may refer to: the entries it was given and the stack's layers. */
 export interface CrossLayerScope {
-  entries: readonly Pick<StackEntry, 'id'>[]
+  entries: readonly Pick<StackEntry, 'id' | 'reverses' | 'opposes'>[]
   layers: readonly number[]
 }
 
 /**
  * Why a returned result does not fit the input, one problem per line; empty when it is valid.
- * Every id must be one the pass was given and used at most once per relation. A derived finding
- * needs the entries it was derived from.
+ * Every id must be one the pass was given and used at most once per relation. A group holding an
+ * entry marked as undoing an earlier request or opposing another is owned by a marked entry, so
+ * the mark is never merged away. A derived finding needs the entries it was derived from.
  */
 export function crossLayerProblems(turn: CrossLayerResult, scope: CrossLayerScope): string[] {
   const known = new Set(scope.entries.map((entry) => entry.id))
+  const marked = new Set(
+    scope.entries.filter((entry) => entry.reverses || entry.opposes).map((entry) => entry.id),
+  )
   const check = relationChecker(known, scope.layers)
   const merged = new Set(
     turn.duplicates.flatMap((group) => group.entries.filter((id) => id !== group.owner)),
@@ -250,6 +261,10 @@ export function crossLayerProblems(turn: CrossLayerResult, scope: CrossLayerScop
     check.ids('duplicates', group.entries)
     if (!group.entries.includes(group.owner))
       check.problem(`duplicates: the owner ${group.owner} must be one of its group's entries.`)
+    if (group.entries.some((id) => marked.has(id)) && !marked.has(group.owner))
+      check.problem(
+        `duplicates: the group of ${group.owner} holds a marked entry, so a marked entry must own it.`,
+      )
   }
   for (const chain of turn.chains) {
     check.ids('chains', [chain.cause, ...chain.unnecessary])

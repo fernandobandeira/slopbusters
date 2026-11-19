@@ -61,6 +61,7 @@ import { StackReviewTools } from './features/mcp/stackReviewTools'
 import { StackReviewJobs } from './features/stack-review/stackReviewJobs'
 import { createStackResolver } from './features/stack-review/stackResolution'
 import { parsePullUrl } from '../shared/domain/pullUrl'
+import type { PreviousRound } from '../shared/domain/earlierRequests'
 
 export interface ReviewerServerOptions extends TypeScriptWorkerOptions {
   dataDirectory: string
@@ -158,6 +159,7 @@ export function createServices(options: ReviewerServerOptions) {
     models,
     loadLocal,
     stack: (url) => stacks.getStackMetadata(url),
+    previousRound: (name, url, session) => previousRound(store, { name, url, session }),
     history: async (pull) => {
       const [discussions, reviews] = await Promise.all([
         fetchDiscussions(pull, github),
@@ -322,6 +324,26 @@ function sourceRemote(
   }
 }
 export type Services = ReturnType<typeof createServices>
+
+/**
+ * A PR's newest panel result from another session, with the complete stack review whose layer
+ * for the PR used it, so grounding reads what that round asked for.
+ */
+function previousRound(
+  store: ReviewerStore,
+  { name, url, session }: { name: string; url: string; session: string },
+): PreviousRound | undefined {
+  const previous = store.panel.results(name, url, 2).find((item) => item.session !== session)
+  if (!previous) return undefined
+  const stack = store.stackReview
+    .recent(name, url, 10)
+    .find(
+      (review) =>
+        review.status === 'complete' &&
+        review.layers.some((layer) => layer.url === url && layer.panel === previous.session),
+    )
+  return { result: previous.result, createdAt: previous.createdAt, ...(stack ? { stack } : {}) }
+}
 
 /** Agent turns for a build without the bundled engine: every run fails with a reason. */
 const withoutEngine: StructuredTurns = {

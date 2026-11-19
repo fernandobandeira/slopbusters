@@ -41,6 +41,17 @@ export class StackReviewSessionStore {
       .get(repository, JSON.stringify(urls))
     return row ? readSession(row.session) : undefined
   }
+  /** The newest stack reviews that covered `url`, newest first. */
+  recent(repository: string, url: string, limit: number): StackReviewSession[] {
+    return this.database
+      .prepare(
+        `SELECT session FROM stack_review_sessions
+        WHERE repository = ? AND EXISTS (SELECT 1 FROM json_each(session, '$.urls') WHERE value = ?)
+        ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+      )
+      .all(repository, url, limit)
+      .map((row) => readSession(row.session))
+  }
 }
 
 interface SavedResult {

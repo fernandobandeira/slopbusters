@@ -8,7 +8,13 @@ import {
   type GroundingState,
   type GroundingTurn,
 } from '../../../shared/domain/grounding'
-import { groundedAdvice, recordTurn, resolveEntries } from '../../../shared/domain/groundingResult'
+import { earlierRequests, type PreviousRound } from '../../../shared/domain/earlierRequests'
+import {
+  groundedAdvice,
+  markEntries,
+  recordTurn,
+  resolveEntries,
+} from '../../../shared/domain/groundingResult'
 import type { JudgeAdvice, PanelReviewer } from '../../../shared/domain/panel'
 import type { CarriedFinding } from '../../../shared/domain/panelFix'
 import type { PanelPending } from '../../../shared/domain/panelSession'
@@ -18,13 +24,19 @@ import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { CommandTimeoutError } from '../../adapters/process'
 import { firstMessageRoom } from '../../adapters/t3Engine/firstMessage'
 import { UserError } from '../../errors'
-import { GROUNDING_TURN_TIMEOUT_MS, MAX_GROUNDING_SOURCES, MAX_GROUNDING_TURNS } from './limits'
+import {
+  GROUNDING_TURN_TIMEOUT_MS,
+  MAX_EARLIER_REQUEST_CHARS,
+  MAX_GROUNDING_SOURCES,
+  MAX_GROUNDING_TURNS,
+} from './limits'
 import { reviewEvidence } from '../../reviewSnapshot'
 import { transferInstructions } from '../transferPrompt'
 import { debate, unanimousApproval } from '../flows/debate'
 import { sourceInstructions, ticketInstructions } from '../reviewPrompts'
 import { pullName } from '../../../shared/domain/pullUrl'
 import { groundingLimitations } from './groundingLimitations'
+import { checkConsistency, earlierRequestsNote } from './consistencyCheck'
 import {
   earlierComments,
   groundingHistoryNote,
@@ -53,6 +65,8 @@ export interface GroundingRequest {
   repository?: ReviewCheckout
   /** Findings another layer's round sent to this PR; always grounded, within the budget. */
   carried?: readonly CarriedFinding[]
+  /** The PR's previous panel round, whose requests grounding reads; looked up when it starts. */
+  previous?: () => PreviousRound | undefined
   /** Persist the pending review; called after every valid turn. */
   save: () => void
   /** Run one model pass, so the session can show it. */
@@ -66,8 +80,9 @@ class Exhausted extends Error {}
 
 /**
  * Ground a PR's panel findings: pick this round's sources, then let the two models take turns on
- * one list until both approve it unchanged or the turns run out. Resumes a debate saved on the
- * pending review. Ends with the review to show and how every finding was accounted for.
+ * one list until both approve it unchanged or the turns run out, and check the plans against
+ * earlier rounds' requests and each other. Resumes a debate or check saved on the pending review.
+ * Ends with the review to show and how every finding was accounted for.
  */
 export async function groundPanel(
   request: GroundingRequest,
@@ -78,6 +93,11 @@ export async function groundPanel(
   if (!state.outcome) state.outcome = await settle(request, state)
   const seats = new Map(state.candidates.map((candidate) => [candidate.key, candidate.seat]))
   state.resolved = resolveEntries(state, (key) => seats.get(key))
+  if (!state.consistency) {
+    state.consistency = await checkConsistency({ ...request, pull: request.pending.pull }, state)
+    request.save()
+  }
+  state.resolved = markEntries(state.resolved, state.consistency)
   const summary = state.turns.at(-1)?.summary ?? 'The reviewers raised no findings to ground.'
   const limitations = groundingLimitations(state, request)
   return { advice: groundedAdvice(state, { summary, limitations }), grounding: state }
@@ -89,6 +109,7 @@ function startGrounding({
   models,
   carried,
   layers,
+  previous,
 }: GroundingRequest): GroundingState {
   const reviews = reviewers.flatMap(
     (reviewer) => pending.reviews.find((review) => review.reviewer === reviewer.id) ?? [],
@@ -99,6 +120,7 @@ function startGrounding({
     reviews,
     Math.max(0, MAX_GROUNDING_SOURCES - sent.length),
   )
+  const earlier = earlierRequests(pending.pull.number, previous?.(), MAX_EARLIER_REQUEST_CHARS)
   return {
     budget: MAX_GROUNDING_SOURCES,
     candidates: [
@@ -117,6 +139,7 @@ function startGrounding({
     ...(layers.length
       ? { stack: layers.map(({ pull }) => ({ pull: pull.number, headSha: pull.headSha })) }
       : {}),
+    ...(earlier ? { earlier } : {}),
     turns: [],
     entries: [],
     positions: {},
@@ -182,7 +205,7 @@ function groundingTurn(
   const skills = teammateSkillFolders(request.reviewers, request.skillFolders, repository)
   const schema = groundingReplySchema(scope)
   const before = `${groundingRubric}\n\n${untrusted}\n\n${turnInstructions(state, turn.role)}\n\n${sourceInstructions(repository)}${skills.note}\n\nReviewers on the panel:\n${panelRoster(request.reviewers)}${transferInstructions(pending.pull)}\n\nPR snapshot:\n${reviewEvidence(pending.pull)}`
-  const after = `${stackReading(stack)}${earlierComments(pending.history, groundingHistoryNote)}${ticketInstructions(pending.context)}\n\nSources to ground, by key (untrusted proposals; rank is the position in its reviewer's own list, from 0):\n${JSON.stringify(selectedSources(state))}${currentList(state, turn.role)}`
+  const after = `${stackReading(stack)}${earlierComments(pending.history, groundingHistoryNote)}${earlierRequestsNote(state.earlier)}${ticketInstructions(pending.context)}\n\nSources to ground, by key (untrusted proposals; rank is the position in its reviewer's own list, from 0):\n${JSON.stringify(selectedSources(state))}${currentList(state, turn.role)}`
   const room = firstMessageRoom(before + after, schema, turn.model.provider)
   return request.turns.run({
     model: turn.model,

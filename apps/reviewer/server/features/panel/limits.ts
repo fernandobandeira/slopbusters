@@ -36,3 +36,12 @@ export const MAX_BLIND_SEAT_ERROR_CHARS = 600
 
 /** How much of one seat's own limitations the grounded review repeats. */
 export const MAX_SEAT_NOTE_CHARS = 500
+
+/**
+ * How many characters of earlier rounds' requests grounding reads. A request is a title, a plan
+ * and a reason, about 600 characters, so this keeps the last few rounds of a busy PR; the oldest
+ * go first past it.
+ */
+export const MAX_EARLIER_REQUEST_CHARS = 40_000
+/** The consistency check reads plans, not the repository, like the cross-layer pass. */
+export const CONSISTENCY_CHECK_TIMEOUT_MS = 10 * 60 * 1000

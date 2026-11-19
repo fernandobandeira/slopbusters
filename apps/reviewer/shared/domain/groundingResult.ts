@@ -18,6 +18,7 @@ import {
   type JudgedFinding,
   type SetAside,
 } from './panel'
+import type { Consistency } from './consistency'
 import type { OrganizationPreferences } from './preferences'
 
 /**
@@ -63,6 +64,32 @@ export function resolveEntries(
   return state.entries.map((entry) => {
     const seats = [...new Set(entry.sources.flatMap((key) => raisedBy(key) ?? []))]
     return { ...entry, raisedBy: seats, ...resolution(state, entry, { last, other }) }
+  })
+}
+
+/**
+ * The consistency check's findings as marks on the entries they name: the earlier request an
+ * entry's plan would undo, and the other entries that ask for the opposite change.
+ */
+export function markEntries(
+  entries: readonly ResolvedEntry[],
+  check: Consistency | undefined,
+): ResolvedEntry[] {
+  return entries.map((entry) => {
+    const reversal = check?.reversals.find((item) => item.entry === entry.id)
+    const conflict = check?.conflicts.find((item) => item.entries.includes(entry.id))
+    return {
+      ...entry,
+      ...(reversal ? { reverses: { earlier: reversal.earlier, reason: reversal.reason } } : {}),
+      ...(conflict
+        ? {
+            opposes: {
+              entries: conflict.entries.filter((id) => id !== entry.id),
+              reason: conflict.reason,
+            },
+          }
+        : {}),
+    }
   })
 }
 

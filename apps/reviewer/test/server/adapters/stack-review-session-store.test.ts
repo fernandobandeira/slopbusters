@@ -46,3 +46,22 @@ describe('a stack review saved with earlier-round entries', () => {
     expect(brief?.fixes[0]?.items[0]?.alsoRaised).toEqual(['#202/g1'])
   })
 })
+
+describe('the stack reviews that covered a PR', () => {
+  it('lists them newest first, and only those that covered it', () => {
+    const older = finishedStackReview([], emptyResult, { id: 'older' })
+    const newer = finishedStackReview([], emptyResult, {
+      id: 'newer',
+      createdAt: '2026-11-14T10:00:00.000Z',
+    })
+    const elsewhere = finishedStackReview([], emptyResult, {
+      id: 'elsewhere',
+      urls: ['https://github.com/review-room/example/pull/9'],
+    })
+    for (const session of [older, newer, elsewhere]) store.stackReview.save(session)
+
+    const recent = store.stackReview.recent(older.repository, older.urls[1]!, 5)
+
+    expect(recent.map((session) => session.id)).toEqual(['newer', 'older'])
+  })
+})

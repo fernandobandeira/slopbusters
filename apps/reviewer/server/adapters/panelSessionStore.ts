@@ -79,10 +79,10 @@ export class PanelSessionStore {
     repository: string,
     url: string,
     limit: number,
-  ): { session: string; result: PanelResult }[] {
+  ): { session: string; createdAt: string; result: PanelResult }[] {
     const rows = this.database
       .prepare(
-        `SELECT sessions.id, result.value FROM panel_sessions AS sessions,
+        `SELECT sessions.id, sessions.created_at, result.value FROM panel_sessions AS sessions,
           json_each(sessions.session, '$.results') AS result
         WHERE sessions.repository = ? AND json_extract(result.value, '$.pull.url') = ?
         ORDER BY sessions.created_at DESC, sessions.rowid DESC LIMIT ?`,
@@ -90,6 +90,7 @@ export class PanelSessionStore {
       .all(repository, url, limit)
     return rows.map((row) => ({
       session: String(row.id),
+      createdAt: String(row.created_at),
       result: JSON.parse(String(row.value)) as PanelResult,
     }))
   }
