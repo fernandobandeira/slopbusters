@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { stackBrief } from '../../../shared/domain/stackBrief'
 import { stackBriefMarkdown } from '../../../shared/domain/stackBriefMarkdown'
+import type { CrossLayerResult, StackEntry } from '../../../shared/domain/stackReview'
 import {
   emptyResult,
   finishedStackReview,
@@ -76,7 +77,6 @@ describe('the stack brief across layers', () => {
           { id: '#201/g1', title: 'Finding g1 on #201' },
           { id: '#201/g2', title: 'Finding g2 on #201' },
         ],
-        contested: false,
       },
     ])
   })
@@ -267,5 +267,126 @@ describe('the stack brief caveats and Markdown', () => {
     expect(markdown).toContain(
       'The two models did not agree on the cross-layer pass within 1 turns.',
     )
+  })
+})
+
+const contestedReview = (entries: StackEntry[], result: CrossLayerResult, contested: string[]) =>
+  finishedStackReview(entries, result, {
+    pass: { ...finishedStackReview([]).pass!, result, outcome: 'exhausted', contested },
+  })
+const fixIds = (brief: ReturnType<typeof stackBrief>) =>
+  brief?.fixes.flatMap(({ items }) => items.map((item) => item.id))
+
+describe('cross-layer conclusions the second model did not approve', () => {
+  it('asks which layer a contested move belongs on, and fixes it on neither', () => {
+    const session = contestedReview(
+      [stackEntry(203, 'g2')],
+      {
+        ...emptyResult,
+        ownership: [{ entry: '#203/g2', layer: 201, reason: 'The helper lives at the bottom.' }],
+      },
+      ['ownership #203/g2'],
+    )
+
+    const brief = stackBrief(session)
+
+    expect(fixIds(brief)).toEqual([])
+    expect(brief?.decisions).toMatchObject([
+      {
+        id: '#203/g2',
+        question:
+          'Which layer does this change belong on: PR #203, where its panel put it, or PR #201, where the cross-layer pass moved it? The helper lives at the bottom. The second model did not approve that.',
+        recommendation: 'Fix g2.',
+        contested: true,
+      },
+    ])
+  })
+
+  it('retires nothing through a contested chain, and asks about each change it would retire', () => {
+    const session = contestedReview(
+      [
+        stackEntry(201, 'g1'),
+        stackEntry(201, 'g2', { disposition: 'skip', triage: 'A preference.' }),
+        stackEntry(203, 'g4', { title: 'Remove the job' }),
+      ],
+      {
+        ...emptyResult,
+        chains: [
+          { cause: '#203/g4', unnecessary: ['#201/g1', '#201/g2'], reason: 'Nothing reads it.' },
+        ],
+      },
+      ['chain #203/g4'],
+    )
+
+    const brief = stackBrief(session)
+
+    expect(brief?.chains).toEqual([])
+    expect(fixIds(brief)).toEqual(['#203/g4'])
+    expect(brief?.decisions.map((item) => [item.id, item.question])).toEqual([
+      [
+        '#201/g1',
+        '#203/g4 (Remove the job) may make this unnecessary: Nothing reads it. The second model did not approve that. Still make this change?',
+      ],
+    ])
+  })
+})
+
+describe('contested duplicates and derived findings', () => {
+  it('keeps a contested duplicate group apart, asking whether each member repeats its owner', () => {
+    const session = contestedReview(
+      [stackEntry(201, 'g1', { title: 'Guard the input' }), stackEntry(202, 'g3')],
+      {
+        ...emptyResult,
+        duplicates: [{ entries: ['#201/g1', '#202/g3'], owner: '#201/g1', reason: 'One guard.' }],
+      },
+      ['duplicate #201/g1'],
+    )
+
+    const brief = stackBrief(session)
+
+    expect(fixIds(brief)).toEqual(['#201/g1'])
+    expect(brief?.fixes[0]?.items[0]?.alsoRaised).toEqual([])
+    expect(brief?.decisions.map((item) => [item.id, item.question])).toEqual([
+      [
+        '#202/g3',
+        'This may repeat #201/g1 (Guard the input): One guard. The second model did not approve that. Make it separately?',
+      ],
+    ])
+  })
+
+  it('makes a contested derived finding a decision', () => {
+    const session = contestedReview(
+      [stackEntry(203, 'g2')],
+      {
+        ...emptyResult,
+        derived: [
+          {
+            id: 'd1',
+            title: 'Remove the unused state',
+            plan: 'Delete the field.',
+            kind: 'simplification',
+            effort: 'small',
+            layer: 201,
+            from: ['#203/g2'],
+          },
+        ],
+      },
+      ['derived d1'],
+    )
+
+    const brief = stackBrief(session)
+    const markdown = stackBriefMarkdown(brief!, stackRepository)
+
+    expect(fixIds(brief)).toEqual(['#203/g2'])
+    expect(brief?.decisions).toMatchObject([
+      {
+        id: 'd1',
+        layer: 201,
+        question:
+          'Only the whole stack shows this, derived from #203/g2. The second model did not approve it. Make this change?',
+        recommendation: 'Delete the field.',
+      },
+    ])
+    expect(markdown).not.toMatch(/^\d+\. .*did not approve/m)
   })
 })

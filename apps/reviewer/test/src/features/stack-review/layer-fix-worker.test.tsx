@@ -35,7 +35,6 @@ it('starts selected fixes and renders the observed outcome', async () => {
           plan: 'Return an empty list.',
           triage: 'Fix the crash.',
           alsoRaised: [],
-          contested: false,
         },
       ]}
     />,

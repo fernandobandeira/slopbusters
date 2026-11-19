@@ -36,7 +36,7 @@ export function stackBriefMarkdown(brief: StackBrief, repository: string): strin
       'Made unnecessary',
       brief.chains.map(
         (chain) =>
-          `- ${chain.cause.id} (${chain.cause.title}) makes these unnecessary: ${chain.unnecessary.map((item) => `${item.id} (${item.title})`).join(', ')}. ${chain.reason}${mark(chain.contested)}`,
+          `- ${chain.cause.id} (${chain.cause.title}) makes these unnecessary: ${chain.unnecessary.map((item) => `${item.id} (${item.title})`).join(', ')}. ${chain.reason}`,
       ),
     ),
     brief.followUps.length
@@ -66,7 +66,7 @@ function layerLine(layer: BriefLayer, index: number): string {
 
 function fixLines(fix: BriefFix, index: number): string {
   const lines = [
-    `${String(index + 1)}. **${fix.title}** (${fix.id})${fix.derivedFrom ? ` · derived from ${fix.derivedFrom.join(', ')}` : ''}${mark(fix.contested)}`,
+    `${String(index + 1)}. **${fix.title}** (${fix.id})${fix.derivedFrom ? ` · derived from ${fix.derivedFrom.join(', ')}` : ''}`,
     `   Plan: ${fix.plan ?? 'None recorded.'}`,
     `   ${[fix.kind ? `Kind: ${groundingKindLabels[fix.kind]}.` : '', fix.effort ? `Effort: ${fix.effort}.` : '', `Triage: ${fix.triage}`].filter(Boolean).join(' ')}`,
   ]

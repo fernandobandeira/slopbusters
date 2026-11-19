@@ -60,13 +60,11 @@ export interface BriefFix {
   movedFrom?: { layer: number; reason: string }
   /** The title or description, when the change is to the PR's metadata rather than its code. */
   field?: 'title' | 'description'
-  contested: boolean
 }
 export interface BriefChain {
   cause: { id: string; title: string }
   reason: string
   unnecessary: { id: string; title: string }[]
-  contested: boolean
 }
 export interface BriefFollowUp {
   id: string
@@ -92,20 +90,29 @@ const emptyResult: CrossLayerResult = {
 export function stackBrief(session: StackReviewSession): StackBrief | undefined {
   const { input, pass } = session
   if (!input) return undefined
-  const result = pass?.result ?? emptyResult
   const contested = new Set(pass?.contested ?? [])
+  const proposed = pass?.result ?? emptyResult
+  const result = approved(proposed, contested)
   const layers = briefLayers(session, input)
   const plan = placement(input, result)
+  const doubts = contestedDoubts(proposed, contested, plan)
   const unmerged = input.entries.filter((entry) => !plan.merged(entry.id))
   const current = unmerged.filter((entry) => !plan.unnecessary(entry.id))
+  const derived = proposed.derived.map((item) => ({ item, entry: derivedEntry(item) }))
   return {
     layers,
     ...(pass?.turns.at(-1)?.summary ? { summary: pass.turns.at(-1)?.summary } : {}),
     decisions: [
       // A question stays even when a chain would make it unnecessary: that change is not settled.
       ...unmerged
-        .filter((entry) => entry.disposition === 'ask')
-        .map((entry) => decision(entry, entryContested(entry.id, contested))),
+        .filter(
+          (entry) =>
+            entry.disposition === 'ask' || (entry.disposition === 'fix' && doubts.has(entry.id)),
+        )
+        .map((entry) => decision(entry, doubts.get(entry.id), entryContested(entry.id, contested))),
+      ...derived
+        .filter(({ item, entry }) => entry.disposition === 'fix' && doubts.has(item.id))
+        .map(({ entry }) => decision(entry, doubts.get(entry.id), true)),
       ...result.structure.map((item) => ({
         id: `#${String(item.layer)}`,
         layer: item.layer,
@@ -120,16 +127,19 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
     fixes: layers
       .map((layer) => ({
         layer,
-        items: fixesOn(layer.number, { current, result, contested, plan }),
+        items: fixesOn(layer.number, {
+          current: current.filter((entry) => !doubts.has(entry.id)),
+          result,
+          plan,
+        }),
       }))
       .filter((group) => group.items.length),
     chains: result.chains.map((chain) => ({
       cause: { id: chain.cause, title: plan.title(chain.cause) },
       reason: chain.reason,
       unnecessary: chain.unnecessary.map((id) => ({ id, title: plan.title(id) })),
-      contested: contested.has(`chain ${chain.cause}`),
     })),
-    followUps: [...current, ...result.derived.map(derivedEntry)]
+    followUps: [...current, ...derived.map(({ entry }) => entry)]
       .filter((entry) => entry.followUp)
       .map((entry) => ({
         id: entry.id,
@@ -140,6 +150,63 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
     stale: staleEntries(input, layers),
     limitations: [...input.limitations, ...passLimitations(session)],
   }
+}
+
+/** The conclusions both models approved; structure proposals are decisions either way. */
+function approved(result: CrossLayerResult, contested: ReadonlySet<string>): CrossLayerResult {
+  return {
+    duplicates: result.duplicates.filter((item) => !contested.has(`duplicate ${item.owner}`)),
+    chains: result.chains.filter((item) => !contested.has(`chain ${item.cause}`)),
+    ownership: result.ownership.filter((item) => !contested.has(`ownership ${item.entry}`)),
+    derived: result.derived.filter((item) => !contested.has(`derived ${item.id}`)),
+    structure: result.structure,
+  }
+}
+
+/**
+ * What a conclusion the second model did not approve leaves for the author to decide, by the
+ * entry it would have changed: which layer a moved change belongs on, whether a change a chain
+ * would retire or a duplicate would absorb is still to be made, and whether to make a derived one.
+ */
+function contestedDoubts(
+  result: CrossLayerResult,
+  contested: ReadonlySet<string>,
+  plan: ReturnType<typeof placement>,
+): Map<string, string[]> {
+  const doubts = new Map<string, string[]>()
+  const add = (id: string, doubt: string) => doubts.set(id, [...(doubts.get(id) ?? []), doubt])
+  const named = (id: string) => `${id} (${plan.title(id)})`
+  const unapproved = 'The second model did not approve that.'
+  for (const item of result.ownership)
+    if (contested.has(`ownership ${item.entry}`)) {
+      const entry = plan.entry(item.entry)
+      const from = entry?.destination?.pull ?? entry?.layer
+      add(
+        item.entry,
+        `Which layer does this change belong on: PR #${String(from)}, where its panel put it, or PR #${String(item.layer)}, where the cross-layer pass moved it? ${item.reason} ${unapproved}`,
+      )
+    }
+  for (const chain of result.chains)
+    if (contested.has(`chain ${chain.cause}`))
+      for (const id of chain.unnecessary)
+        add(
+          id,
+          `${named(chain.cause)} may make this unnecessary: ${chain.reason} ${unapproved} Still make this change?`,
+        )
+  for (const group of result.duplicates)
+    if (contested.has(`duplicate ${group.owner}`))
+      for (const id of group.entries.filter((other) => other !== group.owner))
+        add(
+          id,
+          `This may repeat ${named(group.owner)}: ${group.reason} ${unapproved} Make it separately?`,
+        )
+  for (const item of result.derived)
+    if (contested.has(`derived ${item.id}`))
+      add(
+        item.id,
+        `Only the whole stack shows this, derived from ${item.from.join(', ')}. The second model did not approve it. Make this change?`,
+      )
+  return doubts
 }
 
 function briefLayers(session: StackReviewSession, input: StackPassInput): BriefLayer[] {
@@ -176,6 +243,7 @@ function placement(input: StackPassInput, result: CrossLayerResult) {
   const moved = new Map(result.ownership.map((item) => [item.entry, item]))
   const layers = new Set(input.layers.map((layer) => layer.number))
   return {
+    entry: (id: string) => byId.get(id),
     merged: (id: string) => merged.has(id),
     unnecessary: (id: string) => unnecessary.has(id),
     title: (id: string) => byId.get(id)?.title ?? id,
@@ -196,12 +264,10 @@ function fixesOn(
   {
     current: entries,
     result,
-    contested,
     plan,
   }: {
     current: readonly StackEntry[]
     result: CrossLayerResult
-    contested: ReadonlySet<string>
     plan: ReturnType<typeof placement>
   },
 ): BriefFix[] {
@@ -217,7 +283,6 @@ function fixesOn(
           ...(moved
             ? { movedFrom: { layer: entry.destination?.pull ?? entry.layer, reason: moved.reason } }
             : {}),
-          contested: entryContested(entry.id, contested),
         },
       }
     })
@@ -231,7 +296,6 @@ function fixesOn(
         ...fixOf(entry),
         derivedFrom: item.from,
         alsoRaised: [],
-        contested: contested.has(`derived ${item.id}`),
       },
     }))
   return [...own, ...derived].sort((a, b) => a.entry.rank - b.entry.rank).map(({ fix }) => fix)
@@ -242,7 +306,7 @@ function entryContested(id: string, contested: ReadonlySet<string>): boolean {
   return ['duplicate', 'ownership', 'chain'].some((kind) => contested.has(`${kind} ${id}`))
 }
 
-function fixOf(entry: StackEntry): Omit<BriefFix, 'alsoRaised' | 'contested'> {
+function fixOf(entry: StackEntry): Omit<BriefFix, 'alsoRaised'> {
   return {
     id: entry.id,
     title: entry.title,
@@ -254,16 +318,22 @@ function fixOf(entry: StackEntry): Omit<BriefFix, 'alsoRaised' | 'contested'> {
   }
 }
 
-function decision(entry: StackEntry, contested: boolean): BriefDecision {
+/** An entry for the author: its own question when triage asks one, then any doubts about it. */
+function decision(
+  entry: StackEntry,
+  doubts: readonly string[] = [],
+  contested = false,
+): BriefDecision {
+  const asked = entry.disposition === 'ask'
   return {
     id: entry.id,
     layer: entry.layer,
     title: entry.title,
-    question: decisionQuestion(entry),
+    question: [...(asked ? [decisionQuestion(entry)] : []), ...doubts].join(' '),
     ...(entry.plan ? { recommendation: entry.plan } : {}),
     ...(entry.effort ? { cost: entry.effort } : {}),
-    why: entry.triage,
-    contested,
+    why: asked ? entry.triage : 'The second model did not approve a conclusion about it.',
+    contested: contested || doubts.length > 0,
   }
 }
 
@@ -360,7 +430,7 @@ function passLimitations({ pass }: StackReviewSession): string[] {
     return ['Only one provider was available, so no second model checked the cross-layer pass.']
   if (pass?.outcome === 'exhausted')
     return [
-      `The two models did not agree on the cross-layer pass within ${String(pass.turns.length)} turns. The last valid result is kept, and what the second model did not approve is marked.`,
+      `The two models did not agree on the cross-layer pass within ${String(pass.turns.length)} turns. The last valid result is kept; what the second model did not approve is a decision, not a fix.`,
     ]
   return []
 }

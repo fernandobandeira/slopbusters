@@ -81,7 +81,6 @@ function FixItem({ fix }: { fix: BriefFix }) {
     fix.derivedFrom ? `Derived from ${fix.derivedFrom.join(', ')}` : '',
     fix.alsoRaised.length ? `Also raised as ${fix.alsoRaised.join(', ')}` : '',
     fix.movedFrom ? `Moved here from #${String(fix.movedFrom.layer)}` : '',
-    fix.contested ? 'The second model did not approve this' : '',
   ].filter(Boolean)
   return (
     <li>
@@ -107,7 +106,6 @@ function BriefNotes({ brief }: { brief: StackBrief }) {
               <li key={chain.cause.id}>
                 <code>{chain.cause.id}</code> makes{' '}
                 {chain.unnecessary.map((item) => item.id).join(', ')} unnecessary. {chain.reason}
-                {chain.contested && ' The second model did not approve this.'}
               </li>
             ))}
           </ul>

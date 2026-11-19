@@ -117,7 +117,7 @@ describe('reviewing the whole stack', () => {
     expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy()
   })
 
-  it('says which decisions and chains the second model did not approve', async () => {
+  it('asks about a change a chain the second model did not approve would retire', async () => {
     const exhausted = structuredClone(finished)
     if (!exhausted.pass) throw new Error('Missing pass.')
     exhausted.pass.outcome = 'exhausted'
@@ -130,8 +130,14 @@ describe('reviewing the whole stack', () => {
     render(<StackReview url={layerUrl(201)} reviewers={['unclebob']} />)
 
     expect(
-      await screen.findByText(/Nothing else reads it\. The second model did not approve this\./),
+      await screen.findByText(
+        '#203/g2 (Remove the retry job) may make this unnecessary: Nothing else reads it. The second model did not approve that. Still make this change?',
+      ),
     ).toBeTruthy()
-    expect(screen.getByText(/Cost: small · The second model did not approve this/)).toBeTruthy()
+    expect(screen.getAllByText(/Cost: small · The second model did not approve this/)).toHaveLength(
+      2,
+    )
+    expect(screen.queryByRole('heading', { name: 'Made unnecessary' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Fixes on PR #201' })).toBeNull()
   })
 })
