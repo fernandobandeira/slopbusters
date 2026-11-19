@@ -35,6 +35,10 @@ vi.mock('../../../server/adapters/reviewWorkspaces', () => ({
   },
 }))
 
+/** No stack and no review history, at once: this test never reaches GitHub. */
+const offline = () => Promise.reject(new Error('offline'))
+const offlineGitHub = { rest: offline, paginate: offline, graphql: offline }
+
 let data: string
 let roots: ReturnType<typeof temporarySkillRoots>
 let app: Awaited<ReturnType<typeof startReviewerServer>>
@@ -54,6 +58,7 @@ beforeEach(async () => {
       new URL('../../../../../skills/terminator', import.meta.url),
     ),
     structuredTurns: turns,
+    github: offlineGitHub,
     port: 0,
   })
 })
