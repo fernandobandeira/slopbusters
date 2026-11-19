@@ -96,7 +96,7 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
   const contested = new Set(pass?.contested ?? [])
   const layers = briefLayers(session, input)
   const plan = placement(input, result)
-  const unmerged = input.entries.filter((entry) => !entry.earlier && !plan.merged(entry.id))
+  const unmerged = input.entries.filter((entry) => !plan.merged(entry.id))
   const current = unmerged.filter((entry) => !plan.unnecessary(entry.id))
   return {
     layers,
@@ -321,15 +321,16 @@ function derivedEntry(item: CrossLayerResult['derived'][number]): StackEntry {
  */
 function staleEntries(input: StackPassInput, layers: readonly BriefLayer[]): BriefStale[] {
   const heads = new Map(layers.map((layer) => [layer.number, layer.currentHead]))
-  const current = input.entries.filter((entry) => !entry.earlier)
   const moved = layers
     .filter((layer) => layer.reviewedHead && layer.currentHead && !layer.current)
     .map((layer) => ({
       layer: layer.number,
-      entries: current.filter((entry) => entry.layer === layer.number).map((entry) => entry.id),
+      entries: input.entries
+        .filter((entry) => entry.layer === layer.number)
+        .map((entry) => entry.id),
       reason: movedReason(layer),
     }))
-  const settled = current.flatMap((entry) => {
+  const settled = input.entries.flatMap((entry) => {
     const layer = entry.settledBy
     const read = input.layers
       .find((item) => item.number === entry.layer)

@@ -12,16 +12,12 @@ import {
 describe('the stack brief across layers', () => {
   it('collapses duplicates into the entry that owns the change, which names the others', () => {
     const session = finishedStackReview(
-      [
-        stackEntry(201, 'g1'),
-        stackEntry(202, 'g3'),
-        stackEntry(203, 'g1', { earlier: true, id: '#203/earlier/g1' }),
-      ],
+      [stackEntry(201, 'g1'), stackEntry(202, 'g3'), stackEntry(203, 'g1')],
       {
         ...emptyResult,
         duplicates: [
           {
-            entries: ['#201/g1', '#202/g3', '#203/earlier/g1'],
+            entries: ['#201/g1', '#202/g3', '#203/g1'],
             owner: '#201/g1',
             reason: 'All three ask for the same guard.',
           },
@@ -34,7 +30,7 @@ describe('the stack brief across layers', () => {
     expect(
       brief?.fixes.map(({ layer, items }) => [layer.number, items.map((item) => item.id)]),
     ).toEqual([[201, ['#201/g1']]])
-    expect(brief?.fixes[0]?.items[0]?.alsoRaised).toEqual(['#202/g3', '#203/earlier/g1'])
+    expect(brief?.fixes[0]?.items[0]?.alsoRaised).toEqual(['#202/g3', '#203/g1'])
   })
 
   it('keeps a question in the decision queue even when a chain would make it unnecessary', () => {

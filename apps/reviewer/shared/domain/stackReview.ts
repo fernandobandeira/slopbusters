@@ -19,12 +19,12 @@ import { organizationSchema } from './preferences'
  */
 
 /** An entry's id across the stack: its layer and its grounded id, such as `#131/g4`. */
-const entryIdSchema = z.string().regex(/^#\d+\/(?:earlier\/)?[\w-]{1,40}$/)
+const entryIdSchema = z.string().regex(/^#\d+\/[\w-]{1,40}$/)
 const derivedIdSchema = z.string().regex(/^d\d{1,2}$/)
 const pullNumberSchema = z.number().int().positive()
 
-export function stackEntryId(layer: number, entry: string, earlier = false): string {
-  return `#${String(layer)}/${earlier ? 'earlier/' : ''}${entry}`
+export function stackEntryId(layer: number, entry: string): string {
+  return `#${String(layer)}/${entry}`
 }
 
 /** What happened to one layer's panel in this stack review. */
@@ -48,8 +48,6 @@ export type StackLayer = z.infer<typeof stackLayerSchema>
 export const stackEntrySchema = z.object({
   id: entryIdSchema,
   layer: pullNumberSchema,
-  /** From the layer's previous completed panel round, so a finding raised again shows. */
-  earlier: z.boolean().optional(),
   title: z.string(),
   kind: z.enum(groundingKinds).optional(),
   effort: z.enum(groundingEfforts).optional(),
@@ -226,17 +224,17 @@ export type StackReviewSession = z.infer<typeof stackReviewSessionSchema>
 
 /** What the pass may refer to: the entries it was given and the stack's layers. */
 export interface CrossLayerScope {
-  entries: readonly Pick<StackEntry, 'id' | 'earlier'>[]
+  entries: readonly Pick<StackEntry, 'id'>[]
   layers: readonly number[]
 }
 
 /**
  * Why a returned result does not fit the input, one problem per line; empty when it is valid.
- * Every id must be one the pass was given, used at most once per relation, and only a current
- * entry can own a change. A derived finding needs the entries it was derived from.
+ * Every id must be one the pass was given and used at most once per relation. A derived finding
+ * needs the entries it was derived from.
  */
 export function crossLayerProblems(turn: CrossLayerResult, scope: CrossLayerScope): string[] {
-  const known = new Map(scope.entries.map((entry) => [entry.id, entry]))
+  const known = new Set(scope.entries.map((entry) => entry.id))
   const check = relationChecker(known, scope.layers)
   const merged = new Set(
     turn.duplicates.flatMap((group) => group.entries.filter((id) => id !== group.owner)),
@@ -252,18 +250,15 @@ export function crossLayerProblems(turn: CrossLayerResult, scope: CrossLayerScop
     check.ids('duplicates', group.entries)
     if (!group.entries.includes(group.owner))
       check.problem(`duplicates: the owner ${group.owner} must be one of its group's entries.`)
-    check.current('duplicates', group.owner)
   }
   for (const chain of turn.chains) {
     check.ids('chains', [chain.cause, ...chain.unnecessary])
-    for (const id of [chain.cause, ...chain.unnecessary]) check.current('chains', id)
     owned('chains', [chain.cause, ...chain.unnecessary])
     if (!chain.unnecessary.length)
       check.problem(`chains: ${chain.cause} needs the entries it makes unnecessary.`)
   }
   for (const item of turn.ownership) {
     check.ids('ownership', [item.entry])
-    check.current('ownership', item.entry)
     owned('ownership', [item.entry])
     check.layer('ownership', item.layer)
   }
@@ -295,10 +290,7 @@ function derivedProblems(turn: CrossLayerResult, check: ReturnType<typeof relati
   }
 }
 
-function relationChecker(
-  known: ReadonlyMap<string, Pick<StackEntry, 'earlier'>>,
-  layers: readonly number[],
-) {
+function relationChecker(known: ReadonlySet<string>, layers: readonly number[]) {
   const problems: string[] = []
   const used = new Map<string, Set<string>>()
   return {
@@ -313,11 +305,6 @@ function relationChecker(
         else if (seen.has(id)) problems.push(`${relation}: ${id} is used more than once.`)
         seen.add(id)
       }
-    },
-    /** Only an entry of the current rounds can own, cause or be moved. */
-    current(relation: string, id: string) {
-      if (known.get(id)?.earlier)
-        problems.push(`${relation}: ${id} is from an earlier round and cannot take this role.`)
     },
     layer(relation: string, layer: number) {
       if (!layers.includes(layer))

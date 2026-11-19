@@ -9,26 +9,21 @@ import {
 } from './stackReview'
 import { triage } from './triage'
 
-/** One layer's panel rounds: the one the stack review uses and, when there is one, the one before. */
+/** One layer's panel round: the one the stack review uses. */
 export interface LayerRounds {
   layer: Pick<StackLayer, 'number' | 'title' | 'url'>
   current: PanelResult
-  earlier?: PanelResult
 }
 
 /**
  * The compact view of every layer the cross-layer pass reads: each layer's revision and diff
- * stat, every grounded entry with its triage, and the previous round's entries marked earlier.
- * Past `budget` characters, earlier entries go first, then skipped ones; what was left out is
- * named in the limitations, never dropped silently.
+ * stat and every grounded entry with its triage. Past `budget` characters, skipped entries go
+ * first; what was left out is named in the limitations, never dropped silently.
  */
 export function stackPassInput(rounds: readonly LayerRounds[], budget: number): StackPassInput {
   const input: StackPassInput = {
     layers: rounds.map(passLayer),
-    entries: rounds.flatMap(({ layer, current, earlier }) => [
-      ...entriesOf(layer.number, current, false),
-      ...(earlier ? entriesOf(layer.number, earlier, true) : []),
-    ]),
+    entries: rounds.flatMap(({ layer, current }) => entriesOf(layer.number, current)),
     left: [],
     limitations: rounds
       .filter(({ current }) => !current.grounding?.resolved)
@@ -67,14 +62,13 @@ function passLayer({ layer, current }: LayerRounds): StackPassLayer {
   }
 }
 
-function entriesOf(layer: number, result: PanelResult, earlier: boolean): StackEntry[] {
+function entriesOf(layer: number, result: PanelResult): StackEntry[] {
   const candidates = result.grounding?.candidates ?? []
   return (result.grounding?.resolved ?? []).map((entry) => {
     const decision = triage(entry)
     return {
-      id: stackEntryId(layer, entry.id, earlier),
+      id: stackEntryId(layer, entry.id),
       layer,
-      ...(earlier ? { earlier } : {}),
       title: leadSource(entry, candidates)?.finding.title ?? entry.id,
       resolution: entry.resolution,
       disposition: decision.disposition,
@@ -106,28 +100,20 @@ function optional(entry: ResolvedEntry): Partial<StackEntry> {
   }
 }
 
-/** Leave out earlier entries, then skipped ones, newest layer first, until the view fits. */
+/** Leave out skipped entries, newest layer first, until the view fits. */
 function fitBudget(input: StackPassInput, budget: number) {
   const size = () => JSON.stringify(passView(input)).length
-  const groups = [
-    { what: 'earlier-round', entries: input.entries.filter((entry) => entry.earlier) },
-    {
-      what: 'skipped',
-      entries: input.entries.filter((entry) => !entry.earlier && entry.disposition === 'skip'),
-    },
-  ]
-  for (const group of groups) {
-    const left: string[] = []
-    for (const entry of [...group.entries].reverse()) {
-      if (size() <= budget) break
-      input.left.push(entry.id)
-      left.push(entry.id)
-    }
-    if (left.length)
-      input.limitations.push(
-        `To fit the cross-layer pass's budget, ${String(left.length)} ${group.what} entr${left.length === 1 ? 'y was' : 'ies were'} left out of it: ${left.join(', ')}.`,
-      )
+  const skipped = input.entries.filter((entry) => entry.disposition === 'skip')
+  const left: string[] = []
+  for (const entry of [...skipped].reverse()) {
+    if (size() <= budget) break
+    input.left.push(entry.id)
+    left.push(entry.id)
   }
+  if (left.length)
+    input.limitations.push(
+      `To fit the cross-layer pass's budget, ${String(left.length)} skipped entr${left.length === 1 ? 'y was' : 'ies were'} left out of it: ${left.join(', ')}.`,
+    )
   if (size() > budget)
     input.limitations.push(
       "Even without them, the cross-layer pass's input is over its budget; it read every remaining entry.",

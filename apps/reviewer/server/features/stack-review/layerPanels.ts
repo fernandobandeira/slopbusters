@@ -49,17 +49,14 @@ export async function runLayerPanels(
   }
 }
 
-/** The result each layer's panel ended with, and the newest result from another round. */
+/** The result each layer's panel ended with. */
 export function layerRounds(session: StackReviewSession, layers: LayerPanels) {
   return session.layers.map((layer) => {
     const current = layers.panels
       .get(layer.panel ?? '')
       .results.find((result) => result.pull.url === layer.url)
     if (!current) throw new Error('Missing panel result for a reviewed layer.')
-    const earlier = layers
-      .results(session.repository, layer.url)
-      .find((item) => item.session !== layer.panel)?.result
-    return { layer, current, ...(earlier ? { earlier } : {}) }
+    return { layer, current }
   })
 }
 

@@ -145,7 +145,11 @@ describe('a whole-stack review', () => {
     expect(session.reviewers).toEqual([{ id: 'unclebob', providers: ['claude'] }])
     expect(seatTurns(during, 201)).toHaveLength(0)
     expect(seatTurns(during, 202)).toHaveLength(1)
-    expect(session.input?.entries.map((entry) => entry.id)).toContain('#202/earlier/g1')
+    expect(session.input?.entries.map((entry) => entry.id)).toEqual([
+      '#201/g1',
+      '#202/g1',
+      '#203/g1',
+    ])
   })
 
   it('stops partial on a layer waiting on the author, and a retry continues from there', async () => {

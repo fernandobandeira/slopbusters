@@ -13,12 +13,7 @@ import { fixturePull } from '../../fixtures/pull'
 import { emptyResult } from '../../fixtures/stackReview'
 
 const scope: CrossLayerScope = {
-  entries: [
-    { id: '#201/g1' },
-    { id: '#202/g1' },
-    { id: '#203/g2' },
-    { id: '#202/earlier/g4', earlier: true },
-  ],
+  entries: [{ id: '#201/g1' }, { id: '#202/g1' }, { id: '#203/g2' }],
   layers: [201, 202, 203],
 }
 const problems = (changes: Partial<CrossLayerResult>) =>
@@ -28,9 +23,7 @@ describe('cross-layer output validation', () => {
   it('accepts a result that only uses the ids and layers it was given', () => {
     expect(
       problems({
-        duplicates: [
-          { entries: ['#201/g1', '#202/g1', '#202/earlier/g4'], owner: '#201/g1', reason: 'Same.' },
-        ],
+        duplicates: [{ entries: ['#201/g1', '#202/g1'], owner: '#201/g1', reason: 'Same.' }],
         chains: [{ cause: '#203/g2', unnecessary: ['#201/g1'], reason: 'The job goes.' }],
         ownership: [{ entry: '#203/g2', layer: 201, reason: 'The code is on the bottom.' }],
         derived: [
@@ -61,17 +54,17 @@ describe('cross-layer output validation', () => {
     ])
   })
 
-  it('refuses an id used twice in one relation, and an earlier entry owning a change', () => {
+  it('refuses an id used twice in one relation, and an owner outside its group', () => {
     expect(
       problems({
         duplicates: [
           { entries: ['#201/g1', '#202/g1'], owner: '#201/g1', reason: 'Same.' },
-          { entries: ['#202/g1', '#202/earlier/g4'], owner: '#202/earlier/g4', reason: 'Same.' },
+          { entries: ['#202/g1', '#203/g2'], owner: '#201/g1', reason: 'Same.' },
         ],
       }),
     ).toEqual([
       'duplicates: #202/g1 is used more than once.',
-      'duplicates: #202/earlier/g4 is from an earlier round and cannot take this role.',
+      "duplicates: the owner #201/g1 must be one of its group's entries.",
     ])
   })
 })
@@ -135,34 +128,26 @@ describe('the cross-layer pass input', () => {
       url: `https://example.test/${String(number)}`,
     },
     current: panelResult(number, [entry('g1'), entry('g2', { origin: 'preexisting' })]),
-    earlier: panelResult(number, [entry('g1'), entry('g3')]),
   }))
 
-  it('leaves out earlier-round entries first, and says which', () => {
-    const current = stackPassInput(
-      rounds.map(({ earlier: _earlier, ...round }) => round),
-      1_000_000,
-    )
+  it('reads every entry when they fit', () => {
+    const input = stackPassInput(rounds, 1_000_000)
 
-    const fitted = stackPassInput(rounds, JSON.stringify(passView(current)).length)
-
-    expect(fitted.left).toEqual([
-      '#202/earlier/g3',
-      '#202/earlier/g1',
-      '#201/earlier/g3',
-      '#201/earlier/g1',
+    expect(input.left).toEqual([])
+    expect(input.limitations).toEqual([])
+    expect(input.entries.map((item) => item.id)).toEqual([
+      '#201/g1',
+      '#201/g2',
+      '#202/g1',
+      '#202/g2',
     ])
-    expect(fitted.limitations).toEqual([
-      "To fit the cross-layer pass's budget, 4 earlier-round entries were left out of it: #202/earlier/g3, #202/earlier/g1, #201/earlier/g3, #201/earlier/g1.",
-    ])
-    expect(fitted.entries).toHaveLength(8)
   })
 
-  it('then leaves out skipped entries, and says when even that is not enough', () => {
+  it('leaves out skipped entries past the budget, and says when even that is not enough', () => {
     const fitted = stackPassInput(rounds, 1)
 
-    expect(fitted.left.slice(4)).toEqual(['#202/g2', '#201/g2'])
-    expect(fitted.limitations.slice(1)).toEqual([
+    expect(fitted.left).toEqual(['#202/g2', '#201/g2'])
+    expect(fitted.limitations).toEqual([
       "To fit the cross-layer pass's budget, 2 skipped entries were left out of it: #202/g2, #201/g2.",
       "Even without them, the cross-layer pass's input is over its budget; it read every remaining entry.",
     ])
