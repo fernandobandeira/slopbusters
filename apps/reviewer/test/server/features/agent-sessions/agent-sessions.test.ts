@@ -103,3 +103,35 @@ it('marks aborted model passes cancelled and discloses transcript truncation', a
   expect(run.status).toBe('cancelled')
   expect(store.events(id, run.id, 0).events[0]?.text).toContain('[Output truncated')
 })
+
+it('syncs metadata while preserving omitted fields and lists each session’s runs in pass order', () => {
+  const repository = 'example/project'
+  sessions.update({ id, status: 'failed', progress: 'Stopped', failureContext: 'Preparing source' })
+  sessions.start('other', 'panel', { repository, urls: [] })
+  for (const [runId, sessionId] of [
+    ['first', id],
+    ['other-pass', 'other'],
+    ['second', id],
+  ] as const) {
+    store.saveRun({ id: runId, sessionId, model, label: runId, status: 'complete', startedAt: '' })
+  }
+
+  sessions.sync('gandalf', {
+    id,
+    repository,
+    urls: [],
+    status: 'running',
+    progress: 'Retrying',
+    createdAt: '2026-10-01',
+  })
+
+  const listed = store.list(repository)
+  expect(listed.find((session) => session.id === id)).toMatchObject({
+    status: 'running',
+    failureContext: 'Preparing source',
+    runs: [{ id: 'first' }, { id: 'second' }],
+  })
+  expect(listed.find((session) => session.id === 'other')?.runs.map((run) => run.id)).toEqual([
+    'other-pass',
+  ])
+})

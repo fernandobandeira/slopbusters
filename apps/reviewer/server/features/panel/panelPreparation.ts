@@ -1,5 +1,6 @@
 import type { LayerSnapshot } from '../../../shared/domain/anchors'
 import type {
+  PanelPending,
   PanelPreparation,
   PanelSnapshot,
   ReviewHistory,
@@ -168,6 +169,12 @@ async function stackLayers(urls: readonly string[], { stack, signal }: Sources) 
     if (notes.length) missing[url] = notes
   })
   return { layers, order, missing }
+}
+
+export function pendingPanelReview(preparation: PanelPreparation, url: string): PanelPending {
+  const snapshot = preparation.snapshots.find((entry) => entry.pull.url === url)
+  if (!snapshot) throw new Error('Missing PR snapshot.')
+  return { ...snapshot, reviews: [] }
 }
 
 function pullCount(count: number, noun = 'PR') {

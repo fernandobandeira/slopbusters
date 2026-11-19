@@ -2,20 +2,13 @@ import { Provider } from '../../../shared/domain/types'
 import { providerLabel } from '../../../shared/domain/preferences'
 import { Link } from 'react-router'
 import { OpenAI, ClaudeAI } from '~/components/Icons'
-import { useAgentSessions } from './useAgentSessions'
+import { useAgentSession } from './useAgentSessions'
 import { modelName, sessionPath } from './sessionPresentation'
 import { AgentState } from './AgentState'
 import './sessions.css'
 
-export function AgentSessionCard({
-  sessionId,
-  repository,
-}: {
-  sessionId: string
-  repository: string
-}) {
-  const query = useAgentSessions(repository)
-  const session = query.data?.sessions.find((session) => session.id === sessionId)
+export function AgentSessionCard({ sessionId }: { sessionId: string }) {
+  const session = useAgentSession(sessionId, 1500).data
   if (!session) return null
   const run = session.runs.find((run) => run.status === 'running') ?? session.runs.at(-1)
   return (

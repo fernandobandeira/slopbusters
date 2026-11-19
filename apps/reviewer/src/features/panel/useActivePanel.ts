@@ -1,6 +1,5 @@
 import { useEffect, useEffectEvent } from 'react'
 import * as routes from '../../../shared/api'
-import { stoppedWithWork } from '../../../shared/domain/panelSession'
 import { blocksNewReview } from '../../../shared/domain/reviewSession'
 import { useApiQuery } from '../../lib/useApiQuery'
 
@@ -35,7 +34,7 @@ export function useActivePanel({
   return {
     session: session && blocksNewReview(session) ? session : undefined,
     /** A panel that stopped with saved work, which a retry picks up. */
-    stopped: session && stoppedWithWork(session) ? session : undefined,
+    stopped: session?.stoppedUrl ? session : undefined,
     loading: latest.loading,
     reload,
   }

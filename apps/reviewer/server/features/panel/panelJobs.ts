@@ -36,7 +36,13 @@ import { failedSeats, reviewSeats } from '../flows/panel'
 import { queuedNotice, Slots } from '../flows/slots'
 import type { PanelMembers } from './panelMembers'
 import { roundLoader } from './localRound'
-import { layersOf, openSource, preparePanelRound, stackTop } from './panelPreparation'
+import {
+  layersOf,
+  openSource,
+  pendingPanelReview,
+  preparePanelRound,
+  stackTop,
+} from './panelPreparation'
 import { groundPanel } from './groundingDebate'
 import { reviewAsPanelist } from './panelReview'
 import { openStackTop, writeLayerFiles, type StackFolders } from './stackFolders'
@@ -137,13 +143,19 @@ export class PanelJobs {
     return session
   }
   get(id: string): PanelSession {
-    const session = this.options.store.get(id)
+    const session = this.jobs.session(id) ?? this.options.store.get(id)
     if (!session) throw new UserError('This panel review is no longer available.', 404)
-    return this.recover(session)
+    return this.jobs.recover(
+      session,
+      'Panel review interrupted when the app stopped. Reviewed PRs are saved.',
+    )
   }
-  latest(repository: string, url?: string): PanelSession | undefined {
-    const session = this.options.store.latest(repository, url)
-    return session && this.recover(session)
+  latest(repository: string, url: string): PanelSession | undefined {
+    const id = this.options.store.latestId(repository, url)
+    return id ? this.get(id) : undefined
+  }
+  isLive(id: string): boolean {
+    return this.jobs.isRunning(id)
   }
   /** Ground the reviews that finished, leaving the failed reviewers out. */
   continue(id: string): PanelSession {
@@ -182,12 +194,6 @@ export class PanelJobs {
     this.launch(session, mode)
     return session
   }
-  private recover(session: PanelSession): PanelSession {
-    return this.jobs.recover(
-      session,
-      'Panel review interrupted when the app stopped. Reviewed PRs are saved.',
-    )
-  }
   private launch(session: PanelSession, mode: RunMode): void {
     const waiting = queuedNotice(session, 'Waiting for panels on other PRs to finish…', () => {
       this.save(session)
@@ -197,13 +203,16 @@ export class PanelJobs {
     )
   }
   private async run(session: PanelSession, signal: AbortSignal, mode: RunMode): Promise<void> {
-    const preparation = session.preparation ?? (await this.prepareRound(session, signal))
-    for (let index = session.results.length; index < session.urls.length; index++) {
-      signal.throwIfAborted()
-      const usePending = mode !== 'fresh' && session.pending
-      const round = { preparation, index, mode: usePending ? mode : 'fresh' } as const
-      if (!(await this.reviewPull(session, signal, round))) return
-      mode = 'fresh'
+    if (session.results.length < session.urls.length) {
+      const preparation =
+        this.options.store.preparation(session.id) ?? (await this.prepareRound(session, signal))
+      for (const url of session.urls.slice(session.results.length)) {
+        signal.throwIfAborted()
+        const usePending = mode !== 'fresh' && session.pending
+        const round = { preparation, url, mode: usePending ? mode : 'fresh' } as const
+        if (!(await this.reviewPull(session, signal, round))) return
+        mode = 'fresh'
+      }
     }
     session.status = 'complete'
     this.progress(
@@ -218,14 +227,14 @@ export class PanelJobs {
   private async reviewPull(
     session: PanelSession,
     signal: AbortSignal,
-    { preparation, index, mode }: { preparation: PanelPreparation; index: number; mode: RunMode },
+    { preparation, url, mode }: { preparation: PanelPreparation; url: string; mode: RunMode },
   ): Promise<boolean> {
     let repository: ReviewCheckout | undefined
     let top: ReviewCheckout | undefined
     let files: EvidenceFolder | undefined
     try {
-      const pending =
-        mode === 'fresh' ? this.pendingFor(session, preparation, index) : session.pending
+      if (mode === 'fresh') session.pending = pendingPanelReview(preparation, url)
+      const pending = session.pending
       if (!pending) throw new Error('Missing pending panel review.')
       const layers = layersOf(preparation, pending.pull.url)
       const source = await openSource(this.options.openRepository, pending.pull, signal)
@@ -280,14 +289,6 @@ export class PanelJobs {
       track: (pass, execute) => this.track(session, { ...pass, url: pending.pull.url }, execute),
     })
   }
-  private pendingFor(session: PanelSession, preparation: PanelPreparation, index: number) {
-    const url = session.urls[index]
-    const snapshot = preparation.snapshots.find((entry) => entry.pull.url === url)
-    if (!snapshot) throw new Error('Missing PR snapshot.')
-    const pending: PanelPending = { ...snapshot, reviews: [] }
-    session.pending = pending
-    return pending
-  }
   private async prepareRound(session: PanelSession, signal: AbortSignal) {
     const preparation = await preparePanelRound(session.urls, {
       ...this.options,
@@ -297,8 +298,7 @@ export class PanelJobs {
         this.progress(session, progress)
       },
     })
-    session.preparation = preparation
-    this.save(session)
+    this.options.store.savePreparation(session.id, preparation)
     return preparation
   }
   /** Run every reviewer that has no review yet, a few at a time, saving each as it lands. */

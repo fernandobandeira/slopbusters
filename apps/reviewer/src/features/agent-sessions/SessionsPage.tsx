@@ -1,11 +1,8 @@
 import { Provider } from '../../../shared/domain/types'
-import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router'
 import { OpenAI, ClaudeAI } from '~/components/Icons'
 import type { AgentRun } from '../../../shared/domain/agentSession'
-import { getAgentSession } from '../../../shared/api/agentSessions'
-import { useApiQuery } from '../../lib/useApiQuery'
-import { useAgentSessions } from './useAgentSessions'
+import { useAgentSession, useAgentSessions } from './useAgentSessions'
 import { agentNames, modelName, sessionPath, sessionSubject } from './sessionPresentation'
 import { AgentState } from './AgentState'
 import { SessionTranscript } from './SessionTranscript'
@@ -19,22 +16,8 @@ export function SessionsPage({ id, repository }: { id?: string; repository?: str
   )
 }
 
-function useSessionDetail(id: string) {
-  const detail = useApiQuery(getAgentSession, { params: { id } })
-  const { reload } = detail
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (!document.hidden) reload()
-    }, 1000)
-    return () => {
-      clearInterval(timer)
-    }
-  }, [reload])
-  return detail
-}
-
 function SessionDetail({ id, repository }: { id: string; repository?: string }) {
-  const detail = useSessionDetail(id)
+  const detail = useAgentSession(id, 1000)
   const location = useLocation()
   const session = detail.data
   const selected = new URLSearchParams(location.search).get('run')

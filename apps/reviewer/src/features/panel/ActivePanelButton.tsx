@@ -1,6 +1,6 @@
 import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
-import type { PanelSession } from '../../../shared/domain/panelSession'
+import type { PanelSessionSummary } from '../../../shared/domain/panelSession'
 import { useApiQuery } from '../../lib/useApiQuery'
 import { PanelStack } from './PanelStack'
 
@@ -13,7 +13,7 @@ export function ActivePanelButton({
   number,
   onOpen,
 }: {
-  session: PanelSession
+  session: PanelSessionSummary
   number: number
   onOpen: () => void
 }) {

@@ -2,7 +2,16 @@ import type { FollowUpTicket } from './panelFollowups'
 import type { GroundingState } from './grounding'
 import type { Gate } from './panelGate'
 import type { CarriedFinding, LayerRoute, LocalRound, MetadataDraft } from './panelFix'
-import type { JudgeAdvice, PanelAdvice, PanelReviewer, UnplacedFinding } from './panel'
+import { z } from 'zod'
+import { agentStateSchema } from './agentSession'
+import {
+  panelReviewerSchema,
+  seatIdSchema,
+  type JudgeAdvice,
+  type PanelAdvice,
+  type PanelReviewer,
+  type UnplacedFinding,
+} from './panel'
 import type { OrganizationPreferences } from './preferences'
 import type { PullRequest, PullReviewBody, ReviewThread } from './types'
 
@@ -90,8 +99,6 @@ export interface PanelSession {
   local?: LocalRound
   /** Findings another layer's round sent here, grounded with this round's sources. */
   carried?: CarriedFinding[]
-  /** Kept on the server; the API leaves the loaded layers out. */
-  preparation?: PanelPreparation
   error?: string
   createdAt: string
 }
@@ -106,4 +113,36 @@ export function stoppedWithWork(session: Pick<PanelSession, 'status' | 'pending'
   return Boolean(
     pending?.reviews.some((review) => review.advice) || pending?.grounding?.turns.length,
   )
+}
+
+export const panelSessionSummarySchema = z.object({
+  id: z.string(),
+  status: agentStateSchema,
+  progress: z.string(),
+  queued: z.boolean().optional(),
+  reviewers: z.array(panelReviewerSchema),
+  pending: z
+    .object({
+      reviews: z.array(z.object({ reviewer: seatIdSchema, advice: z.boolean() })),
+    })
+    .optional(),
+  stoppedUrl: z.string().optional(),
+})
+export type PanelSessionSummary = z.infer<typeof panelSessionSummarySchema>
+
+export function summarizePanel(session: PanelSession): PanelSessionSummary {
+  return {
+    id: session.id,
+    status: session.status,
+    progress: session.progress,
+    queued: session.queued,
+    reviewers: session.reviewers,
+    pending: session.pending && {
+      reviews: session.pending.reviews.map(({ reviewer, advice }) => ({
+        reviewer,
+        advice: Boolean(advice),
+      })),
+    },
+    stoppedUrl: stoppedWithWork(session) ? session.pending?.pull.url : undefined,
+  }
 }

@@ -1,7 +1,19 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from 'react'
 import * as routes from '../../../shared/api'
 import type { PanelSession } from '../../../shared/domain/panelSession'
 import { call, message } from '../../lib/api'
+
+interface PanelRevision {
+  id: string
+  revision: number
+}
 
 /** A saved panel review, polled while it runs, with the actions that move it along. */
 export function usePanelSession(sessionId: string) {
@@ -10,12 +22,18 @@ export function usePanelSession(sessionId: string) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const saved = useRef<PanelRevision>(undefined)
   useEffect(() => {
     const controller = new AbortController()
-    void call(routes.getPanel, { params: { id: sessionId } }, { signal: controller.signal })
+    void call(
+      routes.getPanel,
+      { params: { id: sessionId }, query: {} },
+      { signal: controller.signal },
+    )
       .then((next) => {
         if (controller.signal.aborted) return
-        setSession(next)
+        saved.current = { id: sessionId, revision: next.revision }
+        setSession(next.session ?? undefined)
         setLoading(false)
         setError('')
       })
@@ -28,7 +46,9 @@ export function usePanelSession(sessionId: string) {
       controller.abort()
     }
   }, [sessionId, refresh])
-  usePanelPolling(session, { setSession, setError })
+  const runningId =
+    session?.id === sessionId && session.status === 'running' ? sessionId : undefined
+  usePanelPolling(runningId, { saved, setSession, setError })
 
   async function act(action: 'retry' | 'continue' | 'cancel') {
     if (busy || !session) return
@@ -64,36 +84,44 @@ export function usePanelSession(sessionId: string) {
 }
 
 function usePanelPolling(
-  session: PanelSession | undefined,
+  runningId: string | undefined,
   options: {
+    saved: RefObject<PanelRevision | undefined>
     setSession: Dispatch<SetStateAction<PanelSession | undefined>>
     setError: (error: string) => void
   },
 ) {
-  const { setSession, setError } = options
-  const runningId = session?.status === 'running' ? session.id : undefined
+  const { saved, setSession, setError } = options
   useEffect(() => {
     if (!runningId) return
     const id = runningId
     const controller = new AbortController()
-    let timer: ReturnType<typeof setTimeout>
+    let timer = setTimeout(() => void poll(), 1500)
     async function poll() {
       try {
-        const next = await call(routes.getPanel, { params: { id } }, { signal: controller.signal })
+        const next = await call(
+          routes.getPanel,
+          {
+            params: { id },
+            query: { after: saved.current?.id === id ? saved.current.revision : undefined },
+          },
+          { signal: controller.signal },
+        )
         if (controller.signal.aborted) return
-        setSession(next)
+        saved.current = { id, revision: next.revision }
+        if (next.session) setSession(next.session)
         setError('')
-        if (next.status === 'running') timer = setTimeout(() => void poll(), 1500)
+        if (!next.session || next.session.status === 'running')
+          timer = setTimeout(() => void poll(), 1500)
       } catch (cause) {
         if (controller.signal.aborted) return
         setError(message(cause))
         timer = setTimeout(() => void poll(), 4000)
       }
     }
-    void poll()
     return () => {
       controller.abort()
       clearTimeout(timer)
     }
-  }, [runningId, setSession, setError])
+  }, [runningId, saved, setSession, setError])
 }

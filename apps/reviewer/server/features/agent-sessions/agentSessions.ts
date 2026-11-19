@@ -29,7 +29,8 @@ export class AgentSessions {
     error?: string
     failureContext?: string
   }) {
-    const previous = this.store.getSession(source.id)
+    const previous = this.store.findSession(source.id)
+    if (!previous) throw new UserError('This agent session is no longer available.', 404)
     this.store.saveSession({ ...previous, ...source, updatedAt: new Date().toISOString() })
   }
   sync(
@@ -39,13 +40,8 @@ export class AgentSessions {
       'id' | 'repository' | 'urls' | 'status' | 'progress' | 'createdAt'
     > & { error?: string; failureContext?: string },
   ) {
-    try {
-      this.store.getSession(source.id)
-    } catch (error) {
-      if (!(error instanceof UserError) || error.status !== 404) throw error
-      this.start(source.id, kind, source)
-    }
-    this.update(source)
+    const previous = this.store.findSession(source.id)
+    this.store.saveSession({ kind, ...previous, ...source, updatedAt: new Date().toISOString() })
   }
   async run<T>(
     sessionId: string,

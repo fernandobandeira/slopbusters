@@ -120,7 +120,7 @@ afterEach(() => {
 describe('a grounded panel result', () => {
   it('shows how every finding was accounted for, then each verdict with its plan', async () => {
     vi.mocked(call).mockImplementation((route: ApiContract) => {
-      if (route === routes.getPanel) return Promise.resolve(session())
+      if (route === routes.getPanel) return Promise.resolve({ revision: 0, session: session() })
       if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
       return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
     })

@@ -14,7 +14,7 @@ import {
 import { groundingStateSchema } from '../domain/grounding'
 import { gateSchema } from '../domain/panelGate'
 import { layerRouteSchema, localRoundSchema, metadataDraftSchema } from '../domain/panelFix'
-import type { PanelSession } from '../domain/panelSession'
+import { panelSessionSummarySchema, type PanelSession } from '../domain/panelSession'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, pullUrlSchema, repositoryQuery } from './contract'
 import { pullSchema } from './reviewSchemas'
@@ -68,9 +68,10 @@ const session = z.object({
     .optional(),
 }) satisfies z.ZodType<PanelSession>
 
+/** The newest panel that covered a PR, as the little a PR header shows. */
 export const latestPanel = defineRoute('GET', '/panel/latest', {
-  query: repositoryQuery.extend({ url: pullUrlSchema.optional() }),
-  response: z.object({ session: session.nullable() }),
+  query: repositoryQuery.extend({ url: pullUrlSchema }),
+  response: z.object({ session: panelSessionSummarySchema.nullable() }),
 })
 export const savedPanelReviews = defineRoute('GET', '/panel/reviews', {
   query: repositoryQuery,
@@ -106,7 +107,12 @@ export const startPanels = defineRoute('POST', '/panel/batch', {
     skipped: z.array(z.object({ url: z.string(), reason: z.string() })),
   }),
 })
-export const getPanel = defineRoute('GET', '/panel/:id', { params: idParams, response: session })
+/** A panel and its revision; a poll that names the revision it holds gets no session back. */
+export const getPanel = defineRoute('GET', '/panel/:id', {
+  params: idParams,
+  query: z.object({ after: z.coerce.number().int().nonnegative().optional() }),
+  response: z.object({ revision: z.number().int().nonnegative(), session: session.nullable() }),
+})
 export const continuePanel = defineRoute('POST', '/panel/:id/continue', {
   params: idParams,
   response: session,

@@ -214,7 +214,7 @@ export function App() {
     }
   }
   function renderSessionCard(sessionId: string) {
-    return <AgentSessionCard sessionId={sessionId} repository={repository} />
+    return <AgentSessionCard sessionId={sessionId} />
   }
   const myPulls = inbox ? inboxPulls(inbox, 'mine') : []
   const chips = route.kind === 'inbox' ? readInboxChips(location.search) : []

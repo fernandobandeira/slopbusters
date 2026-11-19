@@ -1,5 +1,5 @@
 import { seatReviewer, type PanelReviewer } from '../../../shared/domain/panel'
-import type { PanelSession } from '../../../shared/domain/panelSession'
+import type { PanelReview, PanelSession } from '../../../shared/domain/panelSession'
 import type { Mood, Teammate } from '../../../shared/domain/teammates'
 import { ReviewerFace } from '../../components/ReviewerFace'
 import { reviewerFaceSrc } from '../../lib/reviewerFaces'
@@ -13,6 +13,12 @@ interface StackedFace {
   working: boolean
 }
 
+type StackSession = Pick<PanelSession, 'status' | 'reviewers'> & {
+  pending?: {
+    reviews: { reviewer: PanelReview['reviewer']; advice?: PanelReview['advice'] | boolean }[]
+  }
+}
+
 /**
  * Everyone on the panel at once, overlapping: while it runs, each face shows its reviewer's
  * state; on the summary, they all share the verdict's mood. A reviewer running on both providers
@@ -24,7 +30,7 @@ export function PanelStack({
   teammates,
   compact = false,
 }: {
-  session: PanelSession
+  session: StackSession
   mood: Mood
   teammates?: Teammate[]
   compact?: boolean
@@ -56,7 +62,7 @@ export function PanelStack({
   )
 }
 
-function stackedFaces(session: PanelSession, mood: Mood): StackedFace[] {
+function stackedFaces(session: StackSession, mood: Mood): StackedFace[] {
   const running = session.status === 'running' || session.status === 'partial'
   const reviews = session.pending?.reviews ?? []
   const byReviewer = new Map<string, PanelReviewer[]>()
@@ -77,7 +83,7 @@ function stackedFaces(session: PanelSession, mood: Mood): StackedFace[] {
   })
 }
 
-function stackLabel(faces: StackedFace[], session: PanelSession) {
+function stackLabel(faces: StackedFace[], session: StackSession) {
   const names = faces.map((face) => face.name)
   const list =
     names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}` : names.join('')

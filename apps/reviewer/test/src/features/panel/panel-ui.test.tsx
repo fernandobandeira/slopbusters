@@ -84,7 +84,7 @@ function session(): PanelSession {
 beforeEach(() => {
   localStorage.clear()
   vi.mocked(call).mockImplementation((route: ApiContract) => {
-    if (route === routes.getPanel) return Promise.resolve(session())
+    if (route === routes.getPanel) return Promise.resolve({ revision: 0, session: session() })
     if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
     return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
   })
@@ -148,7 +148,7 @@ describe('a review of commits the PR has moved past', () => {
     const onOpen = vi.fn()
     const focusLine = vi.fn()
     vi.mocked(call).mockImplementation((route: ApiContract) => {
-      if (route === routes.getPanel) return Promise.resolve(session())
+      if (route === routes.getPanel) return Promise.resolve({ revision: 0, session: session() })
       if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
       if (route === routes.startPanel) return Promise.resolve({ ...session(), id: 'panel-2' })
       return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
@@ -195,7 +195,7 @@ describe('a finding without a line', () => {
       raisedBy: ['teammate:avery'],
     })
     vi.mocked(call).mockImplementation((route: ApiContract) => {
-      if (route === routes.getPanel) return Promise.resolve(described)
+      if (route === routes.getPanel) return Promise.resolve({ revision: 0, session: described })
       if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
       return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
     })
@@ -248,7 +248,9 @@ describe('the review panel portrait', () => {
       },
     }
     vi.mocked(call).mockImplementation((route: ApiContract) =>
-      route === routes.getPanel ? Promise.resolve(running) : Promise.resolve({ teammates: [] }),
+      route === routes.getPanel
+        ? Promise.resolve({ revision: 0, session: running })
+        : Promise.resolve({ teammates: [] }),
     )
     render(
       <MemoryRouter>

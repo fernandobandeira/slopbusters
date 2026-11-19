@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as routes from '../../../shared/api'
 import type { ApiContract } from '../../../shared/api/contract'
-import type { PanelSession } from '../../../shared/domain/panelSession'
+import { summarizePanel, type PanelSession } from '../../../shared/domain/panelSession'
 import { Provider } from '../../../shared/domain/types'
 import { PullPanelActions } from '../../../src/app/PullPanelActions'
 import { call } from '../../../src/lib/api'
@@ -42,7 +42,10 @@ function panel(status: PanelSession['status']): PanelSession {
 
 function serve(latest: () => PanelSession | null) {
   vi.mocked(call).mockImplementation((route: ApiContract) => {
-    if (route === routes.latestPanel) return Promise.resolve({ session: latest() })
+    if (route === routes.latestPanel) {
+      const session = latest()
+      return Promise.resolve({ session: session ? summarizePanel(session) : null })
+    }
     if (route === routes.listTeammates) return Promise.resolve({ teammates: [] })
     return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
   })

@@ -21,6 +21,7 @@ import {
   url,
 } from '../../../fixtures/panelJobs'
 import { installSkill } from '../../../fixtures/skills'
+import { fixturePull } from '../../../fixtures/pull'
 import { recordingTurns } from '../../../fixtures/turns'
 
 const harness = panelHarness()
@@ -347,6 +348,22 @@ describe('starting a panel', () => {
     expect((await jobs.start(repository, [url], everyone)).id).toBe(session.id)
     await expect(jobs.start(repository, [url], ['unclebob'])).rejects.toThrow(/Finish or cancel/)
     expect(jobs.cancel(session.id).status).toBe('cancelled')
+  })
+
+  it('allows retrying a completed round without loading any snapshots again', async () => {
+    const loadPull = vi.fn(() => Promise.resolve(fixturePull()))
+    const jobs = panel(recordingTurns(reply).turns, { loadPull })
+    const session = await jobs.start(repository, [url], ['unclebob'])
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
+
+    jobs.retry(session.id)
+    await vi.waitFor(() => {
+      expect(jobs.get(session.id).status).toBe('complete')
+    })
+
+    expect(loadPull).toHaveBeenCalledOnce()
   })
 
   it('marks a panel interrupted by a restart as cancelled', async () => {

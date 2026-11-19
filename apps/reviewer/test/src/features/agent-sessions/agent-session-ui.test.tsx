@@ -74,7 +74,7 @@ it('shows a running model card linked to its session', async () => {
   vi.stubGlobal('fetch', fetchSessions())
   render(
     <MemoryRouter>
-      <AgentSessionCard sessionId="session" repository="example/project" />
+      <AgentSessionCard sessionId="session" />
     </MemoryRouter>,
   )
   const card = await screen.findByRole('link', { name: /^Claude Opus 5.5\s*running$/ })
@@ -213,7 +213,7 @@ it.each(['gandalf', 'linus'] as const)(
         return Promise.resolve(
           Response.json(
             url.includes('/agent-sessions')
-              ? { sessions: [{ ...session, kind }] }
+              ? { ...session, kind }
               : url.includes('/latest')
                 ? { session: job }
                 : job,
@@ -221,9 +221,7 @@ it.each(['gandalf', 'linus'] as const)(
         )
       }),
     )
-    const renderSessionCard = (sessionId: string) => (
-      <AgentSessionCard sessionId={sessionId} repository={root.repository} />
-    )
+    const renderSessionCard = (sessionId: string) => <AgentSessionCard sessionId={sessionId} />
     const companions = {
       gandalf: (
         <GandalfCompanion

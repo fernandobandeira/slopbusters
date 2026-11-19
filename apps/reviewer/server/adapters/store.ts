@@ -21,7 +21,7 @@ import type { PullRequest, ReviewDraft } from '../../shared/domain/types'
 import { withFixedModels, type Preferences } from '../../shared/domain/preferences'
 import { migrateTicketStore, TicketStore } from './ticketStore'
 import { EngineCredentialStore } from './t3Engine/engineCredentials'
-import { migratePanelSessions, PanelSessionStore } from './panelSessionStore'
+import { migratePanelSessions, migratePanelStorage, PanelSessionStore } from './panelSessionStore'
 import { LinusSessionStore, migrateLinusSessions } from './linusSessionStore'
 import { GandalfSessionStore, migrateGandalfSessions } from './gandalfSessionStore'
 import { migrateSplitSessions, SplitSessionStore } from './splitSessionStore'
@@ -60,7 +60,7 @@ export class ReviewerStore {
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
     if (
       typeof version !== 'number' ||
-      ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(version)
+      ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(version)
     ) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
@@ -244,6 +244,7 @@ function migrateFrom(database: DatabaseSync, version: number): void {
   if (version < 10) dropSoloBobReviews(database)
   if (version < 11) migrateStackReviewSessions(database)
   if (version < 12) migrateLayerFixes(database)
+  if (version < 13) migratePanelStorage(database)
 }
 
 /**

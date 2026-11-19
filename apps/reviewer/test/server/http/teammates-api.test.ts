@@ -117,6 +117,45 @@ describe('teammates over HTTP', () => {
 })
 
 describe('the review panel over HTTP', () => {
+  it('recovers an interrupted panel through its summary and sends details only for a newer revision', async () => {
+    const repository = 'review-room/example'
+    const pull = fixturePull()
+    const store = new ReviewerStore({ dataDirectory: data })
+    try {
+      store.panel.save({
+        id: 'interrupted',
+        repository,
+        urls: [pull.url],
+        status: 'running',
+        model: { provider: Provider.claude, model: 'claude-opus-5-5' },
+        reviewers: [{ id: 'unclebob', name: 'Uncle Bob', maxFindings: 10 }],
+        progress: 'Reviewing…',
+        createdAt: '2026-10-01T00:00:00.000Z',
+        results: [],
+      })
+    } finally {
+      store.close()
+    }
+
+    const query = new URLSearchParams({ repository, url: pull.url })
+    const summary = routes.latestPanel.response.parse(
+      await (await send('GET', `/panel/latest?${query.toString()}`)).json(),
+    )
+    expect(summary.session).toMatchObject({ id: 'interrupted', status: 'cancelled' })
+    expect(summary.session).not.toHaveProperty('results')
+
+    const path = '/panel/interrupted'
+    const current = routes.getPanel.response.parse(
+      await (await send('GET', `${path}?after=0`)).json(),
+    )
+    expect(current.session?.status).toBe('cancelled')
+    expect(
+      routes.getPanel.response.parse(
+        await (await send('GET', `${path}?after=${String(current.revision)}`)).json(),
+      ),
+    ).toEqual({ revision: current.revision, session: null })
+  })
+
   it('reviews a PR with a teammate and saves the grounded result for the PR header', async () => {
     vi.mocked(fetchPull).mockResolvedValue(fixturePull())
     installSkill(roots.claude, 'AveryReview')
@@ -131,10 +170,10 @@ describe('the review panel over HTTP', () => {
     expect(started.status).toBe(202)
     const { id } = routes.startPanel.response.parse(await started.json())
     await vi.waitFor(async () => {
-      const session = routes.getPanel.response.parse(
+      const { session } = routes.getPanel.response.parse(
         await (await send('GET', `/panel/${id}`)).json(),
       )
-      expect(session.status).toBe('complete')
+      expect(session?.status).toBe('complete')
     }, 5000)
 
     const saved = routes.savedPanelReviews.response.parse(

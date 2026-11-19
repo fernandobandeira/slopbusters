@@ -3,7 +3,8 @@ import type {
   StructuredTurnRequest,
   StructuredTurns,
 } from '../../../../server/adapters/t3Engine/engineTurns'
-import { activePanels, startEach } from '../../../../server/features/panel/panelBatches'
+import { startEach } from '../../../../server/features/panel/panelBatches'
+import { activePanels } from '../../../../server/features/panel/panelReads'
 import {
   groundingReply,
   isGrounding,

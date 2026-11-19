@@ -52,9 +52,7 @@ export function IssueRoute({ identifier, repository }: { identifier: string; rep
           ticket={ticket}
           repository={ticket.pulls[0]?.repository ?? repository}
           onApplied={reload}
-          renderSessionCard={(session) => (
-            <AgentSessionCard sessionId={session.id} repository={session.repository} />
-          )}
+          renderSessionCard={(session) => <AgentSessionCard sessionId={session.id} />}
         />
       )}
     />

@@ -2,7 +2,8 @@ import { Router } from 'express'
 import * as routes from '../../shared/api/panel'
 import { parsePullUrl } from '../../shared/domain/pullUrl'
 import { UserError } from '../errors'
-import { activePanels, startEach } from '../features/panel/panelBatches'
+import { startEach } from '../features/panel/panelBatches'
+import { activePanels, latestPanel, pollPanel } from '../features/panel/panelReads'
 import type { Services } from '../services'
 import { handle } from './contractRouter'
 
@@ -18,7 +19,7 @@ export function panelRouter({
     reviews: store.panel.reviews(query.repository),
   }))
   handle(router, routes.latestPanel, ({ query }) => ({
-    session: panelJobs.latest(query.repository, query.url) ?? null,
+    session: latestPanel(panelJobs, store.panel, query),
   }))
   handle(router, routes.startPanel, async ({ body }, _request, response) => {
     checkPulls(body.repository, body.urls)
@@ -41,7 +42,9 @@ export function panelRouter({
   handle(router, routes.filePanelFollowUps, ({ params, body }) =>
     panelFollowups.file(params.id, body),
   )
-  handle(router, routes.getPanel, ({ params }) => panelJobs.get(params.id))
+  handle(router, routes.getPanel, ({ params, query }) =>
+    pollPanel(panelJobs, store.panel, params.id, query.after),
+  )
   handle(router, routes.continuePanel, ({ params }, _request, response) => {
     response.status(202)
     return panelJobs.continue(params.id)

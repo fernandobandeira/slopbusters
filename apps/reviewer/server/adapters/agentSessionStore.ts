@@ -40,22 +40,41 @@ export class AgentSessionStore {
         JSON.stringify(agentSessionSchema.parse(session)),
       )
   }
-  getSession(id: string) {
+  findSession(id: string) {
     const row = this.database.prepare('SELECT value FROM agent_sessions WHERE id=?').get(id)
-    if (!row) throw new UserError('This agent session is no longer available.', 404)
-    return { ...agentSessionSchema.parse(JSON.parse(String(row.value))), runs: this.runs(id) }
+    return row && readAgentSession(row.value)
+  }
+  getSession(id: string) {
+    const session = this.findSession(id)
+    if (!session) throw new UserError('This agent session is no longer available.', 404)
+    return { ...session, runs: this.runs(id) }
   }
   list(repository?: string) {
     const rows = repository
       ? this.database
           .prepare(
-            'SELECT id FROM agent_sessions WHERE repository=? ORDER BY updated_at DESC LIMIT ?',
+            'SELECT value FROM agent_sessions WHERE repository=? ORDER BY updated_at DESC LIMIT ?',
           )
           .all(repository, MAX_AGENT_SESSIONS)
       : this.database
-          .prepare('SELECT id FROM agent_sessions ORDER BY updated_at DESC LIMIT ?')
+          .prepare('SELECT value FROM agent_sessions ORDER BY updated_at DESC LIMIT ?')
           .all(MAX_AGENT_SESSIONS)
-    return rows.map((row) => this.getSession(String(row.id)))
+    const sessions = rows.map((row) => readAgentSession(row.value))
+    if (!sessions.length) return []
+    const placeholders = sessions.map(() => '?').join(',')
+    const runs = this.database
+      .prepare(
+        `SELECT session_id, value FROM agent_runs WHERE session_id IN (${placeholders}) ORDER BY rowid`,
+      )
+      .all(...sessions.map((session) => session.id))
+    const bySession = new Map<string, AgentRun[]>()
+    for (const row of runs) {
+      const id = String(row.session_id)
+      const group = bySession.get(id) ?? []
+      group.push(agentRunSchema.parse(JSON.parse(String(row.value))))
+      bySession.set(id, group)
+    }
+    return sessions.map((session) => ({ ...session, runs: bySession.get(session.id) ?? [] }))
   }
   saveRun(run: AgentRun) {
     this.database
@@ -140,6 +159,10 @@ export class AgentSessionStore {
           this.saveRun({ ...run, status: 'cancelled', finishedAt: new Date().toISOString() })
     }
   }
+}
+
+function readAgentSession(saved: unknown) {
+  return agentSessionSchema.parse(JSON.parse(String(saved)))
 }
 
 /** Wrapped failures keep their command output in the cause chain. */

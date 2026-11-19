@@ -6,14 +6,23 @@ export function useAgentSessions(repository?: string) {
   const query = useApiQuery(routes.listAgentSessions, {
     query: { repository: repository || undefined },
   })
-  const { reload } = query
+  useSessionRefresh(query.reload, 1500)
+  return query
+}
+
+export function useAgentSession(id: string, interval: number) {
+  const query = useApiQuery(routes.getAgentSession, { params: { id } })
+  useSessionRefresh(query.reload, interval)
+  return query
+}
+
+function useSessionRefresh(reload: () => void, interval: number) {
   useEffect(() => {
     const timer = setInterval(() => {
       if (!document.hidden) reload()
-    }, 1500)
+    }, interval)
     return () => {
       clearInterval(timer)
     }
-  }, [reload])
-  return query
+  }, [reload, interval])
 }
