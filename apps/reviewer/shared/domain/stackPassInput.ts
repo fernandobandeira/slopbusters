@@ -1,5 +1,6 @@
 import type { EarlierRequest } from './consistency'
 import { leadSource, type ResolvedEntry } from './grounding'
+import { seriousClaim } from './impact'
 import type { PanelResult } from './panelSession'
 import {
   stackEntryId,
@@ -44,7 +45,7 @@ export function passView(input: StackPassInput) {
     layers: input.layers,
     entries: input.entries
       .filter((entry) => !left.has(entry.id))
-      .map(({ rank: _rank, raisedBy: _raisedBy, consequence: _consequence, ...entry }) => entry),
+      .map(({ rank: _rank, raisedBy: _raisedBy, ...entry }) => entry),
   }
 }
 
@@ -91,8 +92,7 @@ function optional(entry: ResolvedEntry): Partial<StackEntry> {
   return {
     ...(entry.kind ? { kind: entry.kind } : {}),
     ...(entry.effort ? { effort: entry.effort } : {}),
-    ...(entry.impact ? { impact: entry.impact } : {}),
-    ...(entry.consequence ? { consequence: entry.consequence } : {}),
+    ...impactOf(entry),
     ...(entry.verdict ? { verdict: entry.verdict } : {}),
     ...(entry.plan ? { plan: entry.plan } : {}),
     ...(entry.question ? { question: entry.question } : {}),
@@ -103,6 +103,18 @@ function optional(entry: ResolvedEntry): Partial<StackEntry> {
       ? { destination: { pull: destination.pull, field: destination.field } }
       : {}),
   }
+}
+
+/** What is at stake: the serious consequence either model claims, or the entry's own impact. */
+function impactOf(entry: ResolvedEntry): Partial<StackEntry> {
+  const claim = seriousClaim(entry)
+  if (claim)
+    return {
+      impact: claim.impact,
+      ...(claim.consequence ? { consequence: claim.consequence } : {}),
+      ...(claim.contested ? { impactContested: true } : {}),
+    }
+  return entry.impact ? { impact: entry.impact } : {}
 }
 
 /** The consistency check's marks, with the earlier request resolved and ids made stack-wide. */

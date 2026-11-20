@@ -71,7 +71,7 @@ describe('the panel review copied for an agent', () => {
 
     expect(brief).toContain(pull.url)
     expect(brief).toContain(`Reviewed head \`${pull.headSha}\``)
-    expect(brief).toContain('## The fixes the author chose')
+    expect(brief).toContain('## Default fixes')
     expect(brief).toContain('### 1. Reuse the audit helper')
     expect(brief).toContain('Plan: Plan for g1.')
     expect(brief).toContain('Why: Reason for g1.')
@@ -241,6 +241,35 @@ describe('serious consequences in the agent brief', () => {
   })
 })
 
+describe('a serious claim the models disagree on', () => {
+  it('stays in the serious section with what the last list held instead', () => {
+    const claimed = entry('g1', 'f1', {
+      impact: 'money',
+      consequence: 'Funds reserve twice.',
+    })
+    const brief = panelBriefMarkdown(
+      result([
+        entry('g1', 'f1', {
+          verdict: 'notTrue',
+          plan: undefined,
+          impact: 'behavior',
+          reason: 'The lock serializes it.',
+          resolution: 'disputed',
+          other: { role: 'primary', entries: [claimed], objections: [] },
+        }),
+      ]),
+      reviewers,
+    )
+    const serious = brief.slice(brief.indexOf('## Serious consequences'))
+
+    expect(serious).toContain('Consequence: Funds reserve twice.')
+    expect(serious).toContain(
+      'Contested: The other model claims this; the last list held Not true, user-visible behavior: The lock serializes it.',
+    )
+    expect(serious).toContain('Where it stands: needs your decision below.')
+  })
+})
+
 describe('predicted reviewer comments in the agent brief', () => {
   it('lists them apart from rejections, with the change and the reply', () => {
     const brief = panelBriefMarkdown(
@@ -282,7 +311,7 @@ describe('predicted reviewer comments in the agent brief', () => {
       reviewers,
     )
     const fixes = brief.slice(
-      brief.indexOf('## The fixes the author chose'),
+      brief.indexOf('## Default fixes'),
       brief.indexOf('## Predicted reviewer comments'),
     )
     expect(fixes).toContain('Reuse the audit helper')

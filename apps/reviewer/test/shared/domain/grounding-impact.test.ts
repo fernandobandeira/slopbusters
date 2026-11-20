@@ -5,6 +5,8 @@ import {
   selectCandidates,
   type GroundedEntry,
 } from '../../../shared/domain/grounding'
+import { groundedAdvice } from '../../../shared/domain/groundingResult'
+import { Provider } from '../../../shared/domain/types'
 import { fixturePanelAdvice, fixturePanelFinding } from '../../fixtures/panel'
 
 const candidates = selectCandidates(
@@ -110,5 +112,31 @@ describe('a grounded reply with what is at stake', () => {
     ).toBeUndefined()
     // A provider's structured reply has to hold this; real replies are a fraction of it.
     expect(JSON.stringify(reply).length).toBeLessThan(110_000)
+  })
+})
+
+describe('a round with only predicted comments', () => {
+  it('asks for no changes, though it shows them', () => {
+    const advice = groundedAdvice(
+      {
+        budget: 40,
+        candidates,
+        roles: { primary: { provider: Provider.codex, model: 'gpt' } },
+        turns: [],
+        entries: [],
+        positions: {},
+        resolved: [
+          {
+            ...entry('f1', { verdict: 'predicted', impact: 'preference' }),
+            resolution: 'agreed',
+            raisedBy: ['teammate:avery'],
+          },
+        ],
+      },
+      { summary: 'Only predictions.', limitations: [] },
+    )
+
+    expect(advice.findings).toHaveLength(1)
+    expect(advice.verdict).toBe('clean')
   })
 })

@@ -1,4 +1,5 @@
 import { triage } from './triage'
+import { seriousClaim } from './impact'
 import {
   entryRevision,
   groundingVerdictLabels,
@@ -161,7 +162,12 @@ export function groundedAdvice(
     .flatMap((entry) => asFinding(state, entry))
   const setAside = resolved.filter(settled).flatMap((entry) => asSetAside(state, entry))
   const disputed = resolved.filter((entry) => entry.resolution === 'disputed')
-  const open = findings.length > 0
+  // Predicted comments and what triage leaves for later ask for no change, unless serious.
+  const open = resolved.some(
+    (entry) =>
+      !settled(entry) &&
+      (['fix', 'ask'].includes(triage(entry).disposition) || seriousClaim(entry) !== undefined),
+  )
   return judgeAdviceSchema.parse({
     verdict: open ? 'changes' : limitations.length ? 'uncertain' : 'clean',
     summary: clip(

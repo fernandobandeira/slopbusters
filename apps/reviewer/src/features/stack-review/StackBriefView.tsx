@@ -1,5 +1,6 @@
 import { LayerFixWorker } from './LayerFixWorker'
-import { groundingImpactLabels, groundingKindLabels } from '../../../shared/domain/grounding'
+import { groundingKindLabels } from '../../../shared/domain/grounding'
+import { groundingImpactLabels } from '../../../shared/domain/impact'
 import { short, type BriefFix, type StackBrief } from '../../../shared/domain/stackBrief'
 import { stackBriefMarkdown } from '../../../shared/domain/stackBriefMarkdown'
 import { CopyButton } from '../../components/CopyButton'

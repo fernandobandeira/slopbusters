@@ -1,6 +1,5 @@
 import { dispositionLabels, triage } from '../../../shared/domain/triage'
 import {
-  groundingImpactLabels,
   groundingKindLabels,
   groundingOriginLabels,
   groundingResolutionLabels,
@@ -10,6 +9,7 @@ import {
   type GroundingState,
   type ResolvedEntry,
 } from '../../../shared/domain/grounding'
+import { groundingImpactLabels } from '../../../shared/domain/impact'
 import type { PanelReviewer } from '../../../shared/domain/panel'
 import type { PanelResult } from '../../../shared/domain/panelSession'
 import { FindingText } from '../../components/FindingText'

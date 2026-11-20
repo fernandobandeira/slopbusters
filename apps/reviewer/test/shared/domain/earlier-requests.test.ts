@@ -109,6 +109,7 @@ describe('what earlier rounds asked for, from a stack review built on that round
           plan: 'Delete the field.',
           kind: 'simplification',
           effort: 'small',
+          impact: 'behavior',
           layer: 201,
           from: ['#203/g5'],
         },

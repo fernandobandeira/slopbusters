@@ -27,7 +27,7 @@ export function stackEntry(
     resolution: 'agreed',
     disposition: 'fix',
     rank: 2,
-    triage: 'Corrects a confirmed defect.',
+    triage: 'Both models traced this defect in the code.',
     followUp: false,
     reason: 'The code shows it.',
     plan: `Fix ${id}.`,

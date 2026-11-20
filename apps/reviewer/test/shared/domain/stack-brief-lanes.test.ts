@@ -79,3 +79,52 @@ describe('serious consequences in the stack brief', () => {
     expect(serious[0]?.standing).toContain('merged into #201/g1')
   })
 })
+
+describe('serious findings only the whole stack shows', () => {
+  it('lists a serious finding only the whole stack shows', () => {
+    const session = finishedStackReview([stackEntry(201, 'g1'), stackEntry(203, 'g2')], {
+      ...emptyResult,
+      derived: [
+        {
+          id: 'd1',
+          title: 'Guard the shared writer',
+          plan: 'Check closure in the reservation writer.',
+          kind: 'defect',
+          effort: 'medium',
+          impact: 'money',
+          consequence: 'A reservation through the shared writer skips the closure guard.',
+          layer: 201,
+          from: ['#201/g1', '#203/g2'],
+        },
+      ],
+    })
+
+    expect(stackBrief(session)?.serious.map((item) => [item.id, item.standing])).toEqual([
+      ['d1', 'a fix on PR #201.'],
+    ])
+  })
+
+  it('puts a serious derived edge case to the author, where the lane points', () => {
+    const session = finishedStackReview([stackEntry(201, 'g1'), stackEntry(203, 'g2')], {
+      ...emptyResult,
+      derived: [
+        {
+          id: 'd1',
+          title: 'Retry after rollback double-sends',
+          plan: 'Send after commit.',
+          kind: 'edgeCase',
+          effort: 'medium',
+          impact: 'contract',
+          consequence: 'A rollback after a retry sends the webhook twice.',
+          layer: 201,
+          from: ['#201/g1', '#203/g2'],
+        },
+      ],
+    })
+
+    const brief = stackBrief(session)
+
+    expect(brief?.decisions.map((item) => item.id)).toContain('d1')
+    expect(brief?.serious[0]?.standing).toContain('needs your decision')
+  })
+})

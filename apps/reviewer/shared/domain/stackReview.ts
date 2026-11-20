@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { stableId } from './findings'
 import {
   groundingEfforts,
-  groundingImpacts,
   groundingKinds,
   groundingOrigins,
   groundingResolutions,
@@ -10,6 +9,7 @@ import {
   groundingVerdicts,
   type GroundingRole,
 } from './grounding'
+import { groundingImpacts, isSerious } from './impact'
 import { earlierRequestSchema } from './consistency'
 import { panelSeatRequestSchema } from './panel'
 import { organizationSchema } from './preferences'
@@ -55,6 +55,8 @@ export const stackEntrySchema = z.object({
   effort: z.enum(groundingEfforts).optional(),
   impact: z.enum(groundingImpacts).optional(),
   consequence: z.string().optional(),
+  /** Only the other model claims the serious impact; the last list rejected or lowered it. */
+  impactContested: z.boolean().optional(),
   verdict: z.enum(groundingVerdicts).optional(),
   resolution: z.enum(groundingResolutions),
   disposition: z.enum(['fix', 'skip', 'ask', 'prepare']),
@@ -149,6 +151,9 @@ export const crossLayerResultSchema = z
             plan: reasonSchema,
             kind: z.enum(groundingKinds),
             effort: z.enum(groundingEfforts),
+            /** Absent only on passes from before impacts were recorded. */
+            impact: z.enum(groundingImpacts).optional(),
+            consequence: z.string().min(1).max(300).optional(),
             layer: pullNumberSchema,
             from: z.array(entryIdSchema).max(20),
           })
@@ -305,6 +310,11 @@ function derivedProblems(turn: CrossLayerResult, check: ReturnType<typeof relati
       check.problem(`derived: ${item.id} needs the entries it was derived from in from.`)
     check.ids(`derived ${item.id}`, item.from)
     check.layer('derived', item.layer)
+    if (!item.impact) check.problem(`derived: ${item.id} needs impact, what is at stake.`)
+    else if (isSerious(item) && !item.consequence)
+      check.problem(
+        `derived: ${item.id} has a ${item.impact} impact and needs consequence: what triggers it, what goes wrong and who notices.`,
+      )
   }
 }
 

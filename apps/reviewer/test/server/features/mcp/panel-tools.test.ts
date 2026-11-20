@@ -33,7 +33,7 @@ describe('the panel for a coding agent', () => {
     expect(started).toContain('Call get_panel_review')
     expect(harness.jobs?.latest(repository, url)?.urls).toEqual([url])
     expect(review).toContain('The author has not chosen fixes in Slopbusters yet.')
-    expect(review).toContain('## The fixes the author chose')
+    expect(review).toContain('## Default fixes')
     expect(review).toContain('Plan: Reuse the audit helper.')
   })
 

@@ -98,7 +98,7 @@ describe('a round that would undo what an earlier round asked for', () => {
       ['g2', 'ask', 'Would undo a change an earlier round asked for.'],
       ['g3', 'ask', 'Another finding asks for the opposite change.'],
       ['g4', 'ask', 'Another finding asks for the opposite change.'],
-      ['g5', 'fix', 'Corrects a confirmed defect.'],
+      ['g5', 'fix', 'Both models traced this defect in the code.'],
     ])
     expect(resolved.every((entry) => entry.id === 'g5' || triage(entry).rank === 0)).toBe(true)
     expect(
@@ -111,7 +111,7 @@ describe('a round that would undo what an earlier round asked for', () => {
   it('briefs each as one decision naming what it is against, and none as a fix', () => {
     const brief = panelBriefMarkdown(result, [])
     const chosen = brief.slice(
-      brief.indexOf('## The fixes the author chose'),
+      brief.indexOf('## Default fixes'),
       brief.indexOf('## Needs your decision'),
     )
     const decisions = brief.slice(brief.indexOf('## Needs your decision'))

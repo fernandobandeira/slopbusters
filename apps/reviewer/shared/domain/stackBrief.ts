@@ -1,4 +1,5 @@
-import { isSerious, type ResolvedEntry } from './grounding'
+import { type ResolvedEntry } from './grounding'
+import { isSerious } from './impact'
 import type {
   CrossLayerResult,
   StackEntry,
@@ -62,6 +63,8 @@ export interface BriefSerious {
   title: string
   impact: NonNullable<StackEntry['impact']>
   consequence: string
+  /** Only one model claims it; the other rejected or lowered it. */
+  contested: boolean
   /** Where it is in this brief: a fix, a decision, a reply, a follow-up, or set aside and why. */
   standing: string
 }
@@ -116,7 +119,11 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
   return {
     layers,
     ...(pass?.turns.at(-1)?.summary ? { summary: pass.turns.at(-1)?.summary } : {}),
-    serious: seriousEntries(input.entries, { plan, doubts, result }),
+    serious: seriousEntries([...input.entries, ...derived.map(({ entry }) => entry)], {
+      plan,
+      doubts,
+      result,
+    }),
     decisions: [
       // A question stays even when a chain would make it unnecessary: that change is not settled.
       ...entryDecisions(
@@ -126,7 +133,10 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
               entry.disposition === 'ask' || (entry.disposition === 'fix' && doubts.has(entry.id)),
           ),
           ...derived
-            .filter(({ item, entry }) => entry.disposition === 'fix' && doubts.has(item.id))
+            .filter(
+              ({ item, entry }) =>
+                entry.disposition === 'ask' || (entry.disposition === 'fix' && doubts.has(item.id)),
+            )
             .map(({ entry }) => entry),
         ],
         { doubts, contested, entry: plan.entry },
@@ -152,17 +162,7 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
         }),
       }))
       .filter((group) => group.items.length),
-    predictions: current
-      .filter((entry) => entry.disposition === 'prepare')
-      .sort((a, b) => a.layer - b.layer || a.rank - b.rank)
-      .map((entry) => ({
-        id: entry.id,
-        layer: entry.layer,
-        title: entry.title,
-        ...(entry.plan ? { plan: entry.plan } : {}),
-        ...(entry.effort ? { effort: entry.effort } : {}),
-        reply: entry.reason,
-      })),
+    predictions: predictionsOf(current),
     chains: result.chains.map((chain) => ({
       cause: { id: chain.cause, title: plan.title(chain.cause) },
       reason: chain.reason,
@@ -179,6 +179,21 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
     stale: staleEntries(input, layers),
     limitations: [...input.limitations, ...passLimitations(session)],
   }
+}
+
+/** Predicted reviewer comments, bottom to top, each with the reply to give. */
+function predictionsOf(entries: readonly StackEntry[]): BriefPrediction[] {
+  return entries
+    .filter((entry) => entry.disposition === 'prepare')
+    .sort((a, b) => a.layer - b.layer || a.rank - b.rank)
+    .map((entry) => ({
+      id: entry.id,
+      layer: entry.layer,
+      title: entry.title,
+      ...(entry.plan ? { plan: entry.plan } : {}),
+      ...(entry.effort ? { effort: entry.effort } : {}),
+      reply: entry.reason,
+    }))
 }
 
 interface Standing {
@@ -198,6 +213,7 @@ function seriousEntries(entries: readonly StackEntry[], standing: Standing): Bri
     title: entry.title,
     impact: entry.impact,
     consequence: entry.consequence ?? entry.reason,
+    contested: entry.impactContested ?? false,
     standing: seriousStanding(entry, standing),
   }))
 }
@@ -209,7 +225,8 @@ function seriousStanding(entry: StackEntry, { plan, doubts, result }: Standing):
   if (owner && plan.merged(entry.id))
     return `merged into ${owner} (${plan.title(owner)}); that entry carries the change, and this consequence with it.`
   const cause = result.chains.find((chain) => chain.unnecessary.includes(entry.id))?.cause
-  if (cause) return `made unnecessary by ${cause} (${plan.title(cause)}).`
+  if (cause)
+    return `would be unnecessary once ${cause} (${plan.title(cause)}) is applied and checked.`
   if (entry.followUp) return `left for a follow-up. ${entry.triage}`
   if (entry.disposition === 'ask' || doubts.has(entry.id))
     return `needs your decision. ${entry.triage}`
@@ -348,6 +365,8 @@ function derivedEntry(item: CrossLayerResult['derived'][number]): StackEntry {
     origin: 'change',
     kind: item.kind,
     effort: item.effort,
+    ...(item.impact ? { impact: item.impact } : {}),
+    ...(item.consequence ? { consequence: item.consequence } : {}),
     destination: { kind: 'code', pull: item.layer },
     resolution: 'agreed',
     raisedBy: ['stack'],
@@ -359,6 +378,8 @@ function derivedEntry(item: CrossLayerResult['derived'][number]): StackEntry {
     title: item.title,
     kind: item.kind,
     effort: item.effort,
+    ...(item.impact ? { impact: item.impact } : {}),
+    ...(item.consequence ? { consequence: item.consequence } : {}),
     verdict: 'legit',
     resolution: 'agreed',
     disposition: decided.disposition,

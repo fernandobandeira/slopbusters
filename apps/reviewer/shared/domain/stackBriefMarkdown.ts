@@ -1,4 +1,5 @@
-import { groundingImpactLabels, groundingKindLabels, settleSerious } from './grounding'
+import { groundingKindLabels } from './grounding'
+import { groundingImpactLabels, settleSerious } from './impact'
 import {
   short,
   type BriefFix,
@@ -95,6 +96,9 @@ function seriousLines(item: BriefSerious): string {
   return [
     `- **${item.title}** (${item.id}, PR #${String(item.layer)}) · ${groundingImpactLabels[item.impact]}`,
     `  Consequence: ${item.consequence}`,
+    ...(item.contested
+      ? ['  Contested: one model claims this; the other rejected or lowered it.']
+      : []),
     `  Where it stands: ${item.standing}`,
   ].join('\n')
 }

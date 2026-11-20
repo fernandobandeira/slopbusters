@@ -1,4 +1,5 @@
-import { groundingImpactLabels, isSerious, type ResolvedEntry } from './grounding'
+import { type ResolvedEntry } from './grounding'
+import { groundingImpactLabels, seriousClaim } from './impact'
 import { seatReviewer } from './panel'
 
 /** `prepare`: the reviewer will likely ask, the models would not; have the reply ready. */
@@ -103,10 +104,10 @@ function question(entry: ResolvedEntry): Decision | undefined {
 
 const fixReasons: Record<NonNullable<ResolvedEntry['kind']>, string> = {
   simplification: 'Removes code nothing needs.',
-  defect: 'Corrects a confirmed defect.',
+  defect: 'Both models traced this defect in the code.',
   rule: 'Follows a written repository rule or established convention.',
   wording: 'Clarifies naming or wording.',
-  product: 'Corrects confirmed product behavior.',
+  product: 'Both models traced this product behavior in the code.',
   test: 'Changes tests only.',
   edgeCase: 'Covers a case that needs several things to go wrong.',
 }
@@ -119,7 +120,7 @@ function worth(entry: ResolvedEntry): Decision {
   if (entry.plan && entry.effort === 'small' && reviewers(entry) >= 2)
     return fix(entry, 'Costs little and several reviewers raised it.')
   if (verdict === 'tasteSkip') return skip('A preference with no demonstrated cost.')
-  if (kind === 'edgeCase' && isSerious(entry))
+  if (kind === 'edgeCase' && seriousClaim(entry))
     return {
       disposition: 'ask',
       rank: 0,
@@ -139,17 +140,18 @@ function reviewers(entry: ResolvedEntry): number {
 
 /** A fix with a serious consequence leads, and says what it protects. */
 function fix(entry: ResolvedEntry, reason: string): Decision {
-  if (isSerious(entry))
+  const serious = seriousClaim(entry)
+  if (serious)
     return {
       disposition: 'fix',
       rank: 0,
-      reason: `${reason} At stake: ${groundingImpactLabels[entry.impact].toLowerCase()}.`,
+      reason: `${reason} At stake: ${groundingImpactLabels[serious.impact].toLowerCase()}.`,
     }
   return { disposition: 'fix', rank: 1 + fixRank(entry.kind), reason }
 }
 
 function ask(entry: ResolvedEntry, reason: string): Decision {
-  const rank = isSerious(entry) ? 0 : entry.kind === 'simplification' ? 1 : 2
+  const rank = seriousClaim(entry) ? 0 : entry.kind === 'simplification' ? 1 : 2
   return { disposition: 'ask', rank, reason }
 }
 

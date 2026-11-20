@@ -2,17 +2,15 @@ import { triage, type Disposition } from './triage'
 import { anchorLabel } from './anchors'
 import type { EarlierRequest } from './consistency'
 import {
-  groundingImpactLabels,
   groundingKindLabels,
   groundingOriginLabels,
-  isSerious,
-  settleSerious,
   groundingResolutionLabels,
   groundingVerdictLabels,
   leadSource,
   type GroundingCandidate,
   type ResolvedEntry,
 } from './grounding'
+import { groundingImpactLabels, seriousClaim, settleSerious } from './impact'
 import type { JudgedFinding, PanelReviewer } from './panel'
 import { gateItems, type GateItem, type GateRoute } from './panelGate'
 import { panelFindingMarkdown, panelReviewMarkdown } from './panelMarkdown'
@@ -106,13 +104,13 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
       !triage(item.entry).followUp,
   )
   return [
-    `Panel review of ${pullName(result.pull)}, "${result.pull.title}" (${result.pull.url}). Reviewers raised findings, two models grounded them against the code, and the author chose which to fix.`,
+    `Panel review of ${pullName(result.pull)}, "${result.pull.title}" (${result.pull.url}). Reviewers raised findings, two models grounded them against the code, and ${result.gate ? 'the author chose which to fix' : 'the panel selected fixes by default'}.`,
     revisionHeader(result),
     `## Verdict\n\n${result.advice.summary}`,
     seriousSection(items, chosen, candidates),
     chosen.length
-      ? `## Rules\n\n${fixRules.join('\n')}\n\n## The fixes the author chose\n\n${chosen.map((item, index) => withRoute(fixSection(item, index, candidates), item.route)).join('\n\n')}`
-      : '## The fixes the author chose\n\nNone yet. Treat the findings below as context, and ask before changing code.',
+      ? `## Rules\n\n${fixRules.join('\n')}\n\n${fixesHeading(result)}\n\n${chosen.map((item, index) => withRoute(fixSection(item, index, candidates), item.route)).join('\n\n')}`
+      : `${fixesHeading(result)}\n\nNone yet. Treat the findings below as context, and ask before changing code.`,
     section(
       'Needs your decision',
       'Do not act on these until the author answers.',
@@ -168,22 +166,31 @@ function seriousSection(
   chosen: readonly GateItem[],
   candidates: readonly GroundingCandidate[],
 ): string {
-  const serious = items.filter((item) => isSerious(item.entry))
   return section(
     'Serious consequences',
     settleSerious,
-    serious.map((item) => {
-      const { entry } = item
-      const lead = leadSource(entry, candidates)
+    items.flatMap((item) => {
+      const claim = seriousClaim(item.entry)
+      if (!claim) return []
+      const lead = leadSource(item.entry, candidates)
       const where = lead ? ` (\`${anchorLabel(lead.finding.anchor)}\`)` : ''
-      const impact = entry.impact ? ` · ${groundingImpactLabels[entry.impact]}` : ''
       return [
-        `- **${lead?.finding.title ?? entry.id}**${where}${impact}`,
-        `  Consequence: ${entry.consequence ?? entry.reason}`,
-        `  Where it stands: ${standing(item, chosen)}`,
-      ].join('\n')
+        [
+          `- **${lead?.finding.title ?? item.entry.id}**${where} · ${groundingImpactLabels[claim.impact]}`,
+          `  Consequence: ${claim.consequence ?? item.entry.reason}`,
+          ...(claim.contested ? [`  Contested: ${contested(item.entry)}`] : []),
+          `  Where it stands: ${standing(item, chosen)}`,
+        ].join('\n'),
+      ]
     }),
   )
+}
+
+/** What the last list held instead of a serious claim only the other model makes. */
+function contested(entry: ResolvedEntry): string {
+  const verdict = entry.verdict ? groundingVerdictLabels[entry.verdict] : 'no verdict'
+  const impact = entry.impact ? `, ${groundingImpactLabels[entry.impact].toLowerCase()}` : ''
+  return `The other model claims this; the last list held ${verdict}${impact}: ${entry.reason}`
 }
 
 function standing(item: GateItem, chosen: readonly GateItem[]): string {
@@ -196,6 +203,13 @@ function standing(item: GateItem, chosen: readonly GateItem[]): string {
   if (decision.disposition === 'prepare') return `a predicted reviewer comment. ${decision.reason}`
   if (decision.disposition === 'skip') return `not chosen. ${decision.reason}`
   return 'not chosen by the author.'
+}
+
+/** Whose selection the fixes are: the author's once they saved one, the panel's default before. */
+function fixesHeading(result: PanelResult): string {
+  return result.gate
+    ? '## The fixes the author chose'
+    : "## Default fixes\n\nThe panel's default selection; the author has not chosen yet."
 }
 
 /** Each decision for the author, with findings that ask for opposite changes as one item. */

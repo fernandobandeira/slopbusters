@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { consistencySchema, earlierRequestsSchema } from './consistency'
 import { stableId } from './findings'
 import { panelFindingSchema, seatIdSchema, type PanelFinding } from './panel'
+import { groundingImpacts, isSerious } from './impact'
 import { organizationSchema, type ModelPair, type OrganizationPreferences } from './preferences'
 
 /**
@@ -78,58 +79,6 @@ export const groundingKindLabels: Record<GroundingKind, string> = {
   product: 'Product question',
   wording: 'Naming or wording',
 }
-
-/**
- * What is at stake when the finding holds, apart from what it asks for: kind says a change is a
- * defect, impact says whether that defect moves money or only mis-renders a label. The first five
- * are serious: each needs a decision before anything else, and its consequence written out.
- */
-export const groundingImpacts = [
-  'money',
-  'data',
-  'contract',
-  'operations',
-  'security',
-  'behavior',
-  'maintainability',
-  'preference',
-] as const
-export type GroundingImpact = (typeof groundingImpacts)[number]
-export const groundingImpactLabels: Record<GroundingImpact, string> = {
-  money: 'Money or ledger',
-  data: 'Data integrity',
-  contract: 'Public contract',
-  operations: 'Operations',
-  security: 'Security',
-  behavior: 'User-visible behavior',
-  maintainability: 'Maintainability',
-  preference: 'Preference',
-}
-const seriousImpacts: ReadonlySet<GroundingImpact> = new Set([
-  'money',
-  'data',
-  'contract',
-  'operations',
-  'security',
-])
-
-/**
- * An entry whose consequence is serious and that the models have not set aside as untrue, settled
- * elsewhere or a matter of taste.
- */
-export function isSerious<T extends Pick<GroundedEntry, 'impact' | 'verdict'>>(
-  entry: T,
-): entry is T & { impact: GroundingImpact } {
-  return (
-    !!entry.impact &&
-    seriousImpacts.has(entry.impact) &&
-    !['notTrue', 'handledUpstack', 'tasteSkip'].includes(entry.verdict ?? '')
-  )
-}
-
-/** What settling a serious entry means, for every brief that lists them. */
-export const settleSerious =
-  'Settle each of these before any other work. One is settled when it is fixed and checked, refuted with evidence, accepted as a risk by the author with a reason, or assigned for investigation with an owner and the check that would close it. Two models reading the code do not prove a race or an ordering problem; a test that forces the order does.'
 
 /** How much the change costs: a few lines, one focused change, or work across files or layers. */
 export const groundingEfforts = ['small', 'medium', 'large'] as const
