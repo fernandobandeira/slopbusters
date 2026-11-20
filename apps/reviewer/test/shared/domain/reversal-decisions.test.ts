@@ -53,6 +53,7 @@ const resolved = markEntries(
       verdict: 'predicted',
       kind: 'simplification',
       effort: 'small',
+      impact: 'behavior',
       plan: 'Remove the access level and define two booleans on each method.',
       reason: 'One field keeps the impossible combination out.',
       raisedBy: ['teammate:quinn'],
@@ -60,6 +61,7 @@ const resolved = markEntries(
     groundedEntry('g2', 'f2', {
       kind: 'rule',
       effort: 'small',
+      impact: 'behavior',
       plan: 'Read the account through the accounts service, batched per page.',
       raisedBy: ['teammate:quinn', 'terminator'],
     }),

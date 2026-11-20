@@ -91,6 +91,8 @@ function optional(entry: ResolvedEntry): Partial<StackEntry> {
   return {
     ...(entry.kind ? { kind: entry.kind } : {}),
     ...(entry.effort ? { effort: entry.effort } : {}),
+    ...(entry.impact ? { impact: entry.impact } : {}),
+    ...(entry.consequence ? { consequence: entry.consequence } : {}),
     ...(entry.verdict ? { verdict: entry.verdict } : {}),
     ...(entry.plan ? { plan: entry.plan } : {}),
     ...(entry.question ? { question: entry.question } : {}),

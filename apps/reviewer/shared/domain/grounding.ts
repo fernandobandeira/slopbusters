@@ -79,6 +79,50 @@ export const groundingKindLabels: Record<GroundingKind, string> = {
   wording: 'Naming or wording',
 }
 
+/**
+ * What is at stake when the finding holds, apart from what it asks for: kind says a change is a
+ * defect, impact says whether that defect moves money or only mis-renders a label. The first five
+ * are serious: each needs a decision before anything else, and its consequence written out.
+ */
+export const groundingImpacts = [
+  'money',
+  'data',
+  'contract',
+  'operations',
+  'security',
+  'behavior',
+  'maintainability',
+  'preference',
+] as const
+export type GroundingImpact = (typeof groundingImpacts)[number]
+export const groundingImpactLabels: Record<GroundingImpact, string> = {
+  money: 'Money or ledger',
+  data: 'Data integrity',
+  contract: 'Public contract',
+  operations: 'Operations',
+  security: 'Security',
+  behavior: 'User-visible behavior',
+  maintainability: 'Maintainability',
+  preference: 'Preference',
+}
+const seriousImpacts: ReadonlySet<GroundingImpact> = new Set([
+  'money',
+  'data',
+  'contract',
+  'operations',
+  'security',
+])
+
+/** An entry whose consequence is serious and that neither model has set aside as untrue or settled. */
+export function isSerious(entry: Pick<GroundedEntry, 'impact' | 'verdict'>): boolean {
+  return (
+    !!entry.impact &&
+    seriousImpacts.has(entry.impact) &&
+    entry.verdict !== 'notTrue' &&
+    entry.verdict !== 'handledUpstack'
+  )
+}
+
 /** How much the change costs: a few lines, one focused change, or work across files or layers. */
 export const groundingEfforts = ['small', 'medium', 'large'] as const
 
@@ -140,6 +184,13 @@ export const groundedEntrySchema = z
     /** Absent only on lists grounded before kinds and efforts were recorded. */
     kind: z.enum(groundingKinds).optional(),
     effort: z.enum(groundingEfforts).optional(),
+    /** Absent only on lists grounded before impacts were recorded. */
+    impact: z.enum(groundingImpacts).optional(),
+    /**
+     * Required for a serious impact: what triggers it, what goes wrong and who notices, in one
+     * sentence.
+     */
+    consequence: z.string().min(1).max(300).optional(),
     /** Required for `handledUpstack`: the stack layer whose change settles the finding. */
     settledBy: z.object({ pull: z.number().int().positive() }).strict().optional(),
     destination: destinationSchema,
@@ -308,6 +359,7 @@ function entryProblems(
     )
   if (!entry.kind) problems.push('say in kind what the finding asks for.')
   if (!entry.effort) problems.push('say in effort whether the change is small, medium or large.')
+  problems.push(...impactProblems(entry))
   if (
     entry.kind === 'simplification' &&
     (entry.verdict === 'tasteSkip' || entry.verdict === 'notTrue')
@@ -372,6 +424,19 @@ function upstackProblems(
   if (!entry.evidence.length)
     problems.push('handledUpstack needs evidence you read in that layer, as path:line.')
   return problems
+}
+
+/** Every entry says what is at stake; a serious one says how it happens and who notices. */
+function impactProblems(entry: GroundedEntry): string[] {
+  if (!entry.impact) return ['say in impact what is at stake if the finding holds.']
+  const serious = seriousImpacts.has(entry.impact)
+  if (serious && !entry.consequence)
+    return [
+      `a ${entry.impact} impact needs consequence: what triggers it, what goes wrong and who notices.`,
+    ]
+  if (!serious && entry.consequence)
+    return ['consequence is only for a money, data, contract, operations or security impact.']
+  return []
 }
 
 /** What each verdict requires: a plan, a question, or what is missing when there is none. */

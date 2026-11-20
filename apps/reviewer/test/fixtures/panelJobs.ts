@@ -105,6 +105,7 @@ export function groundingReply(request: StructuredTurnRequest<unknown>) {
         origin: 'change',
         kind: 'defect',
         effort: 'small',
+        impact: 'behavior',
         destination: { kind: 'code', pull: fixturePull().number },
       },
     ],

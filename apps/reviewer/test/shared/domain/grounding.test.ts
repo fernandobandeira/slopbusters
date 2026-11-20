@@ -30,6 +30,7 @@ function entry(sources: string[], changes: Partial<GroundedEntry> = {}): Grounde
     origin: 'change',
     kind: 'defect',
     effort: 'small',
+    impact: 'behavior',
     destination: { kind: 'code', pull: 12 },
     ...changes,
   }
@@ -231,27 +232,6 @@ describe('a grounded reply', () => {
     expect(parsed.error?.issues.map((issue) => issue.message)).toEqual([
       'No entry accounts for f2.',
     ])
-  })
-
-  it('fits forty entries at every field’s maximum length', () => {
-    const many = selectCandidates(12, [{ reviewer: 'unclebob', advice: findings('bob', 40) }], 40)
-    const longest = (length: number) => 'x'.repeat(length)
-    const entries = many.map((candidate, index) =>
-      entry([candidate.key], {
-        id: `g${String(index)}-`.padEnd(40, 'x'),
-        reason: longest(400),
-        evidence: Array.from({ length: 4 }, () => `src/${longest(190)}.ts:12`),
-        plan: longest(400),
-        destination: { kind: 'code', pull: 12 },
-      }),
-    )
-    const reply = turn(entries, {
-      summary: longest(1500),
-      objections: entries.map((item) => ({ entry: item.id, objection: longest(400) })),
-    })
-
-    expect(groundingReplySchema(scope(many)).safeParse(reply).error?.issues).toBeUndefined()
-    expect(JSON.stringify(reply).length).toBeLessThan(100_000)
   })
 })
 

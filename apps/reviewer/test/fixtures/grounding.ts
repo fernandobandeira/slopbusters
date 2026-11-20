@@ -38,6 +38,7 @@ export function groundedEntry(
     origin: 'change',
     kind: 'defect',
     effort: 'medium',
+    impact: 'behavior',
     destination: { kind: 'code', pull: fixturePull().number },
     resolution: 'agreed',
     raisedBy: ['unclebob'],

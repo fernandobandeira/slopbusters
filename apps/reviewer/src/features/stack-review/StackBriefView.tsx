@@ -1,5 +1,5 @@
 import { LayerFixWorker } from './LayerFixWorker'
-import { groundingKindLabels } from '../../../shared/domain/grounding'
+import { groundingImpactLabels, groundingKindLabels } from '../../../shared/domain/grounding'
 import { short, type BriefFix, type StackBrief } from '../../../shared/domain/stackBrief'
 import { stackBriefMarkdown } from '../../../shared/domain/stackBriefMarkdown'
 import { CopyButton } from '../../components/CopyButton'
@@ -32,6 +32,7 @@ export function StackBriefView({
         ))}
       </ol>
       {brief.summary && <p className="stack-brief-summary">{brief.summary}</p>}
+      <SeriousList brief={brief} />
       <h3>Needs your decision</h3>
       {brief.decisions.length ? (
         <ul className="stack-brief-list">
@@ -73,6 +74,31 @@ export function StackBriefView({
       ))}
       <BriefNotes brief={brief} />
     </div>
+  )
+}
+
+/** Entries with a serious consequence, wherever triage put them, each asking for a disposition. */
+function SeriousList({ brief }: { brief: StackBrief }) {
+  if (!brief.serious.length) return null
+  return (
+    <>
+      <h3>Serious consequences</h3>
+      <p className="stack-brief-detail">
+        Settle each before other work: fixed and checked, refuted with evidence, accepted as a risk
+        with a reason, or assigned for investigation with an owner.
+      </p>
+      <ul className="stack-brief-list">
+        {brief.serious.map((item) => (
+          <li key={item.id}>
+            <strong>{item.title}</strong> <code>{item.id}</code>
+            <p>{item.consequence}</p>
+            <p className="stack-brief-detail">
+              {groundingImpactLabels[item.impact]} · {item.standing}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }
 

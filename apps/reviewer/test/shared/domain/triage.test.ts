@@ -72,13 +72,13 @@ describe('fixed triage policy', () => {
   })
 
   it.each([
-    ['simplification', 0],
-    ['defect', 1],
-    ['rule', 1],
-    ['wording', 2],
-    ['product', 2],
-    ['test', 3],
-    [undefined, 1],
+    ['simplification', 1],
+    ['defect', 2],
+    ['rule', 2],
+    ['wording', 3],
+    ['product', 3],
+    ['test', 4],
+    [undefined, 2],
   ] as const)('fixes %s at rank %s, including legacy entries', (kind, rank) => {
     expect(triage({ ...base, kind })).toMatchObject({ disposition: 'fix', rank })
   })
@@ -136,6 +136,31 @@ describe('reviewers and predicted comments', () => {
         raisedBy: [...(('raisedBy' in changes ? changes.raisedBy : undefined) ?? base.raisedBy)],
       }).disposition,
     ).toBe(disposition)
+  })
+})
+
+describe('serious consequences', () => {
+  const serious = { impact: 'money', consequence: 'A hold survives closure.' } as const
+
+  it('fixes a serious defect before any removal, and says what is at stake', () => {
+    const decision = triage({ ...base, ...serious, kind: 'defect' })
+    expect(decision).toMatchObject({ disposition: 'fix', rank: 0 })
+    expect(decision.reason).toContain('At stake: money or ledger.')
+    expect(decision.rank).toBeLessThan(triage({ ...base, kind: 'simplification' }).rank)
+  })
+
+  it('asks about a serious edge case instead of skipping it', () => {
+    expect(triage({ ...base, ...serious, kind: 'edgeCase' })).toMatchObject({
+      disposition: 'ask',
+      rank: 0,
+    })
+    expect(triage({ ...base, impact: 'behavior', kind: 'edgeCase' }).disposition).toBe('skip')
+  })
+
+  it('leaves a disproved one set aside', () => {
+    expect(triage({ ...base, ...serious, verdict: 'notTrue', plan: undefined }).disposition).toBe(
+      'skip',
+    )
   })
 })
 

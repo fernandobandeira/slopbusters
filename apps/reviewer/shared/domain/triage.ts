@@ -1,4 +1,4 @@
-import type { ResolvedEntry } from './grounding'
+import { groundingImpactLabels, isSerious, type ResolvedEntry } from './grounding'
 import { seatReviewer } from './panel'
 
 /** `prepare`: the reviewer will likely ask, the models would not; have the reply ready. */
@@ -119,6 +119,13 @@ function worth(entry: ResolvedEntry): Decision {
   if (entry.plan && entry.effort === 'small' && reviewers(entry) >= 2)
     return fix(entry, 'Costs little and several reviewers raised it.')
   if (verdict === 'tasteSkip') return skip('A preference with no demonstrated cost.')
+  if (kind === 'edgeCase' && isSerious(entry))
+    return {
+      disposition: 'ask',
+      rank: 0,
+      reason:
+        'Needs several things to go wrong together, but what is at stake is serious: fix it, accept the risk, or have it checked.',
+    }
   if (kind === 'edgeCase') return skip('Needs several things to go wrong together.')
   if (verdict === 'authorsCall')
     return fix(entry, "Takes the panel's recommendation; nothing in the ticket says otherwise.")
@@ -130,12 +137,20 @@ function reviewers(entry: ResolvedEntry): number {
   return new Set(entry.raisedBy.map(seatReviewer)).size
 }
 
+/** A fix with a serious consequence leads, and says what it protects. */
 function fix(entry: ResolvedEntry, reason: string): Decision {
-  return { disposition: 'fix', rank: fixRank(entry.kind), reason }
+  if (isSerious(entry) && entry.impact)
+    return {
+      disposition: 'fix',
+      rank: 0,
+      reason: `${reason} At stake: ${groundingImpactLabels[entry.impact].toLowerCase()}.`,
+    }
+  return { disposition: 'fix', rank: 1 + fixRank(entry.kind), reason }
 }
 
 function ask(entry: ResolvedEntry, reason: string): Decision {
-  return { disposition: 'ask', rank: entry.kind === 'simplification' ? 1 : 2, reason }
+  const rank = isSerious(entry) ? 0 : entry.kind === 'simplification' ? 1 : 2
+  return { disposition: 'ask', rank, reason }
 }
 
 function skip(reason: string): Decision {

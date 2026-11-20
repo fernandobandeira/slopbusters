@@ -1,5 +1,6 @@
 import { dispositionLabels, triage } from '../../../shared/domain/triage'
 import {
+  groundingImpactLabels,
   groundingKindLabels,
   groundingOriginLabels,
   groundingResolutionLabels,
@@ -26,6 +27,7 @@ export function GroundingVerdict({ result, id }: { result: PanelResult; id: stri
         {dispositionLabels[decision.disposition]}: {decision.reason}
       </p>
       <p className="finding-severity">
+        {entry.impact && `${groundingImpactLabels[entry.impact]} · `}
         {entry.kind && `${groundingKindLabels[entry.kind]} · `}
         {entry.effort && `${entry.effort} change · `}
         {verdictLabel(entry)} · {groundingResolutionLabels[entry.resolution]}
@@ -66,6 +68,7 @@ type Detail = readonly [string, string | undefined]
 function EntryDetails({ entry, marks }: { entry: GroundedEntry; marks: Detail[] }) {
   const details: Detail[] = [
     ...marks,
+    ['Consequence', entry.consequence],
     ['Plan', entry.plan],
     ['Question for the author', entry.question],
     ['Evidence needed', entry.missing],

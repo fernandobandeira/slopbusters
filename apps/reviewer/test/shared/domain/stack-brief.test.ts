@@ -142,7 +142,7 @@ describe('the stack brief fixes', () => {
   it('places fixes on the layer that owns the code, in triage order, with derived findings', () => {
     const session = finishedStackReview(
       [
-        stackEntry(201, 'g1', { kind: 'test', rank: 3 }),
+        stackEntry(201, 'g1', { kind: 'test', rank: 4 }),
         stackEntry(203, 'g2', { destination: { pull: 203 } }),
       ],
       {
@@ -413,6 +413,31 @@ describe('predicted reviewer comments in the stack brief', () => {
     ])
     expect(stackBriefMarkdown(brief!, stackRepository)).toContain(
       'Reply if the code stays: The name matches the column.',
+    )
+  })
+})
+
+describe('serious consequences in the stack brief', () => {
+  it('lists each serious entry with where the brief puts it', () => {
+    const money = { impact: 'money' as const, consequence: 'A hold survives closure.' }
+    const session = finishedStackReview(
+      [
+        stackEntry(201, 'g1', money),
+        stackEntry(202, 'g2', { ...money, disposition: 'ask', triage: 'Needs the author.' }),
+        stackEntry(203, 'g3', { impact: 'behavior' }),
+        stackEntry(203, 'g4', { ...money, verdict: 'notTrue' }),
+      ],
+      emptyResult,
+    )
+
+    const brief = stackBrief(session)
+
+    expect(brief?.serious.map((item) => [item.id, item.standing])).toEqual([
+      ['#201/g1', 'a fix on PR #201.'],
+      ['#202/g2', 'needs your decision. Needs the author.'],
+    ])
+    expect(stackBriefMarkdown(brief!, stackRepository)).toContain(
+      'Consequence: A hold survives closure.',
     )
   })
 })

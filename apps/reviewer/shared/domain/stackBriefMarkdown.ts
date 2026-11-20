@@ -1,14 +1,16 @@
-import { groundingKindLabels } from './grounding'
+import { groundingImpactLabels, groundingKindLabels } from './grounding'
 import {
   short,
   type BriefFix,
   type BriefLayer,
   type BriefPrediction,
+  type BriefSerious,
   type StackBrief,
 } from './stackBrief'
 
 /** Rules for an agent working the stack from the brief. */
 const stackRules = [
+  '- Settle every serious consequence before other work, and record how each was settled.',
   '- Work bottom to top. Each fix names the layer whose code must change; make it on that layer and let the layers above take it in.',
   '- Apply only the plans below. A plan is a proposal checked against the code, not a fact: confirm it first, and skip it with a reason when it is wrong.',
   '- Do not act on "Needs your decision" until the author answers, do not make predicted reviewer comments unless the author chooses them, and leave follow-ups for later.',
@@ -23,6 +25,9 @@ export function stackBriefMarkdown(brief: StackBrief, repository: string): strin
     `The panel reviewed every layer, then two models read all layers' grounded findings together: what repeats, what one change makes unnecessary elsewhere, which layer owns each change, and what only the whole stack shows.\n\nLayers, bottom to top:\n${brief.layers.map(layerLine).join('\n')}`,
     brief.summary ? `## Summary\n\n${brief.summary}` : '',
     `## Rules\n\n${stackRules.join('\n')}`,
+    brief.serious.length
+      ? `## Serious consequences\n\nSettle each of these before any other work: fixed and checked, refuted with evidence, accepted as a risk by the author with a reason, or assigned for investigation with an owner and the check that would close it. Two models reading the code do not prove a race or an ordering problem; a test that forces the order does.\n\n${brief.serious.map(seriousLines).join('\n')}`
+      : '',
     section(
       'Needs your decision',
       brief.decisions.map((item) =>
@@ -84,6 +89,14 @@ function fixLines(fix: BriefFix, index: number): string {
   if (fix.movedFrom)
     lines.push(`   Moved here from PR #${String(fix.movedFrom.layer)}: ${fix.movedFrom.reason}`)
   return lines.join('\n')
+}
+
+function seriousLines(item: BriefSerious): string {
+  return [
+    `- **${item.title}** (${item.id}, PR #${String(item.layer)}) · ${groundingImpactLabels[item.impact]}`,
+    `  Consequence: ${item.consequence}`,
+    `  Where it stands: ${item.standing}`,
+  ].join('\n')
 }
 
 function predictionLines(item: BriefPrediction): string {

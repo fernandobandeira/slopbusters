@@ -2,8 +2,10 @@ import { triage, type Disposition } from './triage'
 import { anchorLabel } from './anchors'
 import type { EarlierRequest } from './consistency'
 import {
+  groundingImpactLabels,
   groundingKindLabels,
   groundingOriginLabels,
+  isSerious,
   groundingResolutionLabels,
   groundingVerdictLabels,
   leadSource,
@@ -44,6 +46,7 @@ export function fixSection(
   const facts = [
     entry.kind ? `Kind: ${groundingKindLabels[entry.kind]}.` : '',
     entry.effort ? `Effort: ${entry.effort}.` : '',
+    entry.impact ? `At stake: ${groundingImpactLabels[entry.impact]}.` : '',
   ].filter(Boolean)
   lines.push(
     '',
@@ -53,9 +56,7 @@ export function fixSection(
       ? `The models would not ask for this; the reviewer likely will. Their reasoning, should the author keep the code: ${entry.reason}`
       : `Why: ${entry.reason}`,
   )
-  if (entry.evidence.length) lines.push(`Evidence: ${entry.evidence.join(', ')}`)
-  if (entry.origin) lines.push(`Origin: ${groundingOriginLabels[entry.origin]}`)
-  lines.push('', 'What the reviewers wrote:')
+  lines.push(...entryFacts(entry), '', 'What the reviewers wrote:')
   for (const { seat, finding } of sources)
     lines.push(
       '',
@@ -63,6 +64,15 @@ export function fixSection(
       ...finding.body.split('\n').map((line) => `> ${line}`),
     )
   return lines.join('\n')
+}
+
+/** What a chosen fix's entry records beyond its reason: consequence, evidence, origin. */
+function entryFacts(entry: ResolvedEntry): string[] {
+  return [
+    entry.consequence ? `Consequence: ${entry.consequence}` : '',
+    entry.evidence.length ? `Evidence: ${entry.evidence.join(', ')}` : '',
+    entry.origin ? `Origin: ${groundingOriginLabels[entry.origin]}` : '',
+  ].filter(Boolean)
 }
 
 /**
@@ -98,6 +108,7 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
     `Panel review of ${pullName(result.pull)}, "${result.pull.title}" (${result.pull.url}). Reviewers raised findings, two models grounded them against the code, and the author chose which to fix.`,
     revisionHeader(result),
     `## Verdict\n\n${result.advice.summary}`,
+    seriousSection(items, chosen, candidates),
     chosen.length
       ? `## Rules\n\n${fixRules.join('\n')}\n\n## The fixes the author chose\n\n${chosen.map((item, index) => withRoute(fixSection(item, index, candidates), item.route)).join('\n\n')}`
       : '## The fixes the author chose\n\nNone yet. Treat the findings below as context, and ask before changing code.',
@@ -145,6 +156,45 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
   ]
     .filter(Boolean)
     .join('\n\n')
+}
+
+/**
+ * The entries whose consequence is serious, whatever triage did with them, each with where it
+ * stands. Sorting alone did not get them settled, so each one asks for a disposition.
+ */
+function seriousSection(
+  items: readonly GateItem[],
+  chosen: readonly GateItem[],
+  candidates: readonly GroundingCandidate[],
+): string {
+  const serious = items.filter((item) => isSerious(item.entry))
+  return section(
+    'Serious consequences',
+    'Settle each of these before any other work. One is settled when it is fixed and checked, refuted with evidence, accepted as a risk by the author with a reason, or assigned for investigation with an owner and the check that would close it. Two models reading the code do not prove a race or an ordering problem; a test that forces the order does.',
+    serious.map((item) => {
+      const { entry } = item
+      const lead = leadSource(entry, candidates)
+      const where = lead ? ` (\`${anchorLabel(lead.finding.anchor)}\`)` : ''
+      const impact = entry.impact ? ` · ${groundingImpactLabels[entry.impact]}` : ''
+      return [
+        `- **${lead?.finding.title ?? entry.id}**${where}${impact}`,
+        `  Consequence: ${entry.consequence ?? entry.reason}`,
+        `  Where it stands: ${standing(item, chosen)}`,
+      ].join('\n')
+    }),
+  )
+}
+
+function standing(item: GateItem, chosen: readonly GateItem[]): string {
+  const index = chosen.indexOf(item)
+  if (index >= 0) return `fix ${String(index + 1)} below.`
+  const decision = triage(item.entry)
+  if (item.action.selected && item.problem) return `chosen, but blocked: ${item.problem}`
+  if (decision.followUp) return `left for a follow-up. ${decision.reason}`
+  if (decision.disposition === 'ask') return `needs your decision below. ${decision.reason}`
+  if (decision.disposition === 'prepare') return `a predicted reviewer comment. ${decision.reason}`
+  if (decision.disposition === 'skip') return `not chosen. ${decision.reason}`
+  return 'not chosen by the author.'
 }
 
 /** Each decision for the author, with findings that ask for opposite changes as one item. */

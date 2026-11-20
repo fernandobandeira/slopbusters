@@ -1,4 +1,4 @@
-import type { ResolvedEntry } from './grounding'
+import { isSerious, type ResolvedEntry } from './grounding'
 import type {
   CrossLayerResult,
   StackEntry,
@@ -15,6 +15,8 @@ import { triage } from './triage'
 export interface StackBrief {
   layers: BriefLayer[]
   summary?: string
+  /** Entries with a serious consequence, wherever triage put them: each needs a disposition. */
+  serious: BriefSerious[]
   /** One queue across the stack: questions for the author and proposals to reshape the stack. */
   decisions: BriefDecision[]
   /** Bottom to top, each layer's fixes in triage order. */
@@ -53,6 +55,15 @@ export interface BriefFix {
   movedFrom?: { layer: number; reason: string }
   /** The title or description, when the change is to the PR's metadata rather than its code. */
   field?: 'title' | 'description'
+}
+export interface BriefSerious {
+  id: string
+  layer: number
+  title: string
+  impact: NonNullable<StackEntry['impact']>
+  consequence: string
+  /** Where it is in this brief: a fix, a decision, a reply, a follow-up, or set aside and why. */
+  standing: string
 }
 export interface BriefPrediction {
   id: string
@@ -105,6 +116,7 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
   return {
     layers,
     ...(pass?.turns.at(-1)?.summary ? { summary: pass.turns.at(-1)?.summary } : {}),
+    serious: seriousEntries(unmerged, { plan, doubts, chains: result.chains }),
     decisions: [
       // A question stays even when a chain would make it unnecessary: that change is not settled.
       ...entryDecisions(
@@ -167,6 +179,56 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
     stale: staleEntries(input, layers),
     limitations: [...input.limitations, ...passLimitations(session)],
   }
+}
+
+/** Each serious entry that is not merged into another, with where the brief puts it. */
+function seriousEntries(
+  entries: readonly StackEntry[],
+  {
+    plan,
+    doubts,
+    chains,
+  }: {
+    plan: ReturnType<typeof placement>
+    doubts: ReadonlyMap<string, string[]>
+    chains: CrossLayerResult['chains']
+  },
+): BriefSerious[] {
+  return entries.flatMap((entry) => {
+    if (!entry.impact || !isSerious(entry)) return []
+    return [
+      {
+        id: entry.id,
+        layer: entry.layer,
+        title: entry.title,
+        impact: entry.impact,
+        consequence: entry.consequence ?? entry.reason,
+        standing: seriousStanding(entry, { plan, doubts, chains }),
+      },
+    ]
+  })
+}
+
+function seriousStanding(
+  entry: StackEntry,
+  {
+    plan,
+    doubts,
+    chains,
+  }: {
+    plan: ReturnType<typeof placement>
+    doubts: ReadonlyMap<string, string[]>
+    chains: CrossLayerResult['chains']
+  },
+): string {
+  const cause = chains.find((chain) => chain.unnecessary.includes(entry.id))?.cause
+  if (cause) return `made unnecessary by ${cause} (${plan.title(cause)}).`
+  if (entry.followUp) return `left for a follow-up. ${entry.triage}`
+  if (entry.disposition === 'ask' || doubts.has(entry.id))
+    return `needs your decision. ${entry.triage}`
+  if (entry.disposition === 'fix') return `a fix on PR #${String(plan.layerOf(entry))}.`
+  if (entry.disposition === 'prepare') return `a predicted reviewer comment. ${entry.triage}`
+  return `not chosen. ${entry.triage}`
 }
 
 /** The conclusions both models approved; structure proposals are decisions either way. */

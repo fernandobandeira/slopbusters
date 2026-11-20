@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { stableId } from './findings'
 import {
   groundingEfforts,
+  groundingImpacts,
   groundingKinds,
   groundingOrigins,
   groundingResolutions,
@@ -52,6 +53,8 @@ export const stackEntrySchema = z.object({
   title: z.string(),
   kind: z.enum(groundingKinds).optional(),
   effort: z.enum(groundingEfforts).optional(),
+  impact: z.enum(groundingImpacts).optional(),
+  consequence: z.string().optional(),
   verdict: z.enum(groundingVerdicts).optional(),
   resolution: z.enum(groundingResolutions),
   disposition: z.enum(['fix', 'skip', 'ask', 'prepare']),

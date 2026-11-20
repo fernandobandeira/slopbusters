@@ -229,6 +229,7 @@ function entry(id: string, changes: Partial<ResolvedEntry> = {}): ResolvedEntry 
     origin: 'change',
     kind: 'defect',
     effort: 'medium',
+    impact: 'behavior',
     destination: { kind: 'code', pull: 201 },
     resolution: 'agreed',
     raisedBy: ['unclebob'],

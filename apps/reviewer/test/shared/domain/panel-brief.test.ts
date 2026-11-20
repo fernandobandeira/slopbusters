@@ -193,6 +193,7 @@ describe('triage in the agent brief', () => {
           verdict: 'authorsCall',
           kind: 'product',
           effort: 'large',
+          impact: 'behavior',
           question: 'Keep it?',
           ticketConflict: 'Done means: the job stays.',
         }),
@@ -209,6 +210,37 @@ describe('triage in the agent brief', () => {
   })
 })
 
+describe('serious consequences in the agent brief', () => {
+  it('lists each one first, with its consequence and where it stands', () => {
+    const brief = panelBriefMarkdown(
+      result([
+        entry('g1', 'f1', { kind: 'simplification', impact: 'maintainability' }),
+        entry('g2', 'f2', {
+          kind: 'defect',
+          impact: 'money',
+          consequence: 'A reservation during closure leaves a hold on a closed account.',
+        }),
+        entry('g3', 'f3', {
+          kind: 'edgeCase',
+          impact: 'contract',
+          consequence: 'A late card never reaches the webhook.',
+        }),
+      ]),
+      reviewers,
+    )
+    const serious = brief.slice(brief.indexOf('## Serious consequences'), brief.indexOf('## Rules'))
+
+    expect(brief.indexOf('## Serious consequences')).toBeGreaterThan(0)
+    expect(serious).toContain(
+      'Consequence: A reservation during closure leaves a hold on a closed account.',
+    )
+    expect(serious).toContain('Where it stands: fix 1 below.')
+    expect(serious).toContain('Where it stands: needs your decision below.')
+    expect(serious).not.toContain('Reuse the audit helper')
+    expect(brief).toContain('### 1. Rename the guard')
+  })
+})
+
 describe('predicted reviewer comments in the agent brief', () => {
   it('lists them apart from rejections, with the change and the reply', () => {
     const brief = panelBriefMarkdown(
@@ -217,6 +249,7 @@ describe('predicted reviewer comments in the agent brief', () => {
           verdict: 'predicted',
           kind: 'defect',
           effort: 'large',
+          impact: 'behavior',
           plan: 'Add an issuing status.',
           reason: 'The schema documents the claim.',
           raisedBy: ['teammate:avery'],
@@ -240,6 +273,7 @@ describe('predicted reviewer comments in the agent brief', () => {
         entry('g2', 'f2', {
           verdict: 'predicted',
           effort: 'small',
+          impact: 'behavior',
           plan: 'Rename the guard.',
           reason: 'The name matches the column.',
           raisedBy: ['teammate:avery'],
