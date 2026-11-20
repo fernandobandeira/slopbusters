@@ -233,6 +233,30 @@ describe('predicted reviewer comments in the agent brief', () => {
     )
   })
 
+  it('keeps a small one out of the default fixes and lists it once, with its reply', () => {
+    const brief = panelBriefMarkdown(
+      result([
+        entry('g1', 'f1'),
+        entry('g2', 'f2', {
+          verdict: 'predicted',
+          effort: 'small',
+          plan: 'Rename the guard.',
+          reason: 'The name matches the column.',
+          raisedBy: ['teammate:avery'],
+        }),
+      ]),
+      reviewers,
+    )
+    const fixes = brief.slice(
+      brief.indexOf('## The fixes the author chose'),
+      brief.indexOf('## Predicted reviewer comments'),
+    )
+    expect(fixes).toContain('Reuse the audit helper')
+    expect(fixes).not.toContain('Rename the guard')
+    expect(brief.split('**Rename the guard**')).toHaveLength(2)
+    expect(brief).toContain('Reply if the code stays: The name matches the column.')
+  })
+
   it('leaves out what was not recorded rather than saying so', () => {
     const brief = panelBriefMarkdown(result([entry('g1', 'f1')]), reviewers)
     expect(brief).not.toContain('Not recorded')

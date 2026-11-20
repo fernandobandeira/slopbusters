@@ -1,11 +1,17 @@
 import { groundingKindLabels } from './grounding'
-import { short, type BriefFix, type BriefLayer, type StackBrief } from './stackBrief'
+import {
+  short,
+  type BriefFix,
+  type BriefLayer,
+  type BriefPrediction,
+  type StackBrief,
+} from './stackBrief'
 
 /** Rules for an agent working the stack from the brief. */
 const stackRules = [
   '- Work bottom to top. Each fix names the layer whose code must change; make it on that layer and let the layers above take it in.',
   '- Apply only the plans below. A plan is a proposal checked against the code, not a fact: confirm it first, and skip it with a reason when it is wrong.',
-  '- Do not act on "Needs your decision" until the author answers, and leave follow-ups for later.',
+  '- Do not act on "Needs your decision" until the author answers, do not make predicted reviewer comments unless the author chooses them, and leave follow-ups for later.',
   "- Before editing a layer, check it is still at the head below; a stale entry may no longer hold. Follow the repository's instructions and run its lint, build and relevant tests.",
 ]
 
@@ -32,6 +38,9 @@ export function stackBriefMarkdown(brief: StackBrief, repository: string): strin
     brief.fixes.length
       ? `## Fixes, bottom to top\n\n${brief.fixes.map(({ layer, items }) => `### PR #${String(layer.number)}: ${layer.title}\n\n${items.map(fixLines).join('\n\n')}`).join('\n\n')}`
       : '## Fixes, bottom to top\n\nNone.',
+    brief.predictions.length
+      ? `## Predicted reviewer comments\n\nThe reviewer will likely ask for these, though both models would leave the code as it is. Keep the reply ready; do not make the change unless the author chooses it.\n\n<details>\n<summary>${String(brief.predictions.length)} replies to have ready</summary>\n\n${brief.predictions.map(predictionLines).join('\n')}\n\n</details>`
+      : '',
     section(
       'Made unnecessary',
       brief.chains.map(
@@ -75,6 +84,14 @@ function fixLines(fix: BriefFix, index: number): string {
   if (fix.movedFrom)
     lines.push(`   Moved here from PR #${String(fix.movedFrom.layer)}: ${fix.movedFrom.reason}`)
   return lines.join('\n')
+}
+
+function predictionLines(item: BriefPrediction): string {
+  return [
+    `- **${item.title}** (${item.id}, PR #${String(item.layer)})`,
+    `  Change that answers the reviewer: ${item.plan ?? 'None recorded.'}${item.effort ? ` Cost: ${item.effort}.` : ''}`,
+    `  Reply if the code stays: ${item.reply}`,
+  ].join('\n')
 }
 
 function mark(contested: boolean): string {

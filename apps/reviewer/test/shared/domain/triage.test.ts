@@ -61,13 +61,6 @@ describe('fixed triage policy', () => {
       'skip',
     ],
     ['combined edge cases are skipped', { kind: 'edgeCase' }, 'skip'],
-    ['a small predicted comment is fixed', { verdict: 'predicted', effort: 'small' }, 'fix'],
-    ['a larger predicted comment is asked', { verdict: 'predicted', effort: 'large' }, 'ask'],
-    [
-      'a predicted comment on old code is still asked',
-      { verdict: 'predicted', effort: 'medium', origin: 'preexisting' },
-      'ask',
-    ],
   ] as const)('%s', (_name, changes, disposition) => {
     expect(
       triage({
@@ -95,6 +88,54 @@ describe('fixed triage policy', () => {
     expect(
       triage({ ...base, ...conflict, verdict: 'authorsCall', kind: 'simplification' }).rank,
     ).toBeLessThan(triage({ ...base, resolution: 'disputed' }).rank)
+  })
+})
+
+describe('reviewers and predicted comments', () => {
+  it.each([
+    [
+      'one reviewer on both providers is one reviewer',
+      {
+        ...repeated,
+        verdict: 'tasteSkip',
+        raisedBy: ['teammate:omer@claude', 'teammate:omer@codex'],
+      },
+      'skip',
+    ],
+    [
+      'two reviewers are several',
+      { ...repeated, verdict: 'tasteSkip', raisedBy: ['teammate:omer@claude', 'unclebob@codex'] },
+      'fix',
+    ],
+    ['a small predicted comment is prepared', { verdict: 'predicted', effort: 'small' }, 'prepare'],
+    [
+      'a larger predicted comment is prepared',
+      { verdict: 'predicted', effort: 'large' },
+      'prepare',
+    ],
+    [
+      'a predicted comment on old code is prepared',
+      { verdict: 'predicted', effort: 'medium', origin: 'preexisting' },
+      'prepare',
+    ],
+    [
+      'a disputed predicted comment is asked',
+      { verdict: 'predicted', effort: 'small', resolution: 'disputed' },
+      'ask',
+    ],
+    [
+      'a predicted comment that undoes an earlier request is asked',
+      { verdict: 'predicted', effort: 'small', reverses: { earlier: 'r1', reason: 'Undoes it.' } },
+      'ask',
+    ],
+  ] as const)('%s', (_name, changes, disposition) => {
+    expect(
+      triage({
+        ...base,
+        ...changes,
+        raisedBy: [...(('raisedBy' in changes ? changes.raisedBy : undefined) ?? base.raisedBy)],
+      }).disposition,
+    ).toBe(disposition)
   })
 })
 

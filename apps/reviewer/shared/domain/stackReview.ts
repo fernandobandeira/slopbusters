@@ -54,7 +54,7 @@ export const stackEntrySchema = z.object({
   effort: z.enum(groundingEfforts).optional(),
   verdict: z.enum(groundingVerdicts).optional(),
   resolution: z.enum(groundingResolutions),
-  disposition: z.enum(['fix', 'skip', 'ask']),
+  disposition: z.enum(['fix', 'skip', 'ask', 'prepare']),
   /** The triage policy's rank within the disposition, lowest first. */
   rank: z.number().int().nonnegative(),
   triage: z.string(),

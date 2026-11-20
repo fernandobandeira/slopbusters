@@ -390,3 +390,29 @@ describe('contested duplicates and derived findings', () => {
     expect(markdown).not.toMatch(/^\d+\. .*did not approve/m)
   })
 })
+
+describe('predicted reviewer comments in the stack brief', () => {
+  it('lists predicted comments with their replies, apart from fixes and decisions', () => {
+    const prepared = {
+      disposition: 'prepare' as const,
+      verdict: 'predicted' as const,
+      reason: 'The name matches the column.',
+      effort: 'small' as const,
+    }
+    const session = finishedStackReview(
+      [stackEntry(201, 'g1'), stackEntry(202, 'g2', prepared)],
+      emptyResult,
+    )
+
+    const brief = stackBrief(session)
+
+    expect(brief?.fixes.flatMap(({ items }) => items.map((item) => item.id))).toEqual(['#201/g1'])
+    expect(brief?.decisions).toEqual([])
+    expect(brief?.predictions).toMatchObject([
+      { id: '#202/g2', layer: 202, reply: 'The name matches the column.', effort: 'small' },
+    ])
+    expect(stackBriefMarkdown(brief!, stackRepository)).toContain(
+      'Reply if the code stays: The name matches the column.',
+    )
+  })
+})

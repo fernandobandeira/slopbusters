@@ -129,11 +129,12 @@ const MAX_LIMITATIONS = 16
 
 const rejections = new Set(['notTrue', 'overEngineering', 'tasteSkip', 'handledUpstack'])
 
-/** Fixes by policy rank, then author decisions, then the remaining context. */
+/** Fixes by policy rank, then author decisions, then predicted comments, then the rest. */
 function displayGroup(entry: ResolvedEntry): number {
   const decision = triage(entry)
   if (decision.disposition === 'fix') return decision.rank
   if (decision.disposition === 'ask') return 10 + decision.rank
+  if (decision.disposition === 'prepare') return 15 + decision.rank
   return 20
 }
 

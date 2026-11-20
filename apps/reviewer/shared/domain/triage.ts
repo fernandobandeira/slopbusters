@@ -1,10 +1,13 @@
 import type { ResolvedEntry } from './grounding'
+import { seatReviewer } from './panel'
 
-export type Disposition = 'fix' | 'skip' | 'ask'
+/** `prepare`: the reviewer will likely ask, the models would not; have the reply ready. */
+export type Disposition = 'fix' | 'skip' | 'ask' | 'prepare'
 export const dispositionLabels: Record<Disposition, string> = {
   fix: 'Fix',
   skip: 'Skip',
   ask: 'Your call',
+  prepare: 'Reply ready',
 }
 
 interface Decision {
@@ -72,17 +75,17 @@ function marked(entry: ResolvedEntry): Decision | undefined {
 }
 
 /**
- * The reviewer will likely ask for it though the models would not. A small change costs less than
- * a review round, so it is made; anything bigger is the author's to make or to answer, the
- * biggest first because being caught by it costs most.
+ * The reviewer will likely ask for it though the models would not. That prepares a conversation;
+ * it is no reason to edit code, however small the change, so the reply is kept ready and the
+ * author can still choose the change. The biggest first, because being caught by it costs most.
  */
 function prediction(entry: ResolvedEntry): Decision | undefined {
   if (entry.verdict !== 'predicted') return undefined
-  if (entry.effort === 'small') return fix(entry, 'Small, and the reviewer will likely ask for it.')
   return {
-    disposition: 'ask',
-    rank: entry.effort === 'large' ? 1 : 2,
-    reason: 'The reviewer will likely ask for this; change it or have the reply ready.',
+    disposition: 'prepare',
+    rank: entry.effort === 'large' ? 0 : entry.effort === 'medium' ? 1 : 2,
+    reason:
+      'The reviewer will likely ask for this, though the models would not; have the reply ready.',
   }
 }
 
@@ -113,13 +116,18 @@ function worth(entry: ResolvedEntry): Decision {
   const { verdict, kind } = entry
   if (entry.origin === 'preexisting')
     return skip('Already there before this change; leave it for a follow-up.')
-  if (entry.plan && entry.effort === 'small' && new Set(entry.raisedBy).size >= 2)
+  if (entry.plan && entry.effort === 'small' && reviewers(entry) >= 2)
     return fix(entry, 'Costs little and several reviewers raised it.')
   if (verdict === 'tasteSkip') return skip('A preference with no demonstrated cost.')
   if (kind === 'edgeCase') return skip('Needs several things to go wrong together.')
   if (verdict === 'authorsCall')
     return fix(entry, "Takes the panel's recommendation; nothing in the ticket says otherwise.")
   return fix(entry, kind ? fixReasons[kind] : 'Both models agree this is worth fixing.')
+}
+
+/** One reviewer on both providers, or in two versions of its seat, is still one reviewer. */
+function reviewers(entry: ResolvedEntry): number {
+  return new Set(entry.raisedBy.map(seatReviewer)).size
 }
 
 function fix(entry: ResolvedEntry, reason: string): Decision {

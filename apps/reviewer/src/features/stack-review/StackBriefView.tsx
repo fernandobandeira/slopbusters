@@ -111,6 +111,25 @@ function BriefNotes({ brief }: { brief: StackBrief }) {
           </ul>
         </>
       )}
+      {brief.predictions.length > 0 && (
+        <details className="stack-brief-details">
+          <summary>
+            {brief.predictions.length} predicted reviewer comments · replies to have ready
+          </summary>
+          <ul className="stack-brief-list">
+            {brief.predictions.map((item) => (
+              <li key={item.id}>
+                <strong>{item.title}</strong> <code>{item.id}</code>
+                <p>Reply if the code stays: {item.reply}</p>
+                <p className="stack-brief-detail">
+                  Change that answers the reviewer: {item.plan ?? 'none recorded'}
+                  {item.effort && ` · ${item.effort}`}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {brief.followUps.length > 0 && (
         <details className="stack-brief-details">
           <summary>{brief.followUps.length} follow-ups</summary>

@@ -19,6 +19,8 @@ export interface StackBrief {
   decisions: BriefDecision[]
   /** Bottom to top, each layer's fixes in triage order. */
   fixes: { layer: BriefLayer; items: BriefFix[] }[]
+  /** What a reviewer will likely ask though the models would not: replies to have ready. */
+  predictions: BriefPrediction[]
   chains: BriefChain[]
   /** Entries triage left for later: problems already there, or cases needing several failures. */
   followUps: BriefFollowUp[]
@@ -51,6 +53,16 @@ export interface BriefFix {
   movedFrom?: { layer: number; reason: string }
   /** The title or description, when the change is to the PR's metadata rather than its code. */
   field?: 'title' | 'description'
+}
+export interface BriefPrediction {
+  id: string
+  layer: number
+  title: string
+  /** The change that would answer the reviewer, should the author choose to make it. */
+  plan?: string
+  effort?: StackEntry['effort']
+  /** The models' argument for keeping the code, written to send as the reply. */
+  reply: string
 }
 export interface BriefChain {
   cause: { id: string; title: string }
@@ -128,6 +140,17 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
         }),
       }))
       .filter((group) => group.items.length),
+    predictions: current
+      .filter((entry) => entry.disposition === 'prepare')
+      .sort((a, b) => a.layer - b.layer || a.rank - b.rank)
+      .map((entry) => ({
+        id: entry.id,
+        layer: entry.layer,
+        title: entry.title,
+        ...(entry.plan ? { plan: entry.plan } : {}),
+        ...(entry.effort ? { effort: entry.effort } : {}),
+        reply: entry.reason,
+      })),
     chains: result.chains.map((chain) => ({
       cause: { id: chain.cause, title: plan.title(chain.cause) },
       reason: chain.reason,

@@ -1,4 +1,4 @@
-import { triage } from './triage'
+import { triage, type Disposition } from './triage'
 import { anchorLabel } from './anchors'
 import type { EarlierRequest } from './consistency'
 import {
@@ -77,11 +77,12 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
   const candidates = result.grounding?.candidates ?? []
   const items = gateItems(resolved, result.gate, result.pull.number)
   const chosen = chosenFixes(items)
-  const open = items
-    .filter((item) => triage(item.entry).disposition === 'ask' && !chosen.includes(item))
-    .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
-  const predicted = open.filter((item) => predictedComment(item.entry) && !marked(item.entry))
-  const decisions = open.filter((item) => !predicted.includes(item))
+  const open = (disposition: Disposition) =>
+    items
+      .filter((item) => triage(item.entry).disposition === disposition && !chosen.includes(item))
+      .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
+  const decisions = open('ask')
+  const predicted = open('prepare')
   const blocked = items.filter(
     (item) => item.action.selected && item.problem && !triage(item.entry).followUp,
   )
@@ -89,6 +90,7 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
     (item) =>
       !item.action.selected &&
       !decisions.includes(item) &&
+      !predicted.includes(item) &&
       !settledRejection(item.entry) &&
       !triage(item.entry).followUp,
   )
@@ -106,7 +108,7 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
     ),
     section(
       'Predicted reviewer comments',
-      'The reviewer will likely ask for these, though both models would leave the code as it is. Do not act on them until the author decides whether to make the change or keep the code and reply.',
+      'The reviewer will likely ask for these, though both models would leave the code as it is. Keep the reply ready. Do not make the change unless the author chooses it.',
       predicted.map(
         (item) =>
           `${entryBrief(item, candidates)}\n  Change that answers the reviewer: ${item.entry.plan ?? 'None recorded.'}${item.entry.effort ? `\n  Cost: ${item.entry.effort}.` : ''}\n  Reply if the code stays: ${item.entry.reason}`,
@@ -307,16 +309,6 @@ function withRoute(text: string, route: GateRoute | undefined): string {
 
 function revisionHeader(result: PanelResult): string {
   return `Reviewed head \`${result.pull.headSha}\` (base \`${result.pull.baseSha}\`). Check whether the branch has moved past this commit before editing.`
-}
-
-/** The consistency check found it would undo an earlier request, or another finding opposes it. */
-function marked(entry: ResolvedEntry): boolean {
-  return Boolean(entry.reverses ?? entry.opposes)
-}
-
-/** An agreed prediction the author has to decide on; a disputed one is an ordinary decision. */
-function predictedComment(entry: ResolvedEntry): boolean {
-  return entry.verdict === 'predicted' && entry.resolution === 'agreed'
 }
 
 function settledRejection(entry: ResolvedEntry): boolean {
