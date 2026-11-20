@@ -82,10 +82,13 @@ Return:
 - conflicts: groups of this round's entries whose plans cannot both be applied because they ask for opposite changes to the same thing, such as one folding a flag into another and one splitting it out. Plans that merely touch the same code are not a conflict.
 Name each entry at most once in reversals and at most once across conflicts, with a one-sentence reason. Do not judge which side is right; the author decides. Empty lists are valid and the normal answer.`
 
-/** The entries this round would act on: those with a plan that triage does not skip. */
+/**
+ * The entries this round would act on: those with a plan that triage fixes or asks about. A
+ * predicted comment only prepares a reply, so it can neither undo nor oppose anything.
+ */
 function actedOn(state: GroundingState) {
   return (state.resolved ?? [])
-    .filter((entry) => entry.plan && triage(entry).disposition !== 'skip')
+    .filter((entry) => entry.plan && ['fix', 'ask'].includes(triage(entry).disposition))
     .map((entry) => {
       const lead = leadSource(entry, state.candidates)
       return {

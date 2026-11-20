@@ -139,7 +139,7 @@ function reviewers(entry: ResolvedEntry): number {
 
 /** A fix with a serious consequence leads, and says what it protects. */
 function fix(entry: ResolvedEntry, reason: string): Decision {
-  if (isSerious(entry) && entry.impact)
+  if (isSerious(entry))
     return {
       disposition: 'fix',
       rank: 0,

@@ -56,12 +56,14 @@ describe('what is at stake in a grounded entry', () => {
     ])
   })
 
-  it('says how a serious consequence happens and who notices, and only for a serious one', () => {
+  it('says how a serious consequence happens and who notices, unless the finding is rejected', () => {
     expect(
-      problems({ impact: 'money' }, { impact: 'behavior', consequence: 'A label is stale.' }),
+      problems(
+        { impact: 'money' },
+        { impact: 'money', verdict: 'notTrue', plan: undefined, evidence: ['src/a.ts:1'] },
+      ),
     ).toEqual([
       'g-f1: a money impact needs consequence: what triggers it, what goes wrong and who notices.',
-      'g-f2: consequence is only for a money, data, contract, operations or security impact.',
     ])
   })
 })

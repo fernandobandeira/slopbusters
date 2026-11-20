@@ -113,15 +113,23 @@ const seriousImpacts: ReadonlySet<GroundingImpact> = new Set([
   'security',
 ])
 
-/** An entry whose consequence is serious and that neither model has set aside as untrue or settled. */
-export function isSerious(entry: Pick<GroundedEntry, 'impact' | 'verdict'>): boolean {
+/**
+ * An entry whose consequence is serious and that the models have not set aside as untrue, settled
+ * elsewhere or a matter of taste.
+ */
+export function isSerious<T extends Pick<GroundedEntry, 'impact' | 'verdict'>>(
+  entry: T,
+): entry is T & { impact: GroundingImpact } {
   return (
     !!entry.impact &&
     seriousImpacts.has(entry.impact) &&
-    entry.verdict !== 'notTrue' &&
-    entry.verdict !== 'handledUpstack'
+    !['notTrue', 'handledUpstack', 'tasteSkip'].includes(entry.verdict ?? '')
   )
 }
+
+/** What settling a serious entry means, for every brief that lists them. */
+export const settleSerious =
+  'Settle each of these before any other work. One is settled when it is fixed and checked, refuted with evidence, accepted as a risk by the author with a reason, or assigned for investigation with an owner and the check that would close it. Two models reading the code do not prove a race or an ordering problem; a test that forces the order does.'
 
 /** How much the change costs: a few lines, one focused change, or work across files or layers. */
 export const groundingEfforts = ['small', 'medium', 'large'] as const
@@ -429,13 +437,10 @@ function upstackProblems(
 /** Every entry says what is at stake; a serious one says how it happens and who notices. */
 function impactProblems(entry: GroundedEntry): string[] {
   if (!entry.impact) return ['say in impact what is at stake if the finding holds.']
-  const serious = seriousImpacts.has(entry.impact)
-  if (serious && !entry.consequence)
+  if (isSerious(entry) && !entry.consequence)
     return [
       `a ${entry.impact} impact needs consequence: what triggers it, what goes wrong and who notices.`,
     ]
-  if (!serious && entry.consequence)
-    return ['consequence is only for a money, data, contract, operations or security impact.']
   return []
 }
 

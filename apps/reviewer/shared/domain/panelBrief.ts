@@ -6,6 +6,7 @@ import {
   groundingKindLabels,
   groundingOriginLabels,
   isSerious,
+  settleSerious,
   groundingResolutionLabels,
   groundingVerdictLabels,
   leadSource,
@@ -170,7 +171,7 @@ function seriousSection(
   const serious = items.filter((item) => isSerious(item.entry))
   return section(
     'Serious consequences',
-    'Settle each of these before any other work. One is settled when it is fixed and checked, refuted with evidence, accepted as a risk by the author with a reason, or assigned for investigation with an owner and the check that would close it. Two models reading the code do not prove a race or an ordering problem; a test that forces the order does.',
+    settleSerious,
     serious.map((item) => {
       const { entry } = item
       const lead = leadSource(entry, candidates)
@@ -267,13 +268,20 @@ function resolvedOf(result: PanelResult, id: string): ResolvedEntry | undefined 
   return result.grounding?.resolved?.find((entry) => entry.id === id)
 }
 
-/** The fixes ready to carry out, as the author chose them or by default, in triage order. */
+/**
+ * The fixes ready to carry out, as the author chose them or by default, in triage order: the
+ * policy's fixes first, then what the author chose from the rest.
+ */
 export function chosenFixes(items: readonly GateItem[]): GateItem[] {
+  const order = ({ entry }: GateItem) => {
+    const { disposition, rank } = triage(entry)
+    return (disposition === 'fix' ? 0 : 10) + rank
+  }
   return items
     .filter(
       (item) => item.action.selected && item.plan && !item.problem && !triage(item.entry).followUp,
     )
-    .sort((a, b) => triage(a.entry).rank - triage(b.entry).rank)
+    .sort((a, b) => order(a) - order(b))
 }
 
 /** One finding with what grounding and the author decided about it, for the clipboard. */

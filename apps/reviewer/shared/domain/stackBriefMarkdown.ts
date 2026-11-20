@@ -1,4 +1,4 @@
-import { groundingImpactLabels, groundingKindLabels } from './grounding'
+import { groundingImpactLabels, groundingKindLabels, settleSerious } from './grounding'
 import {
   short,
   type BriefFix,
@@ -26,7 +26,7 @@ export function stackBriefMarkdown(brief: StackBrief, repository: string): strin
     brief.summary ? `## Summary\n\n${brief.summary}` : '',
     `## Rules\n\n${stackRules.join('\n')}`,
     brief.serious.length
-      ? `## Serious consequences\n\nSettle each of these before any other work: fixed and checked, refuted with evidence, accepted as a risk by the author with a reason, or assigned for investigation with an owner and the check that would close it. Two models reading the code do not prove a race or an ordering problem; a test that forces the order does.\n\n${brief.serious.map(seriousLines).join('\n')}`
+      ? `## Serious consequences\n\n${settleSerious}\n\n${brief.serious.map(seriousLines).join('\n')}`
       : '',
     section(
       'Needs your decision',

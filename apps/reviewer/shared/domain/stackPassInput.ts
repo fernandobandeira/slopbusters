@@ -44,7 +44,7 @@ export function passView(input: StackPassInput) {
     layers: input.layers,
     entries: input.entries
       .filter((entry) => !left.has(entry.id))
-      .map(({ rank: _rank, raisedBy: _raisedBy, ...entry }) => entry),
+      .map(({ rank: _rank, raisedBy: _raisedBy, consequence: _consequence, ...entry }) => entry),
   }
 }
 

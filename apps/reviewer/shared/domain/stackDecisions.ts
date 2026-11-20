@@ -122,6 +122,9 @@ function decisionQuestion(entry: StackEntry): string {
     return `${reversal(entry.reverses)} ${argument} Undo the earlier change, or keep it?`
   }
   if (entry.question) return entry.question
+  // Stack reviews saved before predictions were prepared put agreed ones to the author.
+  if (entry.verdict === 'predicted' && entry.resolution === 'agreed')
+    return `The reviewer will likely ask for this, though both models would leave the code as it is. Make the change, or keep the code and reply: ${entry.reason}`
   return 'The two models disagree on this. Which position should be taken?'
 }
 

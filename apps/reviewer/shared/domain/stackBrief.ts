@@ -116,7 +116,7 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
   return {
     layers,
     ...(pass?.turns.at(-1)?.summary ? { summary: pass.turns.at(-1)?.summary } : {}),
-    serious: seriousEntries(unmerged, { plan, doubts, chains: result.chains }),
+    serious: seriousEntries(input.entries, { plan, doubts, result }),
     decisions: [
       // A question stays even when a chain would make it unnecessary: that change is not settled.
       ...entryDecisions(
@@ -181,47 +181,34 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
   }
 }
 
-/** Each serious entry that is not merged into another, with where the brief puts it. */
-function seriousEntries(
-  entries: readonly StackEntry[],
-  {
-    plan,
-    doubts,
-    chains,
-  }: {
-    plan: ReturnType<typeof placement>
-    doubts: ReadonlyMap<string, string[]>
-    chains: CrossLayerResult['chains']
-  },
-): BriefSerious[] {
-  return entries.flatMap((entry) => {
-    if (!entry.impact || !isSerious(entry)) return []
-    return [
-      {
-        id: entry.id,
-        layer: entry.layer,
-        title: entry.title,
-        impact: entry.impact,
-        consequence: entry.consequence ?? entry.reason,
-        standing: seriousStanding(entry, { plan, doubts, chains }),
-      },
-    ]
-  })
+interface Standing {
+  plan: ReturnType<typeof placement>
+  doubts: ReadonlyMap<string, string[]>
+  result: CrossLayerResult
 }
 
-function seriousStanding(
-  entry: StackEntry,
-  {
-    plan,
-    doubts,
-    chains,
-  }: {
-    plan: ReturnType<typeof placement>
-    doubts: ReadonlyMap<string, string[]>
-    chains: CrossLayerResult['chains']
-  },
-): string {
-  const cause = chains.find((chain) => chain.unnecessary.includes(entry.id))?.cause
+/**
+ * Each serious entry with where the brief puts it, including one merged into a duplicate: the
+ * owner of a group may not carry the serious consequence itself.
+ */
+function seriousEntries(entries: readonly StackEntry[], standing: Standing): BriefSerious[] {
+  return entries.filter(isSerious).map((entry) => ({
+    id: entry.id,
+    layer: entry.layer,
+    title: entry.title,
+    impact: entry.impact,
+    consequence: entry.consequence ?? entry.reason,
+    standing: seriousStanding(entry, standing),
+  }))
+}
+
+function seriousStanding(entry: StackEntry, { plan, doubts, result }: Standing): string {
+  const owner = result.duplicates.find(
+    (group) => group.owner !== entry.id && group.entries.includes(entry.id),
+  )?.owner
+  if (owner && plan.merged(entry.id))
+    return `merged into ${owner} (${plan.title(owner)}); that entry carries the change, and this consequence with it.`
+  const cause = result.chains.find((chain) => chain.unnecessary.includes(entry.id))?.cause
   if (cause) return `made unnecessary by ${cause} (${plan.title(cause)}).`
   if (entry.followUp) return `left for a follow-up. ${entry.triage}`
   if (entry.disposition === 'ask' || doubts.has(entry.id))
