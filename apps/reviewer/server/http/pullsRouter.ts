@@ -4,7 +4,6 @@ import * as routes from '../../shared/api/pulls'
 import { fetchDiscussions, replyToThread } from '../features/pulls/discussions'
 import { markPullReady } from '../features/pulls/ready'
 import { getAppStatus } from '../adapters/toolStatus'
-import { ReviewNotFoundError } from '../adapters/store'
 import { UserError, logError } from '../errors'
 import type { Services } from '../services'
 import { handle } from './contractRouter'
@@ -32,15 +31,7 @@ export function pullsRouter(services: Services) {
     }
   })
   handle(router, routes.loadPull, async ({ body }) => {
-    let pull = await pulls.fetchPull(body.url)
-    try {
-      const cached = store.getPull(pull.id)
-      if (cached.groupingSource !== 'files')
-        pull = { ...pull, groups: cached.groups, groupingSource: cached.groupingSource }
-    } catch (error) {
-      if (!(error instanceof ReviewNotFoundError)) throw error
-    }
-    store.savePull(pull)
+    const pull = store.saveFetchedPull(await pulls.fetchPull(body.url))
     services.warmSource(pull)
     return pull
   })

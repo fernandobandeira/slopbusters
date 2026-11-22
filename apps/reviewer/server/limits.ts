@@ -5,6 +5,7 @@ export const MAX_SOURCE_CACHE_BYTES = 32 * 1024 * 1024
 export const MAX_GIT_OUTPUT_BYTES = 16 * 1024 * 1024
 export const GIT_TIMEOUT_MS = 120_000
 export const JOB_RETENTION_MS = 60 * 60 * 1000
+export const GROUPING_CONCURRENCY = 1
 export const MAX_NAVIGATION_TARGETS = 500
 
 export const MAX_PROJECT_FILE_BYTES = 2 * 1024 * 1024

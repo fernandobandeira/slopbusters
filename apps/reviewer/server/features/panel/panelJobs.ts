@@ -60,6 +60,8 @@ interface Options extends Pick<
   judges: () => Pick<ModelPair, 'primary'> & Partial<Pick<ModelPair, 'companion'>>
   /** The PR as a local round's fix commits leave it. */
   loadLocal?: (local: LocalRound) => Promise<PullRequest>
+  /** Best-effort work after a GitHub PR's result is saved and its review resources released. */
+  onReviewedPull?: (pull: PullRequest, signal: AbortSignal) => void
   /** What reviewers already said on a PR, which every seat reads. */
   history?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewHistory>
   /** The PR's stack, so seats see its other open layers. */
@@ -210,7 +212,9 @@ export class PanelJobs {
         signal.throwIfAborted()
         const usePending = mode !== 'fresh' && session.pending
         const round = { preparation, url, mode: usePending ? mode : 'fresh' } as const
-        if (!(await this.reviewPull(session, signal, round))) return
+        const pull = await this.reviewPull(session, signal, round)
+        if (!pull) return
+        if (session.local?.url !== url) this.options.onReviewedPull?.(pull, signal)
         mode = 'fresh'
       }
     }
@@ -221,14 +225,14 @@ export class PanelJobs {
     )
   }
   /**
-   * Review one PR and ground its findings; false when it stops to wait for the user. The PR's
+   * Review one PR and ground its findings; no pull when it stops to wait for the user. The PR's
    * checkout, its layers' files and the top layer's checkout last until it returns.
    */
   private async reviewPull(
     session: PanelSession,
     signal: AbortSignal,
     { preparation, url, mode }: { preparation: PanelPreparation; url: string; mode: RunMode },
-  ): Promise<boolean> {
+  ): Promise<PullRequest | undefined> {
     let repository: ReviewCheckout | undefined
     let top: ReviewCheckout | undefined
     let files: EvidenceFolder | undefined
@@ -242,7 +246,7 @@ export class PanelJobs {
       files = await writeLayerFiles(layers)
       const run: PullRun = { signal, repository, layers, stack: { layers: files?.directory } }
       if (mode !== 'ground') await this.review(session, pending, run)
-      if (!this.canGround(session, pending, mode)) return false
+      if (!this.canGround(session, pending, mode)) return
       this.progress(session, `Grounding the findings on PR #${String(pending.pull.number)}…`)
       // Without this PR's own source there is nothing to compare the top against.
       run.stack.top = await openStackTop(
@@ -259,7 +263,7 @@ export class PanelJobs {
       session.results.push({ ...snapshot, advice, reviews: pending.reviews, grounding })
       session.pending = undefined
       this.save(session)
-      return true
+      return pending.pull
     } finally {
       repository?.release()
       top?.release()
@@ -354,12 +358,11 @@ export class PanelJobs {
         history: pending.history,
         context: pending.context,
       })
-    const label = `${reviewer.name} review`
-    const url = pending.pull.url
-    const first = await this.track(session, { label, url, model }, execute)
+    const pass = { label: `${reviewer.name} review`, url: pending.pull.url, model }
+    const first = await this.track(session, pass, execute)
     if (!blindReview(first.advice)) return first
     // A seat that could not read its task usually reads it on a second try.
-    const second = await this.track(session, { label: `${label} · retry`, url, model }, execute)
+    const second = await this.track(session, { ...pass, label: `${pass.label} · retry` }, execute)
     if (!blindReview(second.advice)) return second
     throw new UserError(
       clip(

@@ -92,6 +92,18 @@ export class ReviewerStore {
     this.layerFixes = new LayerFixStore(this.database)
     this.stackReview = new StackReviewSessionStore(this.database)
   }
+  /** Refresh a fetched snapshot without discarding its existing model groups. */
+  saveFetchedPull(pull: PullRequest): PullRequest {
+    try {
+      const saved = this.getPull(pull.id)
+      if (saved.groupingSource !== 'files')
+        pull = { ...pull, groups: saved.groups, groupingSource: saved.groupingSource }
+    } catch (error) {
+      if (!(error instanceof ReviewNotFoundError)) throw error
+    }
+    this.savePull(pull)
+    return pull
+  }
   savePull(pull: PullRequest): void {
     this.database
       .prepare(

@@ -11,7 +11,7 @@ import type { StructuredTurns } from '../../../server/adapters/t3Engine/engineTu
 import { ReviewerStore } from '../../../server/adapters/store'
 import { startReviewerServer } from '../../../server/app'
 import { fetchPull } from '../../../server/features/pulls/github'
-import { getMcpEndpoint } from '../../../shared/api'
+import { getMcpEndpoint, getPull } from '../../../shared/api'
 import { Provider } from '../../../shared/domain/types'
 import { reply } from '../../fixtures/panelJobs'
 import { fixturePull } from '../../fixtures/pull'
@@ -112,9 +112,13 @@ const hanging: StructuredTurns = {
     }),
 }
 
-describe('the MCP endpoint for coding agents', () => {
-  it('lets an agent start a panel on a PR and read its grounded review', async () => {
-    const { mcpUrl } = await start(recordingTurns(reply).turns)
+describe('panel results over MCP', () => {
+  it('returns a grounded review and saves the PR with its groups', async () => {
+    const pull = fixturePull()
+    const { turns } = recordingTurns((request) =>
+      request.purpose?.startsWith('Organize') ? { groups: pull.groups } : reply(request),
+    )
+    const { mcpUrl, url } = await start(turns)
     const agent = await connect(mcpUrl ?? '')
 
     const tools = await agent.listTools()
@@ -144,8 +148,14 @@ describe('the MCP endpoint for coding agents', () => {
     })
     expect(review.text).toContain('Panel review of review-room/example#128')
     expect(review.text).toContain('Plan: Reuse the audit helper.')
+    await vi.waitFor(async () => {
+      const saved = await fetch(`${url}/api/pulls/${pull.id}`)
+      expect(getPull.response.parse(await saved.json()).groupingSource).toBe(Provider.claude)
+    })
   })
+})
 
+describe('the MCP endpoint for coding agents', () => {
   it('answers what the agent got wrong as a failed tool call it can read', async () => {
     const { mcpUrl } = await start(hanging)
     const agent = await connect(mcpUrl ?? '')

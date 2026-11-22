@@ -151,6 +151,7 @@ export function createServices(options: ReviewerServerOptions) {
   })
   const loadLocal = localSnapshotLoader(repository, pulls.fetchPull)
   const panel = { ...dependencies, store: store.panel, judges }
+  const organizationJobs = new OrganizationJobs(dependencies)
   // Built before Linus, who sends a reviewed PR on to the panel.
   const panelJobs = new PanelJobs({
     ...panel,
@@ -158,6 +159,9 @@ export function createServices(options: ReviewerServerOptions) {
     members: panelMembers,
     models,
     loadLocal,
+    onReviewedPull: (pull, signal) => {
+      organizationJobs.organizeReviewedPull(pull, signal)
+    },
     stack: (url) => stacks.getStackMetadata(url),
     previousRound: (name, url, session) => previousRound(store, { name, url, session }),
     history: async (pull) => {
@@ -213,7 +217,6 @@ export function createServices(options: ReviewerServerOptions) {
     loadLocal,
     openRepository,
   })
-  const organizationJobs = new OrganizationJobs(dependencies)
   const panelGates = new PanelGates(panel)
   const panelRoutes = new PanelRoutes({ ...panel, jobs: panelJobs })
   const chatModel = () => models().primary

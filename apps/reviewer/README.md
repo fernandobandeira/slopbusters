@@ -86,6 +86,8 @@ Then ask the agent for a Slopbusters panel review of a PR. The PR's URL names it
 
 A panel an agent starts is the same panel you would start: it appears on the PR's row and in its header, notifies you when it finishes, and its fixes are still yours to choose. Until you choose, the brief lists the triage policy's default selection and says that you have not confirmed it. The tools tell the agent to start a panel only when you or your instructions ask for one, because a panel runs on your Claude and Codex accounts.
 
+When the panel finishes a pushed PR, the app saves that revision and groups its changes in the background if they still need grouping. Local fix rounds keep their snapshots with the panel review.
+
 The endpoint listens on its own loopback port and serves only these tools; the app's API stays on a port chosen at each launch. It refuses any request that carries a browser `Origin` or a host other than the loopback address. If the port is taken the app runs without the endpoint. A development server (`pnpm dev`, `pnpm start`) leaves the port to the installed app and serves agents only when started with `SLOPBUSTERS_MCP_PORT=<port>`.
 
 ## Linear issues and Steve Jobs
@@ -127,7 +129,7 @@ Repository inboxes have paths such as `/repos/owner/repo/pulls?inbox=others`; PR
 ## Current limits
 
 - Move/copy matching requires exact contiguous text (at least four lines, with meaningful code). Edited moves remain ordinary diffs. Copies are searched in local merge-base text across all changed source files; original contents are read from saved Git objects without per-file GitHub requests.
-- Binary or truncated patches are called out and link to GitHub. PRs whose full file list exceeds GitHub’s API limit are rejected. Large diffs can still be read, but grouping is capped at 220,000 prompt characters.
+- Binary or truncated patches are called out and link to GitHub. PRs whose full file list exceeds GitHub’s API limit are rejected. Large diffs can still be read and grouped.
 - Source inspection opens regular text files up to 512 KiB. Full checkout analysis reads source files up to 2 MiB and returns at most 500 locations. The snapshot fallback remains bounded to 120 files and 8 MiB for TypeScript/syntax analysis, and 10,000 GitHub tree paths. Definitions and references depend on project configuration and the installed toolchain. Dependencies, generated output, Git LFS objects, and submodule contents are not provisioned; unresolved imports and configuration errors are visible. Locations outside committed source cannot be opened. Rust build scripts and procedural macros are disabled; Go and Cargo dependency downloads are disabled. Other installed servers may invoke their own project tools.
 - Review requests to GitHub teams are not yet included in the requested view. Lists show open PRs only. Discussion loading uses paginated GitHub review threads and replies; general PR conversation comments are not included. Outdated discussion locations are shown separately rather than attached to current code.
 - Browser development data lives in `.data/reviewer.sqlite`; Electron uses its writable `userData` directory. SQLite stores snapshots, grouping, drafts, viewed-section fingerprints, and preferences. Existing JSON snapshots and current browser drafts migrate on load. Loading a different revision starts a separate comment draft and preserves earlier unsent feedback; unchanged viewed sections carry forward. Data is local and does not sync between computers.
