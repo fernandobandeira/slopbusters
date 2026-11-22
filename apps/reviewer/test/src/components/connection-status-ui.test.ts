@@ -5,7 +5,7 @@ import type { AppStatus } from '../../../shared/domain/types'
 import { ConnectionStatus } from '../../../src/components/ConnectionStatus'
 
 describe('sidebar connection status', () => {
-  it('shows a real account profile and keeps installed providers distinct from signed-in providers', () => {
+  it('shows the GitHub account without coding provider badges', () => {
     const status: AppStatus = {
       github: {
         available: true,
@@ -24,8 +24,7 @@ describe('sidebar connection status', () => {
 
     expect(markup).toContain('src="https://avatars.githubusercontent.com/u/1"')
     expect(markup).toContain('href="https://github.com/reviewer"')
-    expect(markup).toContain('aria-label="Codex: Signed in"')
-    expect(markup).toContain('aria-label="Claude: Installed · sign-in status unavailable"')
-    expect(markup).not.toContain('Claude: Signed in')
+    expect(markup).not.toContain('Codex')
+    expect(markup).not.toContain('Claude')
   })
 })

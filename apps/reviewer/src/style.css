@@ -316,6 +316,9 @@ pre {
   padding: 52px clamp(20px, 5vw, 84px);
   overflow: auto;
 }
+.inbox-content.pull-inbox {
+  padding-top: 24px;
+}
 .eyebrow {
   font-size: 10px;
   letter-spacing: 1.7px;
@@ -350,7 +353,6 @@ pre {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 16px;
 }
 .inbox-chips {
   display: flex;
