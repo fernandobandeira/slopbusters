@@ -1,3 +1,4 @@
+import { decisionIdSchema } from '../../shared/api/stackReviewRecords'
 import type { LayerFixTools } from '../features/mcp/layerFixTools'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
@@ -28,7 +29,12 @@ export function panelMcpServer(
   const server = new McpServer({ name: 'slopbusters', version: '1.0.0' }, { instructions })
   for (const register of [listReviewers, startPanelReview, getPanelReview, retryOrCancel])
     register(server, tools)
-  for (const register of [startStackReview, getStackReview, retryOrCancelStack])
+  for (const register of [
+    startStackReview,
+    getStackReview,
+    recordStackDecision,
+    retryOrCancelStack,
+  ])
     register(server, stack)
   if (fixes) {
     server.registerTool(
@@ -36,10 +42,10 @@ export function panelMcpServer(
       {
         title: 'Apply layer fixes',
         description:
-          'Apply all selected layer plans from the newest stack brief. Commits locally in an app-owned worktree and pushes nothing. Returns immediately; use get_layer_fixes to follow progress.',
-        inputSchema: { pull_request: pullRequest },
+          'Apply the specified entry ids, or all available layer plans from the newest stack brief. Commits locally in an app-owned worktree and pushes nothing. Returns immediately; use get_layer_fixes to follow progress.',
+        inputSchema: { pull_request: pullRequest, entry_ids: z.array(decisionIdSchema).optional() },
       },
-      ({ pull_request }) => answer(() => fixes.apply(pull_request)),
+      ({ pull_request, entry_ids }) => answer(() => fixes.apply(pull_request, entry_ids)),
     )
     server.registerTool(
       'get_layer_fixes',
@@ -196,6 +202,25 @@ function getStackReview(server: McpServer, tools: StackReviewTools) {
     },
     ({ pull_request, wait_seconds }, { signal }) =>
       answer(() => tools.read(pull_request, wait_seconds ?? DEFAULT_PANEL_WAIT_SECONDS, signal)),
+  )
+}
+
+function recordStackDecision(server: McpServer, tools: StackReviewTools) {
+  server.registerTool(
+    'record_stack_decision',
+    {
+      title: 'Record the author’s stack decision',
+      description:
+        'Use this only to record an answer the author actually gave. Read get_stack_review first for the decision and option ids. Never infer the answer or choose a default on the author’s behalf.',
+      inputSchema: {
+        pull_request: pullRequest,
+        decision_id: decisionIdSchema,
+        option_id: decisionIdSchema,
+        note: z.string().trim().min(1).max(12000).optional(),
+      },
+    },
+    ({ pull_request, decision_id, option_id, note }) =>
+      answer(() => tools.record(pull_request, decision_id, option_id, note)),
   )
 }
 

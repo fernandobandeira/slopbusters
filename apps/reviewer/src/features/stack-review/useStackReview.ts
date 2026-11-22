@@ -1,7 +1,8 @@
+import { buildStackBrief } from '../../../shared/domain/projectStackBrief'
+import { useStackRecords } from './useStackRecords'
 import { useEffect, useMemo, useState } from 'react'
 import * as routes from '../../../shared/api'
 import type { PanelSeatRequest } from '../../../shared/domain/panel'
-import { stackBrief } from '../../../shared/domain/stackBrief'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import type { StackReviewSession } from '../../../shared/domain/stackReview'
 import { call, message } from '../../lib/api'
@@ -20,9 +21,11 @@ export function useStackReview(url: string) {
   const [error, setError] = useState('')
   const session = started ?? latest.data?.session ?? undefined
   useStackReviewPolling(session, setStarted)
+  const records = useStackRecords(session?.id ?? '', session?.status === 'complete')
+
   const brief = useMemo(
-    () => (session?.status === 'complete' ? stackBrief(session) : undefined),
-    [session],
+    () => session && buildStackBrief(session, records.data)?.projected,
+    [session, records.data],
   )
 
   async function act(run: () => Promise<StackReviewSession>) {
@@ -40,9 +43,10 @@ export function useStackReview(url: string) {
   return {
     session,
     brief,
+    records,
     loading: latest.loading,
     busy,
-    error: error || latest.error,
+    error: error || records.error || latest.error,
     start: (reviewers: PanelSeatRequest[]) =>
       act(() => call(routes.startStackReview, { body: { url, reviewers } })),
     retry: (id: string) => act(() => call(routes.retryStackReview, { params: { id } })),

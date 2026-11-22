@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import * as routes from '../../../../shared/api/layerFix'
 import type { ApiContract } from '../../../../shared/api/contract'
@@ -15,11 +15,13 @@ vi.mock('../../../../src/lib/api', async (original) => ({
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  vi.useRealTimers()
 })
 
 it('starts selected fixes and renders the observed outcome', async () => {
   vi.mocked(call).mockImplementation((route: ApiContract) => {
-    if (route === routes.latestLayerFix) return Promise.resolve({ session: null })
+    if (route === routes.latestLayerFix)
+      return Promise.resolve({ session: null, availability: { applied: [] }, retryable: false })
     if (route === routes.startLayerFix) return Promise.resolve(fixtureLayerFix())
     return Promise.reject(new Error('Unexpected route'))
   })
@@ -50,4 +52,45 @@ it('starts selected fixes and renders the observed outcome', async () => {
   expect(call).toHaveBeenCalledWith(routes.startLayerFix, {
     body: { stack: 'stack-1', url: layerUrl(201), entries: ['#201/g1'] },
   })
+})
+
+it('refreshes server availability when polling sees the worker stop', async () => {
+  vi.useFakeTimers()
+  const finished = fixtureLayerFix()
+  const running = fixtureLayerFix({ status: 'running', outcome: undefined, results: [] })
+  let stopped = false
+  vi.mocked(call).mockImplementation((route: ApiContract) => {
+    if (route === routes.latestLayerFix)
+      return Promise.resolve({
+        session: stopped ? finished : running,
+        availability: stopped
+          ? { applied: ['#201/g1'], blocked: 'Retained local commits' }
+          : { applied: [] },
+        retryable: false,
+      })
+    if (route === routes.getLayerFix) {
+      stopped = true
+      return Promise.resolve(finished)
+    }
+    return Promise.reject(new Error('Unexpected route'))
+  })
+  await act(() => {
+    render(
+      <LayerFixWorker
+        stack="stack-1"
+        layer={{ url: layerUrl(201), number: 201, title: 'Layer 201', current: true }}
+        fixes={[
+          { id: '#201/g1', title: 'Handle missing data', triage: 'Fix the crash.', alsoRaised: [] },
+        ]}
+      />,
+    )
+    return Promise.resolve()
+  })
+  expect(screen.getByRole('button', { name: 'Cancel fixes' })).toBeTruthy()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000)
+  })
+  expect(screen.getByText('Retained local commits')).toBeTruthy()
+  expect(screen.queryByRole('checkbox', { name: 'Handle missing data' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Retry fixes' })).toBeNull()
 })

@@ -75,8 +75,12 @@ function fromStack(session: StackReviewSession, pull: number): Request[] {
       })),
   )
   const decisions = brief.decisions
-    // A proposal to reshape the stack, named by its layer alone, asks for no change to code.
-    .filter((item) => !/^#\d+$/.test(item.id) && (item.layer === pull || raisedHere(item.id)))
+    .filter(
+      (item) =>
+        !item.options.some(({ change }) => change?.structure) &&
+        !item.evidence.some(({ disposition }) => disposition === 'prepare') &&
+        (item.layer === pull || item.evidence.some(({ id }) => raisedHere(id))),
+    )
     .map((item) => ({
       round,
       entry: item.id,

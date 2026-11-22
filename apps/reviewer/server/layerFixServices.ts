@@ -1,3 +1,4 @@
+import type { StackReviewRecords } from './features/stack-review/stackReviewRecords'
 import { fixInstructions } from './adapters/fixInstructions'
 import { join } from 'node:path'
 import type { LayerFixStore } from './adapters/layerFixStore'
@@ -19,6 +20,7 @@ import { createLayerFixChecker } from './features/layer-fixes/checkFixes'
 export function createLayerFixJobs({
   store,
   stackReviewJobs,
+  stackRecords,
   models,
   engines,
   options,
@@ -29,6 +31,7 @@ export function createLayerFixJobs({
 }: {
   store: LayerFixStore
   stackReviewJobs: StackReviewJobs
+  stackRecords: StackReviewRecords
   models: () => ReturnType<typeof savedModels>
   engines: ReturnType<typeof createEngines>
   options: { dataDirectory: string; sourceRemoteUrl?: (owner: string, repo: string) => string }
@@ -40,6 +43,7 @@ export function createLayerFixJobs({
   return new LayerFixJobs({
     store,
     stack: (id) => stackReviewJobs.get(id),
+    brief: (stack) => stackRecords.brief(stack, true),
     models,
     workspace: (repository) => engines.hosts.workerWorkspace(repository),
     turns: engines.threadTurns ?? {

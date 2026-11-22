@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest'
+import { projectStackBrief } from '../../../shared/domain/projectStackBrief'
 import { stackBrief } from '../../../shared/domain/stackBrief'
 import {
   briefCounts,
@@ -16,6 +17,7 @@ function decisionsBrief() {
       [
         stackEntry(201, 'legacy', { disposition: 'ask', verdict: 'predicted' }),
         stackEntry(201, 'reverse', {
+          kind: 'rule',
           disposition: 'ask',
           reverses: {
             request: {
@@ -63,9 +65,9 @@ function decisionsBrief() {
 }
 
 it('groups decisions in author order and derives defaults without parsing the Markdown question', () => {
-  const brief = decisionsBrief()
-  const groups = groupDecisions(brief.decisions)
-  expect(groups.map(({ id, hasDefault }) => [id, hasDefault])).toEqual([
+  const brief = projectStackBrief(decisionsBrief(), 'stack-1', [])
+  const groups = groupDecisions(brief)
+  expect(groups.map(({ id, defaults }) => [id, defaults.length > 0])).toEqual([
     ['opposed', false],
     ['disputed', false],
     ['openQuestion', false],
@@ -92,16 +94,17 @@ it('groups decisions in author order and derives defaults without parsing the Ma
     structure: { action: 'fold', into: 202 },
   })
   expect(reversal?.options.map((option) => [option.id, option.recommended])).toEqual([
-    ['change', true],
-    ['keep', false],
+    ['change', false],
+    ['keep', true],
   ])
   expect(reversal?.evidence[0]?.reverses?.request.plan).toBe('Use a map.')
   expect(predicted?.options[0]).toEqual({
     id: 'keep',
     label: 'Keep the code and reply',
     recommended: true,
+    reply: 'The code shows it.',
   })
-  expect(reviewLead(brief)).toBe('4 questions need you. 2 more have a default.')
+  expect(reviewLead(brief)).toBe('0 of 6 answered. 4 questions need you. 2 more have a default.')
 })
 
 it('groups only disputed resolutions under model disagreement', () => {
@@ -114,10 +117,7 @@ it('groups only disputed resolutions under model disagreement', () => {
   )!
 
   expect(
-    groupDecisions(brief.decisions).map(({ label, decisions }) => [
-      label,
-      decisions.map(({ id }) => id),
-    ]),
+    groupDecisions(brief).map(({ label, decisions }) => [label, decisions.map(({ id }) => id)]),
   ).toEqual([
     ['The two models disagree', ['#201/disputed']],
     ['Your call', ['#201/edge', '#201/unverified']],
@@ -199,4 +199,20 @@ it('counts visible work and unread entries, retaining a chain beside its cause o
   ])
   expect(briefOnLayer(brief, 203).chains[0]?.cause.id).toBe('#201/cause')
   expect(briefOnLayer(brief, 201).chains[0]?.unnecessary[0]?.id).toBe('#203/effect')
+})
+
+it('keeps same-action structure proposals separately addressable in the saved review', () => {
+  const proposal = {
+    action: 'split' as const,
+    layer: 201,
+    reason: 'Isolate storage.',
+    cost: 'A rebase.',
+  }
+  const session = finishedStackReview([], {
+    ...emptyResult,
+    structure: [proposal, { ...proposal, reason: 'Isolate rendering.' }],
+  })
+  const ids = () => stackBrief(session)!.decisions.map(({ id }) => id)
+  expect(new Set(ids()).size).toBe(2)
+  expect(ids()).toEqual(ids())
 })

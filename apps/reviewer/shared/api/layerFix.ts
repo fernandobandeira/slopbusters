@@ -9,8 +9,17 @@ export const startLayerFix = defineRoute('POST', '/layer-fixes', {
   response: layerFixSessionSchema,
 })
 export const latestLayerFix = defineRoute('GET', '/layer-fixes/latest', {
-  query: z.object({ url: pullUrlSchema }),
-  response: z.object({ session: layerFixSessionSchema.nullable() }),
+  query: z.object({
+    url: pullUrlSchema,
+    stack: z.string(),
+    head: z.string(),
+    base: z.string(),
+  }),
+  response: z.object({
+    session: layerFixSessionSchema.nullable(),
+    availability: z.object({ applied: z.array(z.string()), blocked: z.string().optional() }),
+    retryable: z.boolean(),
+  }),
 })
 export const getLayerFix = defineRoute('GET', '/layer-fixes/:id', {
   params: idParams,

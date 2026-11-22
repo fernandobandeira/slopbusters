@@ -98,6 +98,7 @@ describe('what earlier rounds asked for, from a stack review built on that round
       stackEntry(201, 'g2', { reason: 'The bottom layer owns it.' }),
       stackEntry(201, 'g4', { disposition: 'ask', question: 'Keep the flag?' }),
       stackEntry(203, 'g5'),
+      stackEntry(201, 'prediction', { disposition: 'prepare', verdict: 'predicted' }),
     ],
     {
       ...emptyResult,

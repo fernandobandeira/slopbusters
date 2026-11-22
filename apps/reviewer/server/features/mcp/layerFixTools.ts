@@ -10,13 +10,24 @@ export class LayerFixTools {
     private readonly jobs: Pick<LayerFixJobs, 'start' | 'latest'>,
     private readonly stacks: Pick<StackReviewJobs, 'latest'>,
   ) {}
-  apply(pullRequest: string): string {
+  async apply(pullRequest: string, entries?: string[]): Promise<string> {
     const { url, repository } = target(pullRequest)
     const running = this.jobs.latest(url)
-    if (running?.status === 'running') return report(running)
+    if (running?.status === 'running') {
+      if (
+        entries &&
+        (new Set(entries).size !== running.fixes.length ||
+          running.fixes.some(({ id }) => !entries.includes(id)))
+      )
+        throw new UserError(
+          'The running worker has a different selection. Wait for it to stop.',
+          409,
+        )
+      return report(running)
+    }
     const stack = this.stacks.latest(repository, [url])
     if (!stack) throw new UserError('Review this stack before applying fixes.')
-    return report(this.jobs.start(stack.id, url))
+    return report(await this.jobs.start(stack.id, url, entries))
   }
   async read(pullRequest: string, seconds: number, signal: AbortSignal): Promise<string> {
     const { url } = target(pullRequest)

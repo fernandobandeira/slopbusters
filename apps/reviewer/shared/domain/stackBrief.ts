@@ -9,9 +9,15 @@ import type {
 import {
   contestedDoubts,
   entryDecisions,
-  structureDecision,
+  structureDecisions,
   type BriefDecision,
 } from './stackDecisions'
+import type {
+  DecisionProvenance,
+  DecisionRecord,
+  ObservedLayer,
+  StackDisposition,
+} from './stackReviewRecords'
 import { triage } from './triage'
 import { briefLayers, staleEntries, type BriefLayer, type BriefStale } from './stackBriefLayers'
 
@@ -28,14 +34,32 @@ export interface StackBrief {
   decisions: BriefDecision[]
   /** Bottom to top, each layer's fixes in triage order. */
   fixes: { layer: BriefLayer; items: BriefFix[] }[]
-  /** What a reviewer will likely ask though the models would not: replies to have ready. */
-  predictions: BriefPrediction[]
   chains: BriefChain[]
   /** Entries triage left for later: problems already there, or cases needing several failures. */
   followUps: BriefFollowUp[]
   unread: BriefEntry[]
   stale: BriefStale[]
   limitations: string[]
+  review?: {
+    answered: BriefAnswer[]
+    history: DecisionRecord[]
+    pending: Map<string, PendingDecision>
+  }
+}
+export interface PendingDecision {
+  revision: number
+  stale: boolean
+  serious: boolean
+}
+
+export interface BriefAnswer {
+  decision: BriefDecision
+  record: DecisionRecord & { answer: NonNullable<DecisionRecord['answer']> }
+  option?: BriefDecision['options'][number]
+  revision: number
+  recheck: boolean
+  confirmableAt?: ObservedLayer[]
+  manual: boolean
 }
 export interface BriefFix {
   id: string
@@ -48,6 +72,8 @@ export interface BriefFix {
   derivedFrom?: string[]
   /** The other entries that made the same point, which this one owns. */
   alsoRaised: string[]
+  decision?: DecisionProvenance
+  applied?: true
   /** The layer grounding sent it to, when the pass moved it here. */
   movedFrom?: { layer: number; reason: string }
   /** The title or description, when the change is to the PR's metadata rather than its code. */
@@ -63,16 +89,10 @@ export interface BriefSerious {
   contested: boolean
   /** Where it is in this brief: a fix, a decision, a reply, a follow-up, or set aside and why. */
   standing: string
-}
-export interface BriefPrediction {
-  id: string
-  layer: number
-  title: string
-  /** The change that would answer the reviewer, should the author choose to make it. */
-  plan?: string
-  effort?: StackEntry['effort']
-  /** The models' argument for keeping the code, written to send as the reply. */
-  reply: string
+  entryIds: string[]
+  relatedLayers: number[]
+  disposition?: StackDisposition
+  revision?: number
 }
 export interface BriefChain {
   cause: BriefEntry
@@ -126,7 +146,9 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
         [
           ...unmerged.filter(
             (entry) =>
-              entry.disposition === 'ask' || (entry.disposition === 'fix' && doubts.has(entry.id)),
+              entry.disposition === 'ask' ||
+              entry.disposition === 'prepare' ||
+              (entry.disposition === 'fix' && doubts.has(entry.id)),
           ),
           ...derived
             .filter(
@@ -136,14 +158,8 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
             .map(({ entry }) => entry),
         ],
         { doubts, contested, entry: plan.entry, layerOf: plan.layerOf },
-      ),
-      ...result.structure.map((item) =>
-        structureDecision(
-          item,
-          structureTitle(item),
-          contested.has(`structure #${String(item.layer)}`),
-        ),
-      ),
+      ).map((decision) => decisionContext(decision, derived, plan)),
+      ...structureDecisions(result.structure, contested),
     ],
     fixes: layers
       .map((layer) => ({
@@ -155,7 +171,6 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
         }),
       }))
       .filter((group) => group.items.length),
-    predictions: predictionsOf(current),
     chains: result.chains.flatMap(({ cause, reason, unnecessary }) => {
       const entry = plan.briefEntries([cause])[0]
       return entry ? [{ cause: entry, reason, unnecessary: plan.briefEntries(unnecessary) }] : []
@@ -174,19 +189,26 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
   }
 }
 
-/** Predicted reviewer comments, bottom to top, each with the reply to give. */
-function predictionsOf(entries: readonly StackEntry[]): BriefPrediction[] {
-  return entries
-    .filter((entry) => entry.disposition === 'prepare')
-    .sort((a, b) => a.layer - b.layer || a.rank - b.rank)
-    .map((entry) => ({
-      id: entry.id,
-      layer: entry.layer,
-      title: entry.title,
-      ...(entry.plan ? { plan: entry.plan } : {}),
-      ...(entry.effort ? { effort: entry.effort } : {}),
-      reply: entry.reason,
-    }))
+function decisionContext(
+  decision: BriefDecision,
+  derived: { item: CrossLayerResult['derived'][number] }[],
+  plan: ReturnType<typeof placement>,
+): BriefDecision {
+  const relatedEntries = [
+    ...(decision.relatedEntries ?? []),
+    ...(derived.find(({ item }) => item.id === decision.id)?.item.from ?? []),
+    ...decision.evidence.flatMap(({ id }) => plan.alsoRaised(id)),
+  ]
+  return {
+    ...decision,
+    relatedEntries,
+    relatedLayers: relatedEntries.flatMap((id) => {
+      const entry = plan.entry(id)
+      return entry
+        ? [entry.layer, plan.layerOf(entry), ...(entry.settledBy ? [entry.settledBy] : [])]
+        : []
+    }),
+  }
 }
 
 interface Standing {
@@ -201,6 +223,7 @@ interface Standing {
  */
 function seriousEntries(entries: readonly StackEntry[], standing: Standing): BriefSerious[] {
   return entries.filter(isSerious).map((entry) => ({
+    ...seriousContext(entry, standing),
     id: entry.id,
     layer: entry.layer,
     title: entry.title,
@@ -209,6 +232,23 @@ function seriousEntries(entries: readonly StackEntry[], standing: Standing): Bri
     contested: entry.impactContested ?? false,
     standing: seriousStanding(entry, standing),
   }))
+}
+
+function seriousContext(entry: StackEntry, { plan, result }: Standing) {
+  const entries = [
+    entry.id,
+    ...result.duplicates
+      .filter((group) => group.entries.includes(entry.id))
+      .flatMap((group) => group.entries),
+    ...result.chains
+      .filter((chain) => chain.unnecessary.includes(entry.id))
+      .map((chain) => chain.cause),
+    ...(result.derived.find((item) => item.id === entry.id)?.from ?? []),
+  ]
+  return {
+    entryIds: [...new Set(entries)].sort(),
+    relatedLayers: [plan.layerOf(entry), ...entries.flatMap((id) => plan.entry(id)?.layer ?? [])],
+  }
 }
 
 function seriousStanding(entry: StackEntry, { plan, doubts, result }: Standing): string {
@@ -380,10 +420,4 @@ function passLimitations({ pass }: StackReviewSession): string[] {
       `The two models did not agree on the cross-layer pass within ${String(pass.turns.length)} turns. The last valid result is kept; what the second model did not approve is a decision, not a fix.`,
     ]
   return []
-}
-
-function structureTitle(item: CrossLayerResult['structure'][number]): string {
-  const layer = `PR #${String(item.layer)}`
-  if (item.action === 'fold') return `Fold ${layer} into PR #${String(item.into ?? 0)}`
-  return `${item.action === 'drop' ? 'Drop' : 'Split'} ${layer}`
 }

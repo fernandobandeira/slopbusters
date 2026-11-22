@@ -1,5 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { layerFixSessionSchema, type LayerFixSession } from '../../shared/domain/layerFix'
+import {
+  appliedLayerFixEntries,
+  layerFixSessionSchema,
+  type LayerFixSession,
+} from '../../shared/domain/layerFix'
 
 export function migrateLayerFixes(database: DatabaseSync): void {
   database.exec(`BEGIN IMMEDIATE;
@@ -21,6 +25,23 @@ export class LayerFixStore {
   get(id: string): LayerFixSession | undefined {
     const row = this.database.prepare('SELECT session FROM layer_fix_sessions WHERE id = ?').get(id)
     return row ? layerFixSessionSchema.parse(JSON.parse(String(row.session))) : undefined
+  }
+  appliedForStack(stack: string): string[] {
+    const rows = this.database
+      .prepare(
+        `
+      SELECT session FROM layer_fix_sessions WHERE json_extract(session, '$.stack') = ?
+        AND json_extract(session, '$.status') <> 'running'
+    `,
+      )
+      .all(stack)
+    return [
+      ...new Set(
+        rows.flatMap((row) =>
+          appliedLayerFixEntries(layerFixSessionSchema.parse(JSON.parse(String(row.session)))),
+        ),
+      ),
+    ]
   }
   all(): LayerFixSession[] {
     return this.database

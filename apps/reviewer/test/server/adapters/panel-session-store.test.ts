@@ -204,7 +204,7 @@ it('upgrades v12 sessions, moving only unfinished preparation and backfilling UR
   }
   const upgraded = new DatabaseSync(filename, { readOnly: true })
   try {
-    expect(upgraded.prepare('PRAGMA user_version').get()?.user_version).toBe(13)
+    expect(upgraded.prepare('PRAGMA user_version').get()?.user_version).toBe(14)
     expect(
       upgraded
         .prepare(

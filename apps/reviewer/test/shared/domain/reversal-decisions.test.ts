@@ -143,7 +143,11 @@ describe('a round that would undo what an earlier round asked for', () => {
     const markdown = stackBriefMarkdown(brief!, stackRepository)
 
     expect(brief?.fixes.flatMap(({ items }) => items.map((item) => item.id))).toEqual(['#201/g5'])
-    expect(brief?.decisions.map((item) => item.id)).toEqual(['#201/g1', '#201/g2', '#201/g3'])
+    expect(brief?.decisions.map((item) => item.id)).toEqual([
+      '#201/g1',
+      '#201/g2',
+      'opposed:#201/g3+#201/g4',
+    ])
     expect(brief?.decisions[0]?.question).toBe(
       'It would undo what the round of 2026-11-18 asked for in #201/g4, "Express the access level in one field": Replace the two booleans with one access level per method. (Two booleans permit a contradictory fourth combination.) The check found: It brings back the two booleans e1 replaced. The models would not ask for it; reply if the code stays: One field keeps the impossible combination out. Undo the earlier change, or keep it?',
     )

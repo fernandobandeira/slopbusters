@@ -1,25 +1,76 @@
+import { Button } from '~/components/ui/button'
+import type { StackBrief } from '../../../shared/domain/stackBrief'
+import { DecisionControls } from './DecisionControls'
+import type { StackRecordActions } from './useStackRecords'
 import { groundingKindLabels } from '../../../shared/domain/grounding'
 import { seatReviewer } from '../../../shared/domain/panel'
 import type { BriefDecision } from '../../../shared/domain/stackDecisions'
 import { groupDecisions } from '../../../shared/domain/stackReviewView'
 
-export function DecisionGroups({ decisions }: { decisions: BriefDecision[] }) {
-  return groupDecisions(decisions).map((group) => (
-    <details key={group.id} className="stack-review-disclosure" open={!group.hasDefault}>
-      <summary>
-        {group.label} · {group.decisions.length}
-        {!group.hasDefault && <span className="stack-review-group-default">No default</span>}
-      </summary>
-      {group.decisions.map((decision) => (
-        <DecisionCard key={decision.id} decision={decision} />
-      ))}
-    </details>
-  ))
+export function DecisionGroups({
+  brief,
+  actions,
+}: {
+  brief: StackBrief
+  actions: StackRecordActions
+}) {
+  return groupDecisions(brief).map((group) => {
+    const { defaults } = group
+    const label = group.id === 'predicted' ? 'Keep the code, replies ready' : defaults[0]?.label
+    return (
+      <details
+        key={group.id}
+        className="stack-review-disclosure"
+        open={defaults.length < group.decisions.length}
+      >
+        <summary>
+          {group.label} · {group.decisions.length}
+          {!defaults.length && <span className="stack-review-group-default">No default</span>}
+        </summary>
+        {defaults.length > 0 && (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={actions.busy}
+            onClick={() =>
+              void actions.bulk(
+                defaults.map(({ decisionId, expectedRevision, optionId }) => ({
+                  decisionId,
+                  expectedRevision,
+                  optionId,
+                })),
+              )
+            }
+          >
+            {label} · {defaults.length}
+          </Button>
+        )}
+        {group.decisions.map((decision) => (
+          <DecisionCard key={decision.id} decision={decision}>
+            <DecisionControls
+              decision={decision}
+              revision={brief.review?.pending.get(decision.id)?.revision ?? 0}
+              stale={brief.review?.pending.get(decision.id)?.stale ?? false}
+              defaultOption={
+                defaults.find(({ decisionId }) => decisionId === decision.id)?.optionId
+              }
+              actions={actions}
+            />
+          </DecisionCard>
+        ))}
+      </details>
+    )
+  })
 }
 
-function DecisionCard({ decision }: { decision: BriefDecision }) {
-  const { layer, group, title, kind, cost, reason, evidence, options, crossLayerQuestion } =
-    decision
+function DecisionCard({
+  decision,
+  children,
+}: {
+  decision: BriefDecision
+  children: React.ReactNode
+}) {
+  const { layer, group, title, kind, cost, reason, evidence, crossLayerQuestion } = decision
   const reviewerCount = new Set(evidence.flatMap((entry) => entry.raisedBy.map(seatReviewer))).size
   const entry = evidence[0]
   const fullQuestion = group === 'openQuestion' ? entry?.question : decision.question
@@ -42,15 +93,7 @@ function DecisionCard({ decision }: { decision: BriefDecision }) {
       {group === 'crossLayer' && decision.contested && !evidence.length && (
         <p>The second model did not approve this proposal.</p>
       )}
-      <ul className="stack-review-options">
-        {options.map(({ id, label, detail, recommended }) => (
-          <li key={id}>
-            <strong>{label}</strong>
-            {recommended && <span className="stack-review-recommendation">Recommended</span>}
-            {detail && <p>{detail}</p>}
-          </li>
-        ))}
-      </ul>
+      {children}
       <details className="stack-review-evidence">
         <summary>Evidence and history</summary>
         {fullQuestion && fullQuestion !== crossLayerQuestion && (

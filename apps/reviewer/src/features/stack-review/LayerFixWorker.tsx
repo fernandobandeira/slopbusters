@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { MAX_CHECKED_FIXES } from '../../../shared/domain/panelFix'
+import { useCallback, useEffect, useState } from 'react'
 import * as routes from '../../../shared/api/layerFix'
 import { groundingKindLabels } from '../../../shared/domain/grounding'
 import type { LayerFixSession } from '../../../shared/domain/layerFix'
@@ -18,47 +19,41 @@ export function LayerFixWorker({
   layer: BriefLayer
   fixes: BriefFix[]
 }) {
-  const { url, number, current } = layer
-  const latest = useApiQuery(routes.latestLayerFix, { query: { url } })
-  const [started, setStarted] = useState<LayerFixSession>()
-  const [selected, setSelected] = useState(() => fixes.map((fix) => fix.id))
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const saved = latest.data?.session
-  const session = started ?? (saved?.stack === stack ? saved : undefined)
-  const failure = error || latest.error
-  useWorkerPolling(session, setStarted)
-  async function act(run: () => Promise<LayerFixSession>) {
-    setBusy(true)
-    setError('')
-    try {
-      setStarted(await run())
-    } catch (cause) {
-      setError(message(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
+  const worker = useLayerWorker(stack, layer, fixes)
+  const { selected, session, busy, blocked, failure, act, setError } = worker
+  const { current, number, url } = layer
+  const tooMany = selected.length > MAX_CHECKED_FIXES
+  const running = session?.status === 'running'
   return (
     <div>
       <FixSelection
-        fixes={fixes}
-        busy={busy || Boolean(session)}
-        selected={session ? session.fixes.map((fix) => fix.id) : selected}
-        setSelected={setSelected}
+        fixes={worker.available}
+        busy={busy || running || Boolean(blocked)}
+        current={current}
+        selected={selected}
+        update={worker.select}
       />
-      {session ? (
+      {blocked && <p className="stack-warning">{blocked}</p>}
+      {tooMany && <p>Choose at most {MAX_CHECKED_FIXES} fixes per run.</p>}
+      {session && (
         <>
           <p role="status">
             {session.outcome ?? 'Working'}: {session.progress}
           </p>
           <WorkerOutcome session={session} />
-          <WorkerActions session={session} busy={busy} act={act} setError={setError} />
+          <WorkerActions
+            session={session}
+            busy={busy}
+            retryable={worker.retryable}
+            act={act}
+            setError={setError}
+          />
         </>
-      ) : (
+      )}
+      {!running && !blocked && (
         <Button
           size="sm"
-          disabled={busy || !current || !selected.length || latest.loading}
+          disabled={busy || !selected.length || tooMany || worker.loading}
           onClick={() =>
             void act(() => call(routes.startLayerFix, { body: { stack, url, entries: selected } }))
           }
@@ -69,6 +64,81 @@ export function LayerFixWorker({
       {failure && <p role="alert">{failure}</p>}
     </div>
   )
+}
+
+function useLayerWorker(stack: string, layer: BriefLayer, fixes: BriefFix[]) {
+  const {
+    session,
+    availability,
+    retryable,
+    update,
+    error: loadError,
+    loading,
+  } = useWorkerSession(stack, layer)
+  const [excluded, setExcluded] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const { applied = [], blocked } = availability ?? {}
+  const available = fixes.filter((fix) => !fix.applied && !applied.includes(fix.id))
+  const selected = available
+    .filter((fix) => (layer.current || fix.decision) && !excluded.includes(fix.id))
+    .map(({ id }) => id)
+  const failure = error || loadError
+  async function act(run: () => Promise<LayerFixSession>) {
+    setBusy(true)
+    setError('')
+    try {
+      update(await run())
+    } catch (cause) {
+      setError(message(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+  function select(id: string, checked: boolean) {
+    setExcluded((previous) =>
+      checked ? previous.filter((item) => item !== id) : [...previous, id],
+    )
+  }
+  return {
+    selected,
+    available,
+    session,
+    blocked,
+    busy,
+    failure,
+    act,
+    setError,
+    select,
+    loading,
+    retryable,
+  }
+}
+
+function useWorkerSession(stack: string, layer: BriefLayer) {
+  const head = layer.currentHead ?? layer.reviewedHead ?? ''
+  const base = layer.currentBase ?? layer.reviewedBase ?? ''
+  const [refresh, setRefresh] = useState(0)
+  const latest = useApiQuery(
+    routes.latestLayerFix,
+    { query: { url: layer.url, stack, head, base } },
+    { refresh },
+  )
+  const [started, setStarted] = useState<LayerFixSession>()
+  const session = started ?? latest.data?.session ?? undefined
+  const update = useCallback((next: LayerFixSession) => {
+    setStarted(next)
+    if (next.status !== 'running') setRefresh((value) => value + 1)
+  }, [])
+  useWorkerPolling(session, update)
+  return {
+    session,
+    update,
+    availability: latest.data?.availability,
+    retryable: Boolean(latest.data?.retryable && latest.data.session?.id === session?.id),
+    loading: !latest.data,
+    error: latest.error,
+  }
 }
 
 function WorkerOutcome({ session }: { session: LayerFixSession }) {
@@ -135,12 +205,14 @@ function FixSelection({
   fixes,
   busy,
   selected,
-  setSelected,
+  current,
+  update,
 }: {
   fixes: BriefFix[]
   busy: boolean
   selected: string[]
-  setSelected: React.Dispatch<React.SetStateAction<string[]>>
+  current: boolean
+  update: (id: string, checked: boolean) => void
 }) {
   return (
     <fieldset disabled={busy}>
@@ -151,18 +223,16 @@ function FixSelection({
             <input
               type="checkbox"
               checked={selected.includes(fix.id)}
+              disabled={!current && !fix.decision}
               onChange={(event) => {
-                setSelected((previous) =>
-                  event.target.checked
-                    ? [...previous, fix.id]
-                    : previous.filter((id) => id !== fix.id),
-                )
+                update(fix.id, event.target.checked)
               }}
             />
             {fix.title}
           </label>
           <p>{fix.plan ?? 'No plan recorded.'}</p>
           <p className="stack-brief-detail">{fixMeta(fix)}</p>
+          {fix.decision?.note && <p>Private note: {fix.decision.note}</p>}
         </div>
       ))}
     </fieldset>
@@ -171,6 +241,7 @@ function FixSelection({
 function fixMeta(fix: BriefFix): string {
   return [
     fix.kind && groundingKindLabels[fix.kind],
+    fix.decision && `Author’s choice · ${fix.decision.decisionId}`,
     fix.effort,
     fix.field && `PR ${fix.field} · Left for the author`,
     fix.derivedFrom && `Derived from ${fix.derivedFrom.join(', ')}`,
@@ -186,9 +257,11 @@ function WorkerActions({
   busy,
   act,
   setError,
+  retryable,
 }: {
   session: LayerFixSession
   busy: boolean
+  retryable: boolean
   act: (run: () => Promise<LayerFixSession>) => Promise<void>
   setError: (error: string) => void
 }) {
@@ -205,7 +278,7 @@ function WorkerActions({
           Cancel fixes
         </Button>
       ) : (
-        session.outcome !== 'done' && (
+        retryable && (
           <Button
             size="sm"
             disabled={busy}

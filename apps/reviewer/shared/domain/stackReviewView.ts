@@ -1,3 +1,4 @@
+import { bulkDefaults } from './projectStackBrief'
 import type { StackBrief } from './stackBrief'
 import { layerMoved } from './stackBriefLayers'
 import { remainingBudgetNote, unreadBudgetNote } from './stackPassInput'
@@ -7,36 +8,41 @@ import type { GroundingKind } from './grounding'
 const decisionGroups: readonly {
   id: BriefDecisionGroup
   label: string
-  hasDefault: boolean
 }[] = [
-  { id: 'opposed', label: 'Reviewers ask for opposite things', hasDefault: false },
-  { id: 'disputed', label: 'The two models disagree', hasDefault: false },
-  { id: 'openQuestion', label: 'Your call', hasDefault: false },
-  { id: 'crossLayer', label: 'Cross-layer decisions', hasDefault: false },
-  { id: 'reversal', label: 'Would undo an earlier round', hasDefault: true },
+  { id: 'opposed', label: 'Reviewers ask for opposite things' },
+  { id: 'disputed', label: 'The two models disagree' },
+  { id: 'openQuestion', label: 'Your call' },
+  { id: 'crossLayer', label: 'Cross-layer decisions' },
+  { id: 'reversal', label: 'Would undo an earlier round' },
   {
     id: 'predicted',
     label: 'A reviewer will probably ask, the models would not',
-    hasDefault: true,
   },
 ]
 
-export function groupDecisions(decisions: readonly BriefDecision[]) {
+export function groupDecisions(brief: StackBrief) {
   return decisionGroups
-    .map((group) => ({
-      ...group,
-      decisions: decisions.filter(({ group: id }) => id === group.id),
-    }))
+    .map((group) => {
+      const decisions = brief.decisions.filter(({ group: id }) => id === group.id)
+      return { ...group, decisions, defaults: bulkDefaults(brief, decisions) }
+    })
     .filter((group) => group.decisions.length)
 }
 
 export function briefCounts(brief: StackBrief) {
-  const needsAnswer = brief.decisions.filter((decision) => !hasDefault(decision)).length
+  const hasDefault = bulkDefaults(brief, brief.decisions).length
   return {
-    serious: brief.serious.length,
-    needsAnswer,
-    hasDefault: brief.decisions.length - needsAnswer,
-    fixes: brief.fixes.reduce((total, group) => total + group.items.length, 0),
+    serious: brief.serious.filter(
+      ({ disposition }) => !disposition || disposition.state === 'assigned',
+    ).length,
+    answered: brief.review?.answered.length ?? 0,
+    total: brief.decisions.length + (brief.review?.answered.length ?? 0),
+    needsAnswer: brief.decisions.length - hasDefault,
+    hasDefault,
+    fixes: brief.fixes.reduce(
+      (total, group) => total + group.items.filter(({ applied }) => !applied).length,
+      0,
+    ),
     unread: brief.unread.length,
     moved: brief.layers.filter(layerMoved).length,
   }
@@ -47,8 +53,9 @@ export function reviewLimitations(brief: StackBrief): string[] {
 }
 
 export function stripCounts(brief: StackBrief): string {
-  const { serious, needsAnswer, fixes, unread, moved } = briefCounts(brief)
+  const { serious, answered, total, needsAnswer, fixes, unread, moved } = briefCounts(brief)
   return [
+    brief.review && total && `${answered} of ${total} answered`,
     serious && `${serious} serious ${plural(serious, 'consequence')}`,
     needsAnswer &&
       `${needsAnswer} ${plural(needsAnswer, 'question')} need${needsAnswer === 1 ? 's' : ''} you`,
@@ -62,8 +69,9 @@ export function stripCounts(brief: StackBrief): string {
 }
 
 export function reviewLead(brief: StackBrief): string {
-  const { needsAnswer, hasDefault: defaults, fixes } = briefCounts(brief)
+  const { answered, total, needsAnswer, hasDefault: defaults, fixes } = briefCounts(brief)
   const sentences = [
+    brief.review && total && `${answered} of ${total} answered.`,
     needsAnswer && `${needsAnswer} ${needsAnswer === 1 ? 'question needs' : 'questions need'} you.`,
     defaults &&
       `${defaults} ${needsAnswer ? 'more' : plural(defaults, 'question')} ${defaults === 1 ? 'has' : 'have'} a default.`,
@@ -88,19 +96,22 @@ export function coverageWarnings(brief: StackBrief): string[] {
 export function briefOnLayer(brief: StackBrief, layer: number | undefined): StackBrief {
   if (layer === undefined) return brief
   const belongs = (item: { layer: number }) => item.layer === layer
+  const onLayer = (item: BriefDecision) =>
+    belongs(item) ||
+    item.options.some(({ change }) => change?.layer === layer || change?.structure?.into === layer)
   return {
     ...brief,
     layers: brief.layers.filter((item) => item.number === layer),
     serious: brief.serious.filter(belongs),
-    decisions: brief.decisions.filter(
-      (item) =>
-        belongs(item) ||
-        item.options.some(
-          ({ change }) => change?.layer === layer || change?.structure?.into === layer,
-        ),
-    ),
+    decisions: brief.decisions.filter(onLayer),
+    review: brief.review && {
+      ...brief.review,
+      answered: brief.review.answered.filter(({ decision }) => onLayer(decision)),
+      history: brief.review.history.filter(({ snapshot }) =>
+        snapshot.layers.some(({ pull }) => pull === layer),
+      ),
+    },
     fixes: brief.fixes.filter((group) => group.layer.number === layer),
-    predictions: brief.predictions.filter(belongs),
     unread: brief.unread.filter(belongs),
     followUps: brief.followUps.filter(belongs),
     chains: brief.chains
@@ -140,7 +151,7 @@ const fixKinds: Record<GroundingKind | 'unclassified', [string, string]> = {
 export function fixKindSummary(brief: StackBrief): string {
   const counts = new Map<keyof typeof fixKinds, number>()
   for (const { items } of brief.fixes)
-    for (const item of items) {
+    for (const item of items.filter(({ applied }) => !applied)) {
       const kind = item.kind ?? 'unclassified'
       counts.set(kind, (counts.get(kind) ?? 0) + 1)
     }
@@ -148,13 +159,6 @@ export function fixKindSummary(brief: StackBrief): string {
     .sort(([, a], [, b]) => b - a)
     .map(([kind, count]) => `${count} ${plural(count, ...fixKinds[kind])}`)
     .join(' · ')
-}
-
-function hasDefault(decision: BriefDecision): boolean {
-  return (
-    (decision.group === 'reversal' || decision.group === 'predicted') &&
-    decision.options.some((option) => option.recommended)
-  )
 }
 
 function plural(count: number, singular: string, pluralForm = `${singular}s`): string {

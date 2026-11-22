@@ -1,5 +1,5 @@
+import type { StackReviewRecords } from '../stack-review/stackReviewRecords'
 import type { ReviewerId } from '../../../shared/domain/panel'
-import { stackBrief } from '../../../shared/domain/stackBrief'
 import { stackBriefMarkdown } from '../../../shared/domain/stackBriefMarkdown'
 import { layerProgress, type StackReviewSession } from '../../../shared/domain/stackReview'
 import { UserError } from '../../errors'
@@ -11,6 +11,7 @@ interface Options {
   jobs: Pick<StackReviewJobs, 'start' | 'latest' | 'retry' | 'cancel'>
   /** How often a wait looks at the stack review again. */
   pollMs?: number
+  records: Pick<StackReviewRecords, 'brief' | 'recordChoice'>
 }
 
 /**
@@ -23,7 +24,7 @@ export class StackReviewTools {
   /** Review the stack a PR belongs to, or return the review already working on it. */
   async start(pullRequest: string, reviewers?: readonly ReviewerId[]): Promise<string> {
     const { url } = target(pullRequest)
-    return report(await this.options.jobs.start(url, reviewers && [...reviewers]))
+    return this.report(await this.options.jobs.start(url, reviewers && [...reviewers]))
   }
 
   /** The stack's newest review: its brief, or how far it is after waiting up to `waitSeconds`. */
@@ -34,20 +35,38 @@ export class StackReviewTools {
       const session = this.options.jobs.latest(repository, [url])
       if (!session) return `No stack review covers ${name}. Call start_stack_review to ask for one.`
       const remaining = deadline - Date.now()
-      if (session.status !== 'running' || signal.aborted || remaining <= 0) return report(session)
+      if (session.status !== 'running' || signal.aborted || remaining <= 0)
+        return this.report(session)
       await pause(Math.min(this.options.pollMs ?? PANEL_POLL_MS, remaining), signal)
     }
   }
 
-  retry(pullRequest: string): string {
-    return report(this.options.jobs.retry(this.latest(pullRequest).id))
+  retry(pullRequest: string): Promise<string> {
+    return this.report(this.options.jobs.retry(this.latest(pullRequest).id))
   }
 
-  cancel(pullRequest: string): string {
+  async cancel(pullRequest: string): Promise<string> {
     const session = this.latest(pullRequest)
     if (session.status !== 'running' && session.status !== 'partial')
       throw new UserError(`No stack review is working on ${target(pullRequest).name}.`)
-    return report(this.options.jobs.cancel(session.id))
+    return this.report(this.options.jobs.cancel(session.id))
+  }
+
+  async record(
+    pullRequest: string,
+    decisionId: string,
+    optionId: string,
+    note?: string,
+  ): Promise<string> {
+    const session = this.latest(pullRequest)
+    await this.options.records.recordChoice(session.id, decisionId, optionId, note)
+    return 'Recorded the author’s choice. Call get_stack_review to read the updated brief.'
+  }
+
+  private async report(session: StackReviewSession): Promise<string> {
+    if (session.status === 'complete')
+      return stackBriefMarkdown(await this.options.records.brief(session), session.repository)
+    return progressReport(session)
   }
 
   private latest(pullRequest: string): StackReviewSession {
@@ -58,10 +77,7 @@ export class StackReviewTools {
   }
 }
 
-/** A stack review as an agent needs it: the brief once there is one, else where each layer is. */
-function report(session: StackReviewSession): string {
-  const brief = session.status === 'complete' ? stackBrief(session) : undefined
-  if (brief) return stackBriefMarkdown(brief, session.repository)
+function progressReport(session: StackReviewSession): string {
   const stack = `the stack review of PR #${String(session.layers[0]?.number ?? 0)} to PR #${String(session.layers.at(-1)?.number ?? 0)}`
   const layers = session.layers
     .map((layer) => `- PR #${String(layer.number)} "${layer.title}": ${layerProgress(layer)}`)

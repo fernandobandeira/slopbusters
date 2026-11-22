@@ -1,20 +1,13 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import * as routes from '../../../../shared/api'
-import type { ApiContract } from '../../../../shared/api/contract'
-import { latestLayerFix } from '../../../../shared/api/layerFix'
+import * as recordRoutes from '../../../../shared/api/stackReviewRecords'
+import { projectStackBrief } from '../../../../shared/domain/projectStackBrief'
 import { stackBrief } from '../../../../shared/domain/stackBrief'
 import { stackBriefMarkdown } from '../../../../shared/domain/stackBriefMarkdown'
-import { StackReviewPage } from '../../../../src/features/stack-review/StackReviewPage'
 import { call } from '../../../../src/lib/api'
-import {
-  emptyResult,
-  finishedStackReview,
-  layerUrl,
-  stackEntry,
-} from '../../../fixtures/stackReview'
+import { enabledButton, renderPage, savedReview } from '../../../fixtures/stackReviewPage'
+import { emptyResult, finishedStackReview, stackEntry } from '../../../fixtures/stackReview'
 
 vi.mock('../../../../src/lib/api', async (original) => ({
   ...(await original<typeof import('../../../../src/lib/api')>()),
@@ -27,45 +20,10 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function savedReview() {
-  const session = finishedStackReview([
-    stackEntry(201, 'g1', { title: 'Handle missing data', plan: 'Return an empty list.' }),
-    stackEntry(203, 'g2', {
-      disposition: 'ask',
-      title: 'Keep the export column',
-      question: 'Should the export keep the old column?',
-    }),
-    stackEntry(202, 'g3', { disposition: 'ask', verdict: 'predicted', title: 'Name the limit' }),
-    stackEntry(202, 'g4', {
-      disposition: 'skip',
-      followUp: true,
-      title: 'Tighten the retry window',
-    }),
-  ])
-  session.input!.left = ['#202/g4']
-  session.input!.limitations = [
-    "To fit the cross-layer pass's budget, 1 skipped entry was left out of it: #202/g4.",
-  ]
-  session.layers[1]!.baseSha = 'new-base'
-  return session
-}
-
-function renderPage(session = savedReview()) {
-  vi.mocked(call).mockImplementation((route: ApiContract) => {
-    if (route === routes.latestStackReview) return Promise.resolve({ session })
-    if (route === latestLayerFix) return Promise.resolve({ session: null })
-    return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
-  })
-  render(
-    <MemoryRouter>
-      <StackReviewPage url={layerUrl(202)} reviewers={['unclebob']} backPath="/pull" />
-    </MemoryRouter>,
-  )
-  return session
-}
-
 it('loads a saved review, opens groups without a default and keeps other disclosures closed', async () => {
-  renderPage()
+  const session = savedReview()
+  session.layers[1]!.baseSha = 'base-202'
+  renderPage(session)
   const heading = await screen.findByRole('heading', { name: 'Needs your answer · 2' })
   const open = screen.getByText('Your call · 1')
   const predicted = screen.getByText('A reviewer will probably ask, the models would not · 1')
@@ -74,7 +32,9 @@ it('loads a saved review, opens groups without a default and keeps other disclos
   expect(open.closest('details')?.open).toBe(true)
   expect(predicted.closest('details')?.open).toBe(false)
   expect(
-    screen.getByText('1 question needs you. 1 more has a default. 1 fix is ready.'),
+    screen.getByText(
+      '0 of 2 answered. 1 question needs you. 1 more has a default. 1 fix is ready.',
+    ),
   ).toBeTruthy()
   const warning = screen.getByText(/The cross-layer pass did not read 1 entry/)
   expect(warning.closest('details')).toBeNull()
@@ -88,7 +48,10 @@ it('loads a saved review, opens groups without a default and keeps other disclos
     screen.getByText('Should the export keep the old column?', { exact: false }).closest('details')
       ?.textContent,
   ).toContain('Evidence and history')
-  expect(screen.queryByRole('radio')).toBeNull()
+  const controls = within(open.closest('details')!)
+  expect(controls.getByRole('button', { name: 'Leave open' })).toBeTruthy()
+  expect(controls.queryByRole('textbox')).toBeNull()
+  expect(controls.getByRole('button', { name: 'Add a note' })).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Back to pull request' }).getAttribute('href')).toBe(
     '/pull',
   )
@@ -132,10 +95,9 @@ it('explains why fixes are disabled on a layer that moved', async () => {
   const fixes = (await screen.findByText('#201 Layer 201 · 1 fix')).closest('details')!
   fixes.open = true
   expect(within(fixes).getByText(/moved since its panel reviewed/)).toBeTruthy()
-  expect(within(fixes).getByRole('button', { name: 'Apply 1 fix locally on #201' })).toHaveProperty(
-    'disabled',
-    true,
-  )
+  expect(
+    within(fixes).getByRole('button', { name: 'Apply 0 fixes locally on #201' }),
+  ).toHaveProperty('disabled', true)
 })
 
 it('puts each contested cross-layer question on its card with evidence still closed', async () => {
@@ -192,13 +154,67 @@ it('puts each contested cross-layer question on its card with evidence still clo
 it('copies the whole agent brief even when a layer is selected', async () => {
   const writeText = vi.fn(() => Promise.resolve())
   vi.stubGlobal('navigator', { clipboard: { writeText } })
-  const session = renderPage()
+  const { session } = renderPage()
   const rail = await screen.findByRole('navigation', { name: 'Filter review by layer' })
   fireEvent.click(within(rail).getByRole('button', { name: /#203/ }))
   fireEvent.click(screen.getByRole('button', { name: 'Copy full brief' }))
   await waitFor(() => {
     expect(writeText).toHaveBeenCalledWith(
-      stackBriefMarkdown(stackBrief(session)!, session.repository),
+      stackBriefMarkdown(
+        projectStackBrief(stackBrief(session)!, session.id, []),
+        session.repository,
+      ),
     )
   })
+})
+
+it('answers with a note, projects the chosen fix, and reopens the card', async () => {
+  const session = savedReview()
+  renderPage(session)
+  const heading = await screen.findByRole('heading', { name: 'Keep the export column' })
+  const card = within(heading.closest('article')!)
+  fireEvent.click(await enabledButton('Add a note', card))
+  const note = card.getByRole('textbox', { name: 'Private note (optional)' })
+  fireEvent.change(note, { target: { value: 'Preserve the legacy export.' } })
+  const save = card.getByRole('button', { name: 'Follow the plan' })
+  await waitFor(() => {
+    expect(save).toHaveProperty('disabled', false)
+  })
+  fireEvent.click(save)
+  const answered = await screen.findByRole('heading', { name: 'Answered · 1' })
+  const band = within(answered.closest('section')!)
+  expect(band.getByText('Private note: Preserve the legacy export.')).toBeTruthy()
+  expect(screen.getByText('#203 Layer 203 · 1 fix')).toBeTruthy()
+  fireEvent.click(band.getByRole('button', { name: 'Reopen' }))
+  expect(await screen.findByRole('heading', { name: 'Needs your answer · 2' })).toBeTruthy()
+  expect(screen.queryByText('#203 Layer 203 · 1 fix')).toBeNull()
+})
+
+it('bulk-applies explicit defaults and allows reopening one answer', async () => {
+  const session = savedReview()
+  session.layers[1]!.baseSha = 'base-202'
+  session.input!.entries.push(stackEntry(202, 'next', { disposition: 'ask', verdict: 'predicted' }))
+  renderPage(session)
+  const group = (
+    await screen.findByText('A reviewer will probably ask, the models would not · 2')
+  ).closest('details')!
+  group.open = true
+  const bulk = within(group).getByRole('button', { name: 'Keep the code, replies ready · 2' })
+  await waitFor(() => {
+    expect(bulk).toHaveProperty('disabled', false)
+  })
+  fireEvent.click(bulk)
+  await screen.findByRole('heading', { name: 'Answered · 2' })
+  expect(call).toHaveBeenCalledWith(recordRoutes.putStackAnswers, {
+    params: { id: session.id },
+    body: {
+      answers: [
+        { decisionId: '#202/g3', optionId: 'keep', expectedRevision: 0 },
+        { decisionId: '#202/next', optionId: 'keep', expectedRevision: 0 },
+      ],
+    },
+  })
+  fireEvent.click(screen.getAllByRole('button', { name: 'Reopen' })[0]!)
+  await screen.findByRole('heading', { name: 'Answered · 1' })
+  expect(screen.getByText('A reviewer will probably ask, the models would not · 1')).toBeTruthy()
 })

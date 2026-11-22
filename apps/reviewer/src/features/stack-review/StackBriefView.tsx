@@ -1,4 +1,7 @@
-import { groundingImpactLabels } from '../../../shared/domain/impact'
+import { answerLabel } from '../../../shared/domain/stackReviewRecords'
+import { AnsweredCard } from './DecisionControls'
+import { SeriousClaims } from './SeriousClaims'
+import type { StackRecordActions } from './useStackRecords'
 import type { StackBrief } from '../../../shared/domain/stackBrief'
 import { layerMoved, movedReason } from '../../../shared/domain/stackBriefLayers'
 import { briefCounts, fixKindSummary } from '../../../shared/domain/stackReviewView'
@@ -10,63 +13,69 @@ export function StackBriefView({
   brief,
   fixGroups,
   sessionId,
+  actions,
 }: {
   brief: StackBrief
   fixGroups: StackBrief['fixes']
   sessionId: string
+  actions: StackRecordActions
 }) {
-  const { fixes } = briefCounts(brief)
+  const { fixes, answered } = briefCounts(brief)
   return (
     <>
-      {brief.serious.length > 0 && <SeriousList items={brief.serious} />}
+      {brief.serious.length > 0 && <SeriousClaims items={brief.serious} actions={actions} />}
       <section className="stack-review-band">
         <h2>Needs your answer · {brief.decisions.length}</h2>
-        <DecisionGroups decisions={brief.decisions} />
+        <DecisionGroups brief={brief} actions={actions} />
       </section>
-      <section className="stack-review-band" hidden={!fixes}>
+      {answered > 0 && (
+        <section className="stack-review-band">
+          <h2>Answered · {answered}</h2>
+          {brief.review?.answered.map((item) => (
+            <AnsweredCard key={item.decision.id} item={item} actions={actions} />
+          ))}
+        </section>
+      )}
+      <section className="stack-review-band" hidden={!brief.fixes.length}>
         <h2>Ready to fix · {fixes}</h2>
         <p className="stack-brief-detail">{fixKindSummary(brief)}</p>
         <p className="stack-brief-detail">
           Commits locally in an app-owned worktree. Pushes nothing.
         </p>
-        {fixGroups.map(({ layer, items }) => (
-          <details
-            key={layer.number}
-            className="stack-review-disclosure"
-            hidden={!brief.fixes.some((group) => group.layer.number === layer.number)}
-          >
-            <summary>
-              #{layer.number} {layer.title} · {items.length} {items.length === 1 ? 'fix' : 'fixes'}
-            </summary>
-            {layerMoved(layer) && <p className="stack-warning">{movedReason(layer)}</p>}
-            <LayerFixWorker stack={sessionId} layer={layer} fixes={items} />
-          </details>
-        ))}
+        {fixGroups.map(({ layer, items }) => {
+          const ready = items.filter(({ applied }) => !applied).length
+          return (
+            <details
+              key={layer.number}
+              className="stack-review-disclosure"
+              hidden={!brief.fixes.some((group) => group.layer.number === layer.number)}
+            >
+              <summary>
+                #{layer.number} {layer.title} · {ready} {ready === 1 ? 'fix' : 'fixes'}
+              </summary>
+              {layerMoved(layer) && <p className="stack-warning">{movedReason(layer)}</p>}
+              <LayerFixWorker stack={sessionId} layer={layer} fixes={items} />
+            </details>
+          )
+        })}
       </section>
+      {Boolean(brief.review?.history.length) && (
+        <details className="stack-review-band">
+          <summary>Decision history · {brief.review?.history.length}</summary>
+          <ul className="stack-brief-list">
+            {brief.review?.history.map((record) => (
+              <li key={`${record.sessionId}:${record.itemId}`}>
+                <strong>{record.snapshot.title}</strong> · {answerLabel(record)}
+                <p className="stack-brief-detail">
+                  PR #{record.sourcePr} · {record.updatedAt.slice(0, 10)}
+                </p>
+                {record.answer?.note && <p>Private note: {record.answer.note}</p>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <BriefNotes brief={brief} />
     </>
-  )
-}
-
-function SeriousList({ items }: { items: StackBrief['serious'] }) {
-  return (
-    <section className="stack-review-band">
-      <h2>Serious consequences</h2>
-      <p className="stack-brief-detail">
-        Settle each before other work: fixed and checked, refuted with evidence, accepted as a risk
-        with a reason, or assigned for investigation with an owner.
-      </p>
-      <ul className="stack-brief-list">
-        {items.map((item) => (
-          <li key={item.id}>
-            <strong>{item.title}</strong> <code>{item.id}</code>
-            <p>{item.consequence}</p>
-            <p className="stack-brief-detail">
-              {groundingImpactLabels[item.impact]} · {item.standing}
-            </p>
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }

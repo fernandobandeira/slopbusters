@@ -1,3 +1,4 @@
+import { migrateStackReviewRecords, StackReviewRecordStore } from './stackReviewRecordStore'
 import { mkdirSync, readdirSync, readFileSync, chmodSync, existsSync } from 'node:fs'
 import { LayerFixStore, migrateLayerFixes } from './layerFixStore'
 import { join } from 'node:path'
@@ -48,6 +49,7 @@ export class ReviewerStore {
   readonly gandalf: GandalfSessionStore
   readonly split: SplitSessionStore
   readonly layerFixes: LayerFixStore
+  readonly stackRecords: StackReviewRecordStore
   readonly stackReview: StackReviewSessionStore
   constructor({ dataDirectory }: { dataDirectory: string }) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 })
@@ -60,7 +62,7 @@ export class ReviewerStore {
     const version = this.database.prepare('PRAGMA user_version').get()?.user_version
     if (
       typeof version !== 'number' ||
-      ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(version)
+      ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].includes(version)
     ) {
       this.database.close()
       throw new Error('This review database was created by a newer app.')
@@ -90,6 +92,7 @@ export class ReviewerStore {
     this.gandalf = new GandalfSessionStore(this.database)
     this.split = new SplitSessionStore(this.database)
     this.layerFixes = new LayerFixStore(this.database)
+    this.stackRecords = new StackReviewRecordStore(this.database)
     this.stackReview = new StackReviewSessionStore(this.database)
   }
   /** Refresh a fetched snapshot without discarding its existing model groups. */
@@ -257,6 +260,7 @@ function migrateFrom(database: DatabaseSync, version: number): void {
   if (version < 11) migrateStackReviewSessions(database)
   if (version < 12) migrateLayerFixes(database)
   if (version < 13) migratePanelStorage(database)
+  if (version < 14) migrateStackReviewRecords(database)
 }
 
 /**

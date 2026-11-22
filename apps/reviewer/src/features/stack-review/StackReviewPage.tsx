@@ -1,3 +1,4 @@
+import type { StackRecordActions } from './useStackRecords'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import type { PanelSeatRequest } from '../../../shared/domain/panel'
@@ -55,6 +56,7 @@ export function StackReviewPage({
           key={session.id}
           brief={brief}
           sessionId={session.id}
+          actions={review.records}
           error={review.error}
         />
       ) : (
@@ -67,10 +69,12 @@ export function StackReviewPage({
 function CompletedReview({
   brief,
   sessionId,
+  actions,
   error,
 }: {
   brief: StackBrief
   sessionId: string
+  actions: StackRecordActions
   error?: string
 }) {
   const [layer, setLayer] = useState<number>()
@@ -108,7 +112,12 @@ function CompletedReview({
             {error}
           </p>
         )}
-        <StackBriefView brief={visible} fixGroups={brief.fixes} sessionId={sessionId} />
+        <StackBriefView
+          brief={visible}
+          fixGroups={brief.fixes}
+          sessionId={sessionId}
+          actions={actions}
+        />
       </div>
     </div>
   )
@@ -125,8 +134,7 @@ function RailRow({
   active: boolean
   onSelect: () => void
 }) {
-  const { fixes } = briefCounts(brief)
-  const questions = brief.decisions.length
+  const { fixes, total, answered } = briefCounts(brief)
   const moved = layer && layerMoved(layer)
   return (
     <Button
@@ -154,10 +162,11 @@ function RailRow({
             Moved
           </span>
         )}
-        <span className="stack-warning" title={`${questions} questions`}>
-          {questions}
-          <span className="sr-only"> questions</span>
-        </span>
+        {total > 0 && (
+          <span title={`${answered} of ${total} answered`}>
+            {answered}/{total}
+          </span>
+        )}
         <span title={`${fixes} fixes`}>
           {fixes}
           <span className="sr-only"> fixes</span>

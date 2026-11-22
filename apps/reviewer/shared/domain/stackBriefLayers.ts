@@ -1,3 +1,4 @@
+import type { ObservedLayer } from './stackReviewRecords'
 import type { StackPassInput, StackReviewSession } from './stackReview'
 
 export interface BriefLayer {
@@ -80,4 +81,18 @@ export function movedReason(layer: BriefLayer): string {
 
 export function short(sha: string | undefined): string {
   return sha ? sha.slice(0, 7) : 'unknown'
+}
+
+export function withLayerRevisions(
+  session: StackReviewSession,
+  revisions: readonly ObservedLayer[],
+): StackReviewSession {
+  if (!revisions.length) return session
+  return {
+    ...session,
+    layers: session.layers.map((layer) => {
+      const update = revisions.find(({ pull }) => pull === layer.number)
+      return update ? { ...layer, headSha: update.head, baseSha: update.base } : layer
+    }),
+  }
 }

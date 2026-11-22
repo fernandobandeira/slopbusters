@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { Anchor } from './anchors'
 import type { PanelFinding } from './panel'
 
+export const MAX_CHECKED_FIXES = 40
 export const fixCheckStatuses = ['applied', 'partial', 'missing', 'wrong'] as const
 
 /** The branch a PR's fixes are committed on, beside the PR's own branch, never pushed. */

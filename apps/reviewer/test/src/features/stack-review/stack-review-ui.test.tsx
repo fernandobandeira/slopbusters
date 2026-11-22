@@ -1,3 +1,4 @@
+import { getStackRecords } from '../../../../shared/api/stackReviewRecords'
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
@@ -57,6 +58,8 @@ describe('stack review strip', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     let session = running
     vi.mocked(call).mockImplementation((route: ApiContract) => {
+      if (route === getStackRecords)
+        return Promise.resolve({ records: [], revisions: [], applied: [] })
       if (route === routes.latestStackReview) return Promise.resolve({ session: null })
       if (route === routes.startStackReview) return Promise.resolve(running)
       if (route === routes.getStackReview) return Promise.resolve(session)
@@ -83,7 +86,7 @@ describe('stack review strip', () => {
     const open = await screen.findByRole('link', { name: 'Open review' })
     expect(open.getAttribute('href')).toBe('/review')
     expect(screen.getByRole('status').textContent).toBe(
-      'Review complete · 1 question needs you · 1 fix ready',
+      'Review complete · 0 of 1 answered · 1 question needs you · 1 fix ready',
     )
     expect(screen.getByRole('button', { name: 'Review again' })).toBeTruthy()
     expect(screen.queryByText('Keep the column?')).toBeNull()
@@ -95,6 +98,8 @@ describe('stack review strip', () => {
 
   it.each(['partial', 'failed', 'cancelled'] as const)('retries a %s review', async (status) => {
     vi.mocked(call).mockImplementation((route: ApiContract) => {
+      if (route === getStackRecords)
+        return Promise.resolve({ records: [], revisions: [], applied: [] })
       if (route === routes.latestStackReview)
         return Promise.resolve({
           session: { ...running, status, progress: 'Stack review stopped.' },

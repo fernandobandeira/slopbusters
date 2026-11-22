@@ -5,7 +5,6 @@ export function BriefNotes({ brief }: { brief: StackBrief }) {
   const limitations = reviewLimitations(brief)
   return (
     <>
-      {brief.predictions.length > 0 && <PreparedReplies items={brief.predictions} />}
       <LeftOut brief={brief} />
       <details className="stack-review-band">
         <summary>Review notes</summary>
@@ -23,27 +22,6 @@ export function BriefNotes({ brief }: { brief: StackBrief }) {
         {!brief.summary && !limitations.length && !brief.stale.length && <p>No review notes.</p>}
       </details>
     </>
-  )
-}
-
-function PreparedReplies({ items }: { items: StackBrief['predictions'] }) {
-  return (
-    <details className="stack-review-band">
-      <summary>Prepared replies · {items.length}</summary>
-      <ul className="stack-brief-list">
-        {items.map((item) => (
-          <li key={item.id}>
-            <strong>{item.title}</strong>
-            <p className="stack-brief-detail">
-              PR #{item.layer}
-              {item.effort && ` · ${item.effort}`}
-            </p>
-            <p>Reply if the code stays: {item.reply}</p>
-            {item.plan && <p>Change that answers the reviewer: {item.plan}</p>}
-          </li>
-        ))}
-      </ul>
-    </details>
   )
 }
 

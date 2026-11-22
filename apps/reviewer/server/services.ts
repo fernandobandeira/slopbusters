@@ -1,3 +1,4 @@
+import { createStackReviewServices } from './stackReviewServices'
 import { createLayerFixJobs } from './layerFixServices'
 import { LayerFixTools } from './features/mcp/layerFixTools'
 import { AgentSessionStore } from './adapters/agentSessionStore'
@@ -58,8 +59,6 @@ import { PanelRoutes } from './features/panel/panelRoutes'
 import { loadBuiltInSkill } from './features/panel/builtInSkills'
 import { PanelTools } from './features/mcp/panelTools'
 import { StackReviewTools } from './features/mcp/stackReviewTools'
-import { StackReviewJobs } from './features/stack-review/stackReviewJobs'
-import { createStackResolver } from './features/stack-review/stackResolution'
 import { parsePullUrl } from '../shared/domain/pullUrl'
 import type { PreviousRound } from '../shared/domain/earlierRequests'
 
@@ -197,17 +196,17 @@ export function createServices(options: ReviewerServerOptions) {
     turns: retryingTurns,
     skillDirectory: options.linusSkillDirectory,
   })
-  const stackReviewJobs = new StackReviewJobs({
-    store: store.stackReview,
-    turns: retryingTurns,
-    sessions: agentSessions,
-    panels: panelJobs,
-    results: (name, url) => store.panel.results(name, url, 3),
-    resolve: createStackResolver(stacks.getStackMetadata),
-    revision: (url) => pulls.fetchPullRevision(parsePullUrl(url)),
+  const { stackReviewJobs, stackRecords } = createStackReviewServices({
+    store,
+    retryingTurns,
+    agentSessions,
+    panelJobs,
+    stacks,
+    pulls,
     judges,
   })
   const layerFixJobs = createLayerFixJobs({
+    stackRecords,
     store: store.layerFixes,
     stackReviewJobs,
     models,
@@ -253,6 +252,7 @@ export function createServices(options: ReviewerServerOptions) {
     panelRoutes,
     panelFollowups: new PanelFollowups({ ...panel, linear, linked: tickets.forPull }),
     stackReviewJobs,
+    stackRecords,
     layerFixJobs,
     layerFixTools: new LayerFixTools(layerFixJobs, stackReviewJobs),
     panelTools: new PanelTools({
@@ -260,7 +260,7 @@ export function createServices(options: ReviewerServerOptions) {
       teammates,
       revision: (url) => pulls.fetchPullRevision(parsePullUrl(url)),
     }),
-    stackReviewTools: new StackReviewTools({ jobs: stackReviewJobs }),
+    stackReviewTools: new StackReviewTools({ jobs: stackReviewJobs, records: stackRecords }),
     chats: {
       continueInT3Code: async (request: ContinueChatRequest) => {
         const model = chatModel()

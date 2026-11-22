@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { fixCheckStatuses } from '../../shared/domain/panelFix'
+import { fixCheckStatuses, MAX_CHECKED_FIXES } from '../../shared/domain/panelFix'
 
 export const checkReply = (entries: readonly string[]) =>
   z
@@ -16,7 +16,7 @@ export const checkReply = (entries: readonly string[]) =>
             })
             .strict(),
         )
-        .max(40),
+        .max(MAX_CHECKED_FIXES),
     })
     .strict()
     .refine(

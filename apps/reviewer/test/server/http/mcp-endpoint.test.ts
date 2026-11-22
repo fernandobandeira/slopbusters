@@ -139,6 +139,7 @@ describe('panel results over MCP', () => {
       'cancel_panel_review',
       'start_stack_review',
       'get_stack_review',
+      'record_stack_decision',
       'retry_stack_review',
       'cancel_stack_review',
       'apply_layer_fixes',

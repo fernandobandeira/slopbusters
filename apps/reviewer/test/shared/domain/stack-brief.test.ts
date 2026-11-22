@@ -125,7 +125,7 @@ describe('the stack brief decision queue', () => {
         contested: false,
       },
       {
-        id: '#202',
+        id: 'structure:202:fold:201',
         layer: 202,
         title: 'Fold PR #202 into PR #201',
         question: 'Fold PR #202 into PR #201?',

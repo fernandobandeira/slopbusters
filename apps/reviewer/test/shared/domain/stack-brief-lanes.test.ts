@@ -9,7 +9,7 @@ import {
 } from '../../fixtures/stackReview'
 
 describe('predicted reviewer comments in the stack brief', () => {
-  it('lists predicted comments with their replies, apart from fixes and decisions', () => {
+  it('gives prepared comments a choice and keeps them out of fixes', () => {
     const prepared = {
       disposition: 'prepare' as const,
       verdict: 'predicted' as const,
@@ -24,13 +24,13 @@ describe('predicted reviewer comments in the stack brief', () => {
     const brief = stackBrief(session)
 
     expect(brief?.fixes.flatMap(({ items }) => items.map((item) => item.id))).toEqual(['#201/g1'])
-    expect(brief?.decisions).toEqual([])
-    expect(brief?.predictions).toMatchObject([
-      { id: '#202/g2', layer: 202, reply: 'The name matches the column.', effort: 'small' },
-    ])
-    expect(stackBriefMarkdown(brief!, stackRepository)).toContain(
-      'Reply if the code stays: The name matches the column.',
+    expect(brief?.decisions.map(({ group }) => group)).toEqual(['predicted'])
+    expect(brief?.decisions[0]?.options).toContainEqual(
+      expect.objectContaining({ id: 'keep', reply: 'The name matches the column.' }),
     )
+    const markdown = stackBriefMarkdown(brief!, stackRepository)
+    expect(markdown).toContain('Reply if chosen: The name matches the column.')
+    expect(markdown).not.toContain('## Predicted reviewer comments')
   })
 })
 

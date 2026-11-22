@@ -1,3 +1,4 @@
+import { decisionProvenanceSchema } from './stackReviewRecords'
 import { z } from 'zod'
 import { groundingEfforts, groundingKinds } from './grounding'
 import { organizationSchema } from './preferences'
@@ -8,6 +9,7 @@ export const workerFixSchema = z.object({
   title: z.string(),
   plan: z.string().optional(),
   reason: z.string(),
+  decision: decisionProvenanceSchema.optional(),
   kind: z.enum(groundingKinds).optional(),
   effort: z.enum(groundingEfforts).optional(),
   field: z.enum(['title', 'description']).optional(),
@@ -75,3 +77,23 @@ export const layerFixSessionSchema = z.object({
   ),
 })
 export type LayerFixSession = z.infer<typeof layerFixSessionSchema>
+
+export const LOCAL_WORKTREE_BLOCK =
+  'A previous run has a local worktree at this head. Use that worktree and review the updated pull request before starting another run.'
+
+export function appliedLayerFixEntries(run: LayerFixSession): string[] {
+  if (run.outcome === 'done') return run.fixes.filter((fix) => !fix.field).map(({ id }) => id)
+  return run.results
+    .filter(
+      (item) =>
+        item.status === 'applied' &&
+        run.report?.fixes.some(
+          (fix) =>
+            fix.id === item.entry &&
+            fix.status === 'applied' &&
+            fix.commits.length > 0 &&
+            fix.commits.every((sha) => run.commits.includes(sha)),
+        ),
+    )
+    .map(({ entry }) => entry)
+}

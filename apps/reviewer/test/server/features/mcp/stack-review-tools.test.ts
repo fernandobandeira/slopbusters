@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { buildStackBrief } from '../../../../shared/domain/projectStackBrief'
 import { StackReviewTools } from '../../../../server/features/mcp/stackReviewTools'
 import type { StackReviewSession } from '../../../../shared/domain/stackReview'
 import { finishedStackReview, layerUrl, stackEntry } from '../../../fixtures/stackReview'
@@ -21,7 +22,13 @@ function toolsWith(session: StackReviewSession | undefined) {
       progress: 'Stack review cancelled.',
     })),
   }
-  return { tools: new StackReviewTools({ jobs, pollMs: 5 }), jobs }
+  const records = {
+    brief: vi.fn((review: StackReviewSession) =>
+      Promise.resolve(buildStackBrief(review)!.projected),
+    ),
+    recordChoice: vi.fn(() => Promise.resolve()),
+  }
+  return { tools: new StackReviewTools({ jobs, records, pollMs: 5 }), jobs, records }
 }
 
 const running: StackReviewSession = {
@@ -82,6 +89,8 @@ describe('the stack review for a coding agent', () => {
       'No stack review covers PR #201. Call start_stack_review to ask for one.',
     )
     expect(() => none.retry(layerUrl(201))).toThrow('No stack review covers PR #201.')
-    expect(() => done.cancel(layerUrl(201))).toThrow('No stack review is working on PR #201.')
+    await expect(done.cancel(layerUrl(201))).rejects.toThrow(
+      'No stack review is working on PR #201.',
+    )
   })
 })

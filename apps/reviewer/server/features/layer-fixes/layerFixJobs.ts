@@ -1,8 +1,14 @@
 import { randomUUID } from 'node:crypto'
-import { workerReportSchema, type LayerFixSession } from '../../../shared/domain/layerFix'
+import {
+  appliedLayerFixEntries,
+  LOCAL_WORKTREE_BLOCK,
+  workerReportSchema,
+  type LayerFixSession,
+} from '../../../shared/domain/layerFix'
 import type { ModelPair } from '../../../shared/domain/preferences'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
-import { stackBrief } from '../../../shared/domain/stackBrief'
+import { MAX_CHECKED_FIXES } from '../../../shared/domain/panelFix'
+import type { StackBrief } from '../../../shared/domain/stackBrief'
 import { Provider } from '../../../shared/domain/types'
 import type { StackReviewSession } from '../../../shared/domain/stackReview'
 import type { LayerFixStore } from '../../adapters/layerFixStore'
@@ -18,6 +24,7 @@ import { workerSeed } from './seed'
 interface Options {
   store: Pick<LayerFixStore, 'save' | 'get' | 'all'>
   stack: (id: string) => StackReviewSession
+  brief: (stack: StackReviewSession) => Promise<StackBrief>
   models: () => ModelPair
   workspace: (repository: { owner: string; repo: string }) => Promise<ChatWorkspace>
   turns: ThreadTurns
@@ -47,15 +54,23 @@ export class LayerFixJobs {
     })
   }
 
-  start(stackId: string, url: string, selected?: readonly string[]): LayerFixSession {
+  async start(
+    stackId: string,
+    url: string,
+    selected?: readonly string[],
+  ): Promise<LayerFixSession> {
     const stack = this.options.stack(stackId)
-    const group = stackBrief(stack)?.fixes.find((item) => item.layer.url === url)
-    if (!group || !group.layer.current || !group.layer.reviewedHead)
-      throw new UserError('This layer is no longer current; review it again.')
+    const brief = await this.options.brief(stack)
+    const group = brief.fixes.find((item) => item.layer.url === url)
+    if (!group) throw new UserError('Choose fixes from this layer’s brief.')
+    const { layer } = group
+    const start = layer.currentHead ?? layer.reviewedHead
+    const base = layer.currentBase ?? layer.reviewedBase ?? ''
+    if (!start) throw new UserError('This layer is no longer current; review it again.')
     this.requireIdle(stack.urls)
-    const chosen = selected ? group.items.filter((item) => selected.includes(item.id)) : group.items
-    if (!chosen.length || (selected && new Set(selected).size !== chosen.length))
-      throw new UserError('Choose fixes from this layer’s brief.')
+    const { applied, blocked } = this.availability(stackId, url, start)
+    const chosen = selectFixes(group, { selected, applied })
+    if (blocked) throw new UserError(blocked, 409)
     const models = this.options.models()
     if (models.primary.provider === models.companion.provider)
       throw new UserError('The fix worker needs a checker from the other provider.')
@@ -64,8 +79,8 @@ export class LayerFixJobs {
       stack: stackId,
       urls: stack.urls,
       url,
-      start: group.layer.reviewedHead,
-      base: group.layer.reviewedBase ?? '',
+      start,
+      base,
       createdAt: new Date().toISOString(),
       model: models.primary,
       checker: models.companion,
@@ -104,15 +119,38 @@ export class LayerFixJobs {
     const session = this.options.store.all().find((item) => item.url === url)
     return session && this.get(session.id)
   }
+  latestForStack(stack: string, url: string, head: string, base: string) {
+    const latest = this.latest(url)
+    const session = latest?.stack === stack ? latest : null
+    const retryable = Boolean(
+      session && session.start === head && session.base === base && !this.retryProblem(session),
+    )
+    return { session, availability: this.availability(stack, url, head), retryable }
+  }
+  private availability(stack: string, url: string, head: string, except?: string) {
+    const runs = this.options.store
+      .all()
+      .filter((run) => run.url === url && run.status !== 'running')
+    return {
+      applied: [
+        ...new Set(runs.filter((run) => run.stack === stack).flatMap(appliedLayerFixEntries)),
+      ],
+      blocked: runs.some(
+        (run) => run.id !== except && run.start === head && run.worktree && run.commits.length > 0,
+      )
+        ? LOCAL_WORKTREE_BLOCK
+        : undefined,
+    }
+  }
   async retry(id: string): Promise<LayerFixSession> {
     const session = this.get(id)
-    if (session.status === 'running' || this.jobs.isRunning(id))
-      throw new UserError('Wait for the fix worker to stop.')
-    if (session.outcome === 'done' || session.outcome === 'pushed' || session.outcome === 'moved')
-      throw new UserError('Review this layer again before starting another fix run.')
+    const problem = this.retryProblem(session)
+    if (problem) throw new UserError(problem)
     this.requireIdle(session.urls)
     if (session.worktree) await this.options.head(session.worktree.path, session.start)
     this.requireIdle(session.urls)
+    const blocked = this.availability(session.stack, session.url, session.start, id).blocked
+    if (blocked) throw new UserError(blocked, 409)
     session.status = 'running'
     session.outcome = undefined
     session.error = undefined
@@ -138,6 +176,14 @@ export class LayerFixJobs {
     await this.jobs.stop((session) => {
       this.jobs.abort(session.id)
     })
+  }
+
+  private retryProblem(session: LayerFixSession): string | undefined {
+    if (session.status === 'running' || this.jobs.isRunning(session.id))
+      return 'Wait for the fix worker to stop.'
+    if (session.outcome === 'done' || session.outcome === 'pushed' || session.outcome === 'moved')
+      return 'Review this layer again before starting another fix run.'
+    return this.availability(session.stack, session.url, session.start, session.id).blocked
   }
 
   private requireIdle(urls: readonly string[]) {
@@ -276,4 +322,29 @@ export class LayerFixJobs {
     session.outcome = outcome
     this.jobs.progress(session, reason)
   }
+}
+
+function selectFixes(
+  { layer, items }: StackBrief['fixes'][number],
+  { selected, applied }: { selected?: readonly string[]; applied: string[] },
+) {
+  if (selected?.some((id) => applied.includes(id)))
+    throw new UserError('A selected fix was already applied by this stack review.', 409)
+  const available = items.filter((item) => !item.applied && !applied.includes(item.id))
+  const fixes = selected
+    ? available.filter((item) => selected.includes(item.id))
+    : available.filter((item) => layer.current || item.decision)
+  if (fixes.some((item) => !layer.current && !item.decision) || (!layer.current && !fixes.length))
+    throw new UserError('This layer is no longer current; review it again.')
+  if (!fixes.length || (selected && new Set(selected).size !== fixes.length))
+    throw new UserError('Choose unapplied fixes from this layer’s brief.')
+  checkFixCount(fixes.length)
+  return fixes
+}
+
+function checkFixCount(count: number) {
+  if (count > MAX_CHECKED_FIXES)
+    throw new UserError(
+      `Choose at most ${MAX_CHECKED_FIXES} fixes per run so the checker can verify each one.`,
+    )
 }
