@@ -10,12 +10,14 @@ export function ReviewQuestion({
   group,
   sections,
   open,
+  hiddenCounts,
   onToggle,
 }: {
   pull: PullRequest
   group: ChangeGroup
   sections: ReturnType<typeof questionSections>
   open?: ReadonlySet<OptionalSections>
+  hiddenCounts?: Readonly<Record<OptionalSections, number>>
   onToggle: (section: OptionalSections) => void
 }) {
   return (
@@ -28,6 +30,7 @@ export function ReviewQuestion({
           if (!ids.length) return null
           const expanded = open?.has(section) ?? false
           const Chevron = expanded ? ChevronDown : ChevronRight
+          const count = hiddenCounts?.[section] ?? 0
           const lines = sectionLineCount(pull, group, ids)
           return (
             <button
@@ -44,6 +47,11 @@ export function ReviewQuestion({
               <span className="muted">
                 {lines.toLocaleString()} {lines === 1 ? 'line' : 'lines'}
               </span>
+              {!expanded && count > 0 && (
+                <span>
+                  {count.toLocaleString()} {count === 1 ? 'discussion' : 'discussions'}
+                </span>
+              )}
             </button>
           )
         })}

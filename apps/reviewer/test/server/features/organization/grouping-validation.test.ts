@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { UserError } from '../../../../server/errors'
 import { parseFile } from '../../../../server/features/diff'
-import { validateGrouping } from '../../../../server/features/organization/organize'
+import { organizePull, validateGrouping } from '../../../../server/features/organization/organize'
 import { pullSchema } from '../../../../shared/api/reviewSchemas'
 import { Priority, Provider } from '../../../../shared/domain/types'
 import { fixturePull } from '../../../fixtures/pull'
+import { recordingTurns } from '../../../fixtures/turns'
 import { required } from '../../../fixtures/required'
 
 function change(path: string, line: string) {
@@ -124,45 +125,78 @@ describe('invalid review question groupings', () => {
   const { pull, question, aside } = fixture()
 
   it.each([
-    ['an omitted section', { questions: [question], rest: [] }, 'omitted some changes'],
     [
       'an unknown section',
       { questions: [question], rest: [{ ...aside, hunkIds: ['invented'] }] },
       'does not exist',
     ],
     [
-      'a section shared by two groups',
-      { questions: [question], rest: [aside, aside] },
-      'more than once',
-    ],
-    [
-      'a section shared by support and tests',
-      {
-        questions: [{ ...question, supportHunkIds: question.evidenceHunkIds }],
-        rest: [aside],
-      },
-      'more than once',
-    ],
-    [
-      'a section shared by keys and support',
-      {
-        questions: [{ ...question, supportHunkIds: question.keyHunkIds }],
-        rest: [aside],
-      },
-      'more than once',
-    ],
-    [
       'a question without any key sections',
       { questions: [{ ...question, keyHunkIds: [] }], rest: [aside] },
-      'at least one key diff section',
+      'returned an invalid grouping',
     ],
     [
       'a question attached to a set-aside group',
       { questions: [question], rest: [{ ...aside, question: 'Should guests be blocked?' }] },
-      'A set-aside group may only contain a title, lane, reason, and section IDs.',
+      'returned an invalid grouping',
     ],
   ] as const)('rejects %s with a readable error', (_label, reply, message) => {
     expect(() => validateGrouping(pull, reply)).toThrow(UserError)
     expect(() => validateGrouping(pull, reply)).toThrow(message)
   })
+})
+
+it('keeps the first placement and sets aside missing sections and questions that lose their keys', async () => {
+  const { pull, question, aside } = fixture()
+  const shared = change('editor.ts', 'const editor = "editor"')
+  pull.files.push(shared)
+  const sharedId = required(shared.hunks[0]).id
+  const retained = {
+    ...question,
+    supportHunkIds: [...question.keyHunkIds, sharedId],
+    evidenceHunkIds: [...question.evidenceHunkIds, sharedId],
+  }
+  const withoutKeys = {
+    ...question,
+    title: 'Check the route',
+    keyHunkIds: question.keyHunkIds,
+    supportHunkIds: aside.hunkIds,
+  }
+  const { turns } = recordingTurns(() => ({ questions: [retained, withoutKeys], rest: [aside] }))
+
+  const groups = await organizePull(
+    turns,
+    pull,
+    { provider: Provider.codex, model: 'test' },
+    {
+      signal: new AbortController().signal,
+    },
+  )
+
+  expect(groups[0]).toMatchObject({
+    question: question.question,
+    hunkIds: [...question.keyHunkIds, sharedId, ...question.evidenceHunkIds],
+    supportHunkIds: [sharedId],
+    testHunkIds: question.evidenceHunkIds,
+  })
+  expect(groups.filter((group) => group.question)).toHaveLength(1)
+  const orphaned = groups.find((group) => group.hunkIds.includes(required(aside.hunkIds[0])))
+  expect(orphaned).toMatchObject({
+    title: withoutKeys.title,
+    lane: 'implementation',
+    hunkIds: aside.hunkIds,
+  })
+  expect(orphaned?.reason).toContain('already assigned to earlier questions')
+  const omitted = groups.find((group) =>
+    group.hunkIds.includes(required(question.supportHunkIds[0])),
+  )
+  expect(omitted).toMatchObject({
+    title: 'Sections the model did not place',
+    lane: 'implementation',
+    hunkIds: question.supportHunkIds,
+  })
+  expect(omitted?.reason).toContain('did not assign')
+  expect(groups.flatMap((group) => group.hunkIds).sort()).toEqual(
+    pull.files.flatMap((file) => file.hunks.map((hunk) => hunk.id)).sort(),
+  )
 })

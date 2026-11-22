@@ -6,6 +6,7 @@ import { useReviewDiff } from './useReviewDiff'
 import { useReviewFocus } from './useReviewFocus'
 import { ReviewDiffViewer } from './ReviewDiffViewer'
 import { UPDATES_GROUP_ID } from './reviewUpdates'
+import { questionSectionAt } from './questionSections'
 import { ReviewQuestion } from './ReviewQuestion'
 import { GroupSidebar } from './GroupSidebar'
 import { SubmitReviewDialog } from './SubmitReviewDialog'
@@ -232,10 +233,11 @@ export function ReviewWorkspace({
       comments: draft.comments,
       editor,
       groupId: selected?.id,
+      openSections: question.open,
     })
     return { ...discussed, items: annotateTransfers(discussed.items, pull) }
-  }, [items, pull, discussions, draft.comments, editor, selected?.id])
-  const jumpToTransfer = useTransferJump({
+  }, [items, pull, discussions, draft.comments, editor, selected?.id, question.open])
+  const jumpToLine = useTransferJump({
     selected,
     items,
     changeView,
@@ -520,8 +522,14 @@ export function ReviewWorkspace({
                       group={selected}
                       sections={question.sections}
                       open={question.open}
+                      hiddenCounts={annotated.hiddenCounts}
                       onToggle={toggleQuestionSections}
                     />
+                  )}
+                  {selected.lane && (
+                    <div className="review-question">
+                      <p className="review-question-claim">{selected.reason}</p>
+                    </div>
                   )}
                   {items.length ? (
                     <ReviewDiffViewer
@@ -549,7 +557,7 @@ export function ReviewWorkspace({
                       submitted={submitted}
                       commentOnLine={commentOnLine}
                       navigateSymbol={navigateSymbol}
-                      onJumpToTransfer={jumpToTransfer}
+                      onJumpToTransfer={jumpToLine}
                     />
                   ) : !question.hidden.size ? (
                     <div className="empty-state">
@@ -598,8 +606,14 @@ export function ReviewWorkspace({
                 }
                 const file = pull.files.find((file) => file.path === location.path)
                 const { line, side } = location
-                if (group.question && line != null && side != null) {
-                  focus.focusLine({ ...location, line, side })
+                if (
+                  file &&
+                  group.question &&
+                  line != null &&
+                  side != null &&
+                  questionSectionAt(group, file, { line, side })
+                ) {
+                  jumpToLine({ fileId: file.id, groupId: group.id, line, side })
                   return
                 }
                 if (file) revealFile(file.id, group.id)

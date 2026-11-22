@@ -7,6 +7,7 @@ import {
   type ReviewThread,
   type ChangeGroup,
 } from '../../../../shared/domain/types'
+import { questionSectionAt, type OptionalSections } from '../questionSections'
 
 export type CommentEditor = Omit<DraftComment, 'body'>
 export interface LineDiscussion {
@@ -85,19 +86,21 @@ type AnnotationParams = {
   /** The group on screen. Threads it cannot place appear in only one group: the one whose
    * section holds their line, otherwise the first group with their file. */
   groupId?: string
+  openSections?: ReadonlySet<OptionalSections>
 }
 type Place = (line: number, side: DiffSide) => LineDiscussion | undefined
 
 export function annotateDiscussions(params: AnnotationParams): {
   items: CodeViewItem<LineDiscussion>[]
   unplaced: ReviewThread[]
+  hiddenCounts: Record<OptionalSections, number>
 } {
-  const selectedFiles = params.items.map((item) =>
-    params.pull.files.find((file) => file.id === item.id),
-  )
+  const group = params.pull.groups.find((group) => group.id === params.groupId)
+  const fileIds = new Set(group?.question ? group.fileIds : params.items.map((item) => item.id))
+  const selectedFiles = params.pull.files.filter((file) => fileIds.has(file.id))
   const threads =
     params.discussions?.threads.filter((thread) =>
-      selectedFiles.some((file) => file?.path === thread.path),
+      selectedFiles.some((file) => file.path === thread.path),
     ) ?? []
   const canMap =
     params.discussions?.headSha === params.pull.headSha &&
@@ -143,12 +146,44 @@ export function annotateDiscussions(params: AnnotationParams): {
     )
     return { ...item, annotations }
   })
+  const { hiddenCounts, hiddenThreads } = hiddenDiscussions(params, group, threads, canMap)
   return {
     items: items.map((item) => ({ ...item, version: controlledItemVersion(item) })),
+    hiddenCounts,
     unplaced: threads.filter(
-      (thread) => !placed.has(thread.id) && ownsThread(params, thread, canMap),
+      (thread) =>
+        !placed.has(thread.id) &&
+        !hiddenThreads.has(thread.id) &&
+        ownsThread(params, thread, canMap),
     ),
   }
+}
+
+function hiddenDiscussions(
+  params: AnnotationParams,
+  group: ChangeGroup | undefined,
+  threads: ReviewThread[],
+  canMap: boolean,
+) {
+  const hiddenCounts = { supporting: 0, test: 0 }
+  const hiddenThreads = new Set<string>()
+  if (!group?.question) return { hiddenCounts, hiddenThreads }
+
+  const count = (location: { path: string; line: number; side: DiffSide }) => {
+    const file = params.pull.files.find((file) => file.path === location.path)
+    const section = file && questionSectionAt(group, file, location)
+    if (!section || section === 'key' || params.openSections?.has(section)) return false
+    hiddenCounts[section]++
+    return true
+  }
+  for (const draft of params.comments) {
+    if (draft.headSha === params.pull.headSha) count(draft)
+  }
+  for (const thread of canMap ? threads : []) {
+    if (!thread.outdated && thread.line != null && count({ ...thread, line: thread.line }))
+      hiddenThreads.add(thread.id)
+  }
+  return { hiddenCounts, hiddenThreads }
 }
 
 function ownsThread(params: AnnotationParams, thread: ReviewThread, canMap: boolean) {

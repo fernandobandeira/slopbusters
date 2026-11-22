@@ -8,7 +8,14 @@ export function useQuestionSections(
   selected: ChangeGroup | undefined,
   setFileCollapsed: (fileId: string, collapsed: boolean, groupId?: string) => void,
 ) {
-  const [openSections, setOpenSections] = useState(() => new Map<string, Set<OptionalSections>>())
+  const [state, setState] = useState(() => ({
+    grouping: pull.groups,
+    openSections: new Map<string, Set<OptionalSections>>(),
+  }))
+  if (state.grouping !== pull.groups) {
+    setState({ grouping: pull.groups, openSections: new Map() })
+  }
+  const { openSections } = state
   const sections = useMemo(
     () => (selected?.question ? questionSections(selected) : undefined),
     [selected],
@@ -31,23 +38,35 @@ export function useQuestionSections(
   )
 
   function setOpen(groupId: string, section: OptionalSections, shown: boolean) {
-    setOpenSections((previous) => {
-      const open = new Set(previous.get(groupId))
+    setState((previous) => {
+      const open = new Set(previous.openSections.get(groupId))
       if (open.has(section) === shown) return previous
       if (shown) open.add(section)
       else open.delete(section)
-      return new Map(previous).set(groupId, open)
+      return { ...previous, openSections: new Map(previous.openSections).set(groupId, open) }
     })
   }
-  function revealSection(groupId: string | undefined, location: LinePlace) {
+  function revealFileSections(
+    fileId: string,
+    groupId = selected?.id,
+    line?: Omit<LinePlace, 'fileId'>,
+  ) {
     const group = pull.groups.find((group) => group.id === groupId)
-    const file = pull.files.find((file) => file.id === location.fileId)
+    const file = pull.files.find((file) => file.id === fileId)
     if (!group?.question || !file) return
-    const section = questionSectionAt(group, file, location)
-    if (section) setOpen(group.id, section, true)
+    const section = line && questionSectionAt(group, file, line)
+    if (section === 'key') return
+    if (section) {
+      setOpen(group.id, section, true)
+      return
+    }
+    const { supporting, test } = questionSections(group)
+    const ids = new Set(file.hunks.map((hunk) => hunk.id))
+    if (supporting.some((id) => ids.has(id))) setOpen(group.id, 'supporting', true)
+    if (test.some((id) => ids.has(id))) setOpen(group.id, 'test', true)
   }
   function revealFile(fileId: string, groupId = selected?.id, line?: Omit<LinePlace, 'fileId'>) {
-    if (line) revealSection(groupId, { fileId, ...line })
+    revealFileSections(fileId, groupId, line)
     setFileCollapsed(fileId, false, groupId)
   }
   function toggle(section: OptionalSections) {
@@ -59,14 +78,6 @@ export function useQuestionSections(
     for (const file of pull.files) {
       if (file.hunks.some((hunk) => ids.has(hunk.id))) setFileCollapsed(file.id, false)
     }
-  }
-  function revealFileSections(fileId: string) {
-    if (!sections || !selected) return
-    const file = pull.files.find((file) => file.id === fileId)
-    if (!file) return
-    const ids = new Set(file.hunks.map((hunk) => hunk.id))
-    if (sections.supporting.some((id) => ids.has(id))) setOpen(selected.id, 'supporting', true)
-    if (sections.test.some((id) => ids.has(id))) setOpen(selected.id, 'test', true)
   }
   return { sections, open, hidden, visibleGroup, toggle, revealFile, revealFileSections }
 }

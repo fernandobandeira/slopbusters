@@ -10,20 +10,15 @@ export function reviewedHunkIds(pull: PullRequest, draft: ReviewDraft): Set<stri
   )
 }
 
-export function groupIsViewed(group: ChangeGroup, draft: ReviewDraft, pull?: PullRequest): boolean {
+export function groupIsViewed(group: ChangeGroup, draft: ReviewDraft, pull: PullRequest): boolean {
   if (group.question) {
     const key = questionSections(group).key
-    if (pull) {
-      const viewed = reviewedHunkIds(pull, draft)
-      return key.every((id) => viewed.has(id))
-    }
-    if (draft.viewedHunkIds) return key.every((id) => draft.viewedHunkIds?.includes(id))
-    if (!key.length) return true
+    const viewed = reviewedHunkIds(pull, draft)
+    return key.every((id) => viewed.has(id))
   }
   // A group of only dropped edits has no PR section left to view.
   if (!group.hunkIds.length && !group.fileIds.length) return true
   if (
-    pull &&
     group.fileIds.some((id) => {
       const file = pull.files.find((file) => file.id === id)
       return (!file || file.hunks.length === 0) && !draft.viewedFileIds.includes(id)
@@ -40,7 +35,7 @@ export function nextUnreviewedGroup(
   groups: ChangeGroup[],
   selectedId: string,
   draft: ReviewDraft,
-  pull?: PullRequest,
+  pull: PullRequest,
 ) {
   const index = groups.findIndex((group) => group.id === selectedId)
   if (index < 0) return undefined

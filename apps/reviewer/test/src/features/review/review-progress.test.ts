@@ -29,15 +29,15 @@ describe('reviewing sections separately', () => {
     const second = { ...first, id: 'second', hunkIds: file.hunks.slice(1).map((hunk) => hunk.id) }
     let draft: ReviewDraft = { comments: [], summary: '', viewedFileIds: [] }
     draft = toggleViewedSections(pull, draft, first.hunkIds)
-    expect(groupIsViewed(first, draft)).toBe(true)
-    expect(groupIsViewed(second, draft)).toBe(false)
+    expect(groupIsViewed(first, draft, pull)).toBe(true)
+    expect(groupIsViewed(second, draft, pull)).toBe(false)
     expect(draft.viewedFileIds).not.toContain(file.id)
-    expect(nextUnreviewedGroup([first, second], first.id, draft)).toBe(second)
+    expect(nextUnreviewedGroup([first, second], first.id, draft, pull)).toBe(second)
     draft = toggleViewedSections(pull, draft, second.hunkIds)
     expect(draft.viewedFileIds).toContain(file.id)
     draft = toggleViewedSections(pull, draft, first.hunkIds)
-    expect(groupIsViewed(first, draft)).toBe(false)
-    expect(groupIsViewed(second, draft)).toBe(true)
+    expect(groupIsViewed(first, draft, pull)).toBe(false)
+    expect(groupIsViewed(second, draft, pull)).toBe(true)
   })
 
   it('restores file-based viewed state and stops advancing when every group is complete', () => {
@@ -48,6 +48,6 @@ describe('reviewing sections separately', () => {
       viewedFileIds: pull.files.map((file) => file.id),
     }
     expect(reviewedHunkIds(pull, draft).size).toBe(pull.files.flatMap((file) => file.hunks).length)
-    expect(nextUnreviewedGroup(pull.groups, pull.groups[0]!.id, draft)).toBeUndefined()
+    expect(nextUnreviewedGroup(pull.groups, pull.groups[0]!.id, draft, pull)).toBeUndefined()
   })
 })

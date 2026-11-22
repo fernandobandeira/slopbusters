@@ -25,7 +25,7 @@ export function questionSectionAt(
   group: ChangeGroup,
   file: ChangedFile,
   location: { line: number; side: DiffSide },
-): OptionalSections | undefined {
+): OptionalSections | 'key' | undefined {
   const matches = file.hunks
     .filter((hunk) => group.hunkIds.includes(hunk.id))
     .flatMap((hunk) =>
@@ -42,6 +42,7 @@ export function questionSectionAt(
   const sections = questionSections(group)
   if (sections.supporting.includes(id)) return 'supporting'
   if (sections.test.includes(id)) return 'test'
+  return 'key'
 }
 
 export function sectionLineCount(pull: PullRequest, group: ChangeGroup, hunkIds: string[]) {

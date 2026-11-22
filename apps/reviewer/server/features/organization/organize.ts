@@ -57,60 +57,82 @@ export async function organizePull(
 }
 
 export function validateGrouping(pr: PullRequest, input: unknown): ChangeGroup[] {
-  const { questions, rest } = parseGrouping(input)
+  const result = groupSchema.safeParse(input)
+  if (!result.success)
+    throw new UserError('The model returned an invalid grouping. Try organizing again.')
+  const { questions, rest } = result.data
   const filesBySection = new Map(
     pr.files.flatMap((file) => file.hunks.map((hunk) => [hunk.id, file.id] as const)),
   )
   const assigned = new Set<string>()
-  const groups = [
-    ...questions.map(
-      ({ title, priority, claim, question, keyHunkIds, supportHunkIds, evidenceHunkIds }) => ({
-        title,
-        priority: priorities[priority],
-        reason: claim,
-        claim,
-        question,
-        hunkIds: [...keyHunkIds, ...supportHunkIds, ...evidenceHunkIds],
-        supportHunkIds,
-        testHunkIds: evidenceHunkIds,
-      }),
-    ),
-    ...rest.map((group) => ({ ...group, priority: Priority.low })),
-  ].map((group, index) => ({
+  function assign(ids: string[]) {
+    return ids.filter((id) => {
+      if (!filesBySection.has(id))
+        throw new UserError('The model referenced a diff section that does not exist.')
+      if (assigned.has(id)) return false
+      assigned.add(id)
+      return true
+    })
+  }
+
+  const review: GroupContent[] = []
+  const setAside: GroupContent[] = []
+  for (const question of questions) {
+    const group = questionGroup(question, assign)
+    if (group.question) review.push(group)
+    else if (group.hunkIds.length) setAside.push(group)
+  }
+  for (const group of rest) {
+    const hunkIds = assign(group.hunkIds)
+    if (hunkIds.length) setAside.push({ ...group, hunkIds, priority: Priority.low })
+  }
+  const omitted = [...filesBySection.keys()].filter((id) => !assigned.has(id))
+  if (omitted.length)
+    setAside.push({
+      title: 'Sections the model did not place',
+      priority: Priority.low,
+      lane: 'implementation',
+      reason: 'The model did not assign these diff sections to any group.',
+      hunkIds: omitted,
+    })
+  const groups = [...review, ...setAside].map((group, index) => ({
     ...group,
     id: `group-${index}`,
-    fileIds: [
-      ...new Set(
-        group.hunkIds.map((id) => {
-          const fileId = filesBySection.get(id)
-          if (fileId === undefined)
-            throw new UserError('The model referenced a diff section that does not exist.')
-          if (assigned.has(id))
-            throw new UserError('The model assigned a diff section more than once.')
-          assigned.add(id)
-          return fileId
-        }),
-      ),
-    ],
+    fileIds: [...new Set(group.hunkIds.flatMap((id) => filesBySection.get(id) ?? []))],
   }))
-  if (assigned.size !== filesBySection.size)
-    throw new UserError(
-      'The model omitted some changes. Your full diff is still available. Try organizing again.',
-    )
   return [...groups, ...unavailableGroups(pr)]
 }
 
-function parseGrouping(input: unknown) {
-  const result = groupSchema.safeParse(input)
-  if (result.success) return result.data
-  const issue = result.error.issues[0]
-  if (issue?.path[0] === 'questions' && issue.path[2] === 'keyHunkIds')
-    throw new UserError('Each review question must name at least one key diff section.')
-  if (issue?.code === 'unrecognized_keys' && issue.path[0] === 'rest')
-    throw new UserError(
-      'A set-aside group may only contain a title, lane, reason, and section IDs.',
-    )
-  throw new UserError('The model returned an invalid grouping. Try organizing again.')
+type GroupContent = Omit<ChangeGroup, 'id' | 'fileIds'>
+
+function questionGroup(
+  entry: z.output<typeof groupSchema>['questions'][number],
+  assign: (ids: string[]) => string[],
+): GroupContent {
+  const { title, priority, claim, question } = entry
+  const key = assign(entry.keyHunkIds)
+  const supportHunkIds = assign(entry.supportHunkIds)
+  const testHunkIds = assign(entry.evidenceHunkIds)
+  const hunkIds = [...key, ...supportHunkIds, ...testHunkIds]
+  if (!key.length)
+    return {
+      title,
+      priority: Priority.low,
+      lane: 'implementation',
+      reason:
+        'The model proposed a question whose key sections were already assigned to earlier questions.',
+      hunkIds,
+    }
+  return {
+    title,
+    priority: priorities[priority],
+    reason: claim,
+    claim,
+    question,
+    hunkIds,
+    supportHunkIds,
+    testHunkIds,
+  }
 }
 
 function unavailableGroups(pr: PullRequest): ChangeGroup[] {
@@ -141,6 +163,7 @@ export function groupingPrompt(pr: PullRequest): GroupingPrompt {
     })),
   )
   if (sections.length === 0) return { reason: 'There are no text changes to organize.' }
+  // Measured runs omitted the PR description so questions came from the code.
   const input = {
     title: pr.title,
     sections,
