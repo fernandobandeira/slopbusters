@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as routes from '../../../../shared/api'
 import type { ApiContract } from '../../../../shared/api/contract'
@@ -7,12 +8,7 @@ import type { StackReviewSession } from '../../../../shared/domain/stackReview'
 import { Provider } from '../../../../shared/domain/types'
 import { StackReview } from '../../../../src/features/stack-review/StackReview'
 import { call } from '../../../../src/lib/api'
-import {
-  emptyResult,
-  finishedStackReview,
-  layerUrl,
-  stackEntry,
-} from '../../../fixtures/stackReview'
+import { finishedStackReview, layerUrl, stackEntry } from '../../../fixtures/stackReview'
 
 vi.mock('../../../../src/lib/api', async (original) => ({
   ...(await original<typeof import('../../../../src/lib/api')>()),
@@ -23,24 +19,12 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   vi.useRealTimers()
-  vi.unstubAllGlobals()
 })
 
-const finished = finishedStackReview(
-  [
-    stackEntry(201, 'g1'),
-    stackEntry(203, 'g2', { title: 'Remove the retry job', kind: 'simplification' }),
-    stackEntry(202, 'g3', {
-      disposition: 'ask',
-      title: 'Keep the export column',
-      question: 'Should the export keep the old column?',
-    }),
-  ],
-  {
-    ...emptyResult,
-    chains: [{ cause: '#203/g2', unnecessary: ['#201/g1'], reason: 'Nothing else reads it.' }],
-  },
-)
+const finished = finishedStackReview([
+  stackEntry(201, 'g1'),
+  stackEntry(203, 'g2', { disposition: 'ask', question: 'Keep the column?' }),
+])
 const running: StackReviewSession = {
   ...finished,
   status: 'running',
@@ -53,11 +37,24 @@ const running: StackReviewSession = {
   })),
 }
 
-describe('reviewing the whole stack', () => {
-  it('starts with the reviewers last picked, shows each layer, then the brief to copy', async () => {
+function renderStrip() {
+  const onOpen = vi.fn()
+  render(
+    <MemoryRouter>
+      <StackReview
+        url={layerUrl(202)}
+        reviewers={[{ id: 'unclebob', providers: [Provider.codex] }]}
+        openPath="/review"
+        onOpen={onOpen}
+      />
+    </MemoryRouter>,
+  )
+  return onOpen
+}
+
+describe('stack review strip', () => {
+  it('starts with the picked reviewers, shows progress, then opens the separate review', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    const writeText = vi.fn(() => Promise.resolve())
-    vi.stubGlobal('navigator', { clipboard: { writeText } })
     let session = running
     vi.mocked(call).mockImplementation((route: ApiContract) => {
       if (route === routes.latestStackReview) return Promise.resolve({ session: null })
@@ -65,79 +62,51 @@ describe('reviewing the whole stack', () => {
       if (route === routes.getStackReview) return Promise.resolve(session)
       return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
     })
-    render(
-      <StackReview
-        url={layerUrl(202)}
-        reviewers={[{ id: 'unclebob', providers: [Provider.codex] }]}
-      />,
-    )
+    const onOpen = renderStrip()
+    const start = screen.getByRole('button', { name: 'Review the whole stack' })
+    await waitFor(() => {
+      expect(start.hasAttribute('disabled')).toBe(false)
+    })
+    expect(
+      screen.getByText('Review every layer with the panel, then read them together.'),
+    ).toBeTruthy()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Review the whole stack' }))
-
+    fireEvent.click(start)
     expect(await screen.findAllByText('The panel is reviewing it.')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
     expect(call).toHaveBeenCalledWith(routes.startStackReview, {
       body: { url: layerUrl(202), reviewers: [{ id: 'unclebob', providers: [Provider.codex] }] },
     })
+
     session = finished
     await act(() => vi.advanceTimersByTimeAsync(2000))
-    const decisions = await screen.findByRole('heading', { name: 'Needs your decision' })
-    const fixes = screen.getByRole('region', { name: 'Fixes on PR #203' })
-    expect(decisions.compareDocumentPosition(fixes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByText('Should the export keep the old column?')).toBeTruthy()
-    expect(screen.queryByRole('region', { name: 'Fixes on PR #201' })).toBeNull()
-    expect(screen.getByText('Nothing else reads it.', { exact: false })).toBeTruthy()
+    const open = await screen.findByRole('link', { name: 'Open review' })
+    expect(open.getAttribute('href')).toBe('/review')
+    expect(screen.getByRole('status').textContent).toBe(
+      'Review complete · 1 question needs you · 1 fix ready',
+    )
+    expect(screen.getByRole('button', { name: 'Review again' })).toBeTruthy()
+    expect(screen.queryByText('Keep the column?')).toBeNull()
+    expect(screen.queryByRole('list')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
-
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(
-        expect.stringContaining('# Stack review of review-room/example, PR #201 to PR #203'),
-      )
-    })
+    fireEvent.click(open)
+    expect(onOpen).toHaveBeenCalledOnce()
   })
 
-  it('offers a retry when a layer stopped the review', async () => {
-    const partial = {
-      ...running,
-      status: 'partial' as const,
-      progress: 'PR #202 stopped the stack review. Retry continues from there.',
-    }
+  it.each(['partial', 'failed', 'cancelled'] as const)('retries a %s review', async (status) => {
     vi.mocked(call).mockImplementation((route: ApiContract) => {
-      if (route === routes.latestStackReview) return Promise.resolve({ session: partial })
+      if (route === routes.latestStackReview)
+        return Promise.resolve({
+          session: { ...running, status, progress: 'Stack review stopped.' },
+        })
       if (route === routes.retryStackReview) return Promise.resolve(running)
       return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
     })
-    render(<StackReview url={layerUrl(201)} reviewers={['unclebob']} />)
+    renderStrip()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Retry the stack review' }))
 
-    await waitFor(() => {
-      expect(call).toHaveBeenCalledWith(routes.retryStackReview, { params: { id: 'stack-1' } })
-    })
     expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy()
-  })
-
-  it('asks about a change a chain the second model did not approve would retire', async () => {
-    const exhausted = structuredClone(finished)
-    if (!exhausted.pass) throw new Error('Missing pass.')
-    exhausted.pass.outcome = 'exhausted'
-    exhausted.pass.contested = ['chain #203/g2', 'chain #202/g3']
-    vi.mocked(call).mockImplementation((route: ApiContract) =>
-      route === routes.latestStackReview
-        ? Promise.resolve({ session: exhausted })
-        : Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`)),
-    )
-    render(<StackReview url={layerUrl(201)} reviewers={['unclebob']} />)
-
-    expect(
-      await screen.findByText(
-        '#203/g2 (Remove the retry job) may make this unnecessary: Nothing else reads it. The second model did not approve that. Still make this change?',
-      ),
-    ).toBeTruthy()
-    expect(screen.getAllByText(/Cost: small · The second model did not approve this/)).toHaveLength(
-      2,
-    )
-    expect(screen.queryByRole('heading', { name: 'Made unnecessary' })).toBeNull()
-    expect(screen.queryByRole('region', { name: 'Fixes on PR #201' })).toBeNull()
+    expect(call).toHaveBeenCalledWith(routes.retryStackReview, { params: { id: 'stack-1' } })
   })
 })

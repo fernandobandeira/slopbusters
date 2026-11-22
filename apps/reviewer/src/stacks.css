@@ -46,15 +46,20 @@ button.stack-badge:hover {
   padding-right: 16px;
 }
 .stack-message,
-.stack-warning,
+.stack-dialog .stack-warning,
 .stack-derived {
   margin: 0 8px 16px;
   font-size: 12px;
   line-height: 1.6;
+}
+.stack-message,
+.stack-derived {
   color: var(--muted-foreground);
 }
-.stack-warning {
+.stack-dialog .stack-warning {
   margin-top: 12px;
+}
+.stack-warning {
   color: var(--warning);
 }
 .stack-derived {

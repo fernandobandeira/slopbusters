@@ -1,5 +1,21 @@
 import type { CrossLayerResult, StackEntry } from './stackReview'
 
+export type BriefDecisionGroup =
+  'opposed' | 'disputed' | 'openQuestion' | 'crossLayer' | 'reversal' | 'predicted'
+
+export interface BriefDecisionOption {
+  id: string
+  label: string
+  detail?: string
+  recommended: boolean
+  change?: {
+    layer: number
+    plan: string
+    field?: 'title' | 'description'
+    structure?: Pick<CrossLayerResult['structure'][number], 'action' | 'into'>
+  }
+}
+
 /**
  * The stack brief's decision queue: an entry triage puts to the author, with what makes it the
  * author's: its own question, a cross-layer conclusion the second model did not approve, an
@@ -14,6 +30,17 @@ export interface BriefDecision {
   cost?: string
   why: string
   contested: boolean
+  group: BriefDecisionGroup
+  options: BriefDecisionOption[]
+  reason: string
+  kind?: StackEntry['kind']
+  crossLayerQuestion?: string
+  evidence: StackEntry[]
+}
+
+interface Doubt {
+  text: string
+  proposedLayer?: number
 }
 interface Lookup {
   entry: (id: string) => StackEntry | undefined
@@ -29,17 +56,27 @@ export function entryDecisions(
     doubts,
     contested,
     entry: find,
-  }: Lookup & { doubts: ReadonlyMap<string, string[]>; contested: ReadonlySet<string> },
+    layerOf,
+  }: Lookup & {
+    doubts: ReadonlyMap<string, Doubt[]>
+    contested: ReadonlySet<string>
+    layerOf: (entry: StackEntry) => number
+  },
 ): BriefDecision[] {
   const decided = new Set<string>()
   return entries.flatMap((entry) => {
     if (decided.has(entry.id)) return []
     decided.add(entry.id)
     if (!entry.opposes)
-      return [decision(entry, doubts.get(entry.id), entryContested(entry.id, contested))]
-    const sides = [entry, ...entry.opposes.entries.flatMap((id) => find(id) ?? [])]
+      return [
+        decision(entry, layerOf(entry), doubts.get(entry.id), entryContested(entry.id, contested)),
+      ]
+    const sides: [StackEntry, ...StackEntry[]] = [
+      entry,
+      ...entry.opposes.entries.flatMap((id) => find(id) ?? []),
+    ]
     for (const side of sides) decided.add(side.id)
-    return [conflict(sides, entry.opposes.reason)]
+    return [conflict(sides, entry.opposes.reason, layerOf, doubts)]
   })
 }
 
@@ -52,9 +89,10 @@ export function contestedDoubts(
   result: CrossLayerResult,
   contested: ReadonlySet<string>,
   plan: Lookup & { title: (id: string) => string },
-): Map<string, string[]> {
-  const doubts = new Map<string, string[]>()
-  const add = (id: string, doubt: string) => doubts.set(id, [...(doubts.get(id) ?? []), doubt])
+): Map<string, Doubt[]> {
+  const doubts = new Map<string, Doubt[]>()
+  const add = (id: string, text: string, proposedLayer?: number) =>
+    doubts.set(id, [...(doubts.get(id) ?? []), { text, proposedLayer }])
   const named = (id: string) => `${id} (${plan.title(id)})`
   const unapproved = 'The second model did not approve that.'
   for (const item of result.ownership)
@@ -64,6 +102,7 @@ export function contestedDoubts(
       add(
         item.entry,
         `Which layer does this change belong on: PR #${String(from)}, where its panel put it, or PR #${String(item.layer)}, where the cross-layer pass moved it? ${item.reason} ${unapproved}`,
+        item.layer,
       )
     }
   for (const chain of result.chains)
@@ -97,20 +136,83 @@ function entryContested(id: string, contested: ReadonlySet<string>): boolean {
 /** An entry for the author: its own question when triage asks one, then any doubts about it. */
 function decision(
   entry: StackEntry,
-  doubts: readonly string[] = [],
+  layer: number,
+  doubts: readonly Doubt[] = [],
   contested = false,
 ): BriefDecision {
   const asked = entry.disposition === 'ask'
+  const group = decisionGroup(entry, doubts.length > 0)
+  const crossLayerQuestion = doubts.map(({ text }) => text).join(' ')
   return {
     id: entry.id,
     layer: entry.layer,
     title: entry.title,
-    question: [...(asked ? [decisionQuestion(entry)] : []), ...doubts].join(' '),
+    question: [asked ? decisionQuestion(entry) : '', crossLayerQuestion].filter(Boolean).join(' '),
     ...(entry.plan ? { recommendation: entry.plan } : {}),
     ...(entry.effort ? { cost: entry.effort } : {}),
     why: asked ? entry.triage : 'The second model did not approve a conclusion about it.',
     contested: contested || doubts.length > 0,
+    group,
+    options: decisionOptions(entry, layer, group, doubts),
+    reason: entry.reason,
+    kind: entry.kind,
+    crossLayerQuestion,
+    evidence: [entry],
   }
+}
+
+function decisionGroup(entry: StackEntry, hasDoubts: boolean): BriefDecisionGroup {
+  if (entry.resolution === 'disputed') return 'disputed'
+  if (entry.question) return 'openQuestion'
+  if (hasDoubts) return 'crossLayer'
+  if (entry.reverses) return 'reversal'
+  if (entry.verdict === 'predicted' && entry.resolution === 'agreed') return 'predicted'
+  return 'openQuestion'
+}
+
+function decisionOptions(
+  entry: StackEntry,
+  layer: number,
+  group: BriefDecisionGroup,
+  doubts: readonly Doubt[],
+): BriefDecisionOption[] {
+  const otherLayers = [
+    ...new Set(doubts.flatMap(({ proposedLayer }) => proposedLayer ?? [])),
+  ].filter((proposed) => proposed !== layer)
+  const keep = { id: 'keep', label: 'Leave the code as it is', recommended: false }
+  if (otherLayers.length)
+    return [
+      ...[layer, ...otherLayers].flatMap((pull) =>
+        changeOption(entry, pull, { id: `layer-${pull}`, label: `Make the change on PR #${pull}` }),
+      ),
+      keep,
+    ]
+  if (group === 'predicted')
+    return [
+      { ...keep, label: 'Keep the code and reply', recommended: true },
+      ...changeOption(entry, layer),
+    ]
+  const recommended =
+    group === 'reversal' ||
+    (group === 'openQuestion' && entry.verdict === 'authorsCall' && entry.resolution === 'agreed')
+  return [...changeOption(entry, layer, { recommended }), keep]
+}
+
+function changeOption(
+  entry: StackEntry,
+  layer: number,
+  { id = 'change', label = 'Make the change', recommended = false } = {},
+): BriefDecisionOption[] {
+  if (!entry.plan?.trim()) return []
+  return [
+    {
+      id,
+      label,
+      detail: entry.plan,
+      recommended,
+      change: { layer, plan: entry.plan, field: entry.destination?.field },
+    },
+  ]
 }
 
 function decisionQuestion(entry: StackEntry): string {
@@ -129,16 +231,67 @@ function decisionQuestion(entry: StackEntry): string {
 }
 
 /** Findings whose plans cannot both be applied: one question, which one, if either. */
-function conflict(sides: readonly StackEntry[], reason: string): BriefDecision {
+function conflict(
+  sides: [StackEntry, ...StackEntry[]],
+  reason: string,
+  layerOf: (entry: StackEntry) => number,
+  doubts: ReadonlyMap<string, Doubt[]>,
+): BriefDecision {
   const [first] = sides
   return {
-    id: first?.id ?? '',
-    layer: first?.layer ?? 0,
+    id: first.id,
+    layer: first.layer,
     title: `Opposed changes: ${sides.map((side) => side.title).join(' / ')}`,
     question: `These ask for opposite changes: ${reason} Which one, if either? ${sides.map(sideLine).join(' ')}`,
     recommendation: 'None: the panel does not judge which side is right.',
     why: 'Another finding asks for the opposite change.',
     contested: false,
+    group: 'opposed',
+    options: [
+      ...sides.flatMap((side) =>
+        changeOption(side, layerOf(side), { id: side.id, label: side.title }),
+      ),
+      { id: 'neither', label: 'Make neither change', recommended: false },
+    ],
+    reason,
+    kind: first.kind,
+    crossLayerQuestion: sides
+      .flatMap((side) => doubts.get(side.id)?.map(({ text }) => text) ?? [])
+      .join(' '),
+    evidence: sides,
+  }
+}
+
+export function structureDecision(
+  item: CrossLayerResult['structure'][number],
+  title: string,
+  contested: boolean,
+): BriefDecision {
+  return {
+    id: `#${String(item.layer)}`,
+    layer: item.layer,
+    title,
+    question: `${title}?`,
+    recommendation: item.reason,
+    cost: item.cost,
+    why: 'Only the whole stack shows this.',
+    contested,
+    group: 'crossLayer',
+    options: [
+      {
+        id: item.action,
+        label: title,
+        recommended: false,
+        change: {
+          layer: item.layer,
+          plan: `${title}. ${item.reason}`,
+          structure: { action: item.action, into: item.into },
+        },
+      },
+      { id: 'keep-stack', label: 'Keep the stack as it is', recommended: false },
+    ],
+    reason: item.reason,
+    evidence: [],
   }
 }
 

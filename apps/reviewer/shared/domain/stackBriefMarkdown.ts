@@ -1,13 +1,7 @@
 import { groundingKindLabels } from './grounding'
 import { groundingImpactLabels, settleSerious } from './impact'
-import {
-  short,
-  type BriefFix,
-  type BriefLayer,
-  type BriefPrediction,
-  type BriefSerious,
-  type StackBrief,
-} from './stackBrief'
+import type { BriefFix, BriefPrediction, BriefSerious, StackBrief } from './stackBrief'
+import { short, type BriefLayer } from './stackBriefLayers'
 
 /** Rules for an agent working the stack from the brief. */
 const stackRules = [

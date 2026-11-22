@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import * as routes from '../../../shared/api/layerFix'
+import { groundingKindLabels } from '../../../shared/domain/grounding'
 import type { LayerFixSession } from '../../../shared/domain/layerFix'
 import type { BriefFix } from '../../../shared/domain/stackBrief'
+import type { BriefLayer } from '../../../shared/domain/stackBriefLayers'
 import { call, message } from '../../lib/api'
 import { useApiQuery } from '../../lib/useApiQuery'
 import { Button } from '~/components/ui/button'
@@ -9,15 +11,14 @@ import { Button } from '~/components/ui/button'
 /** A layer's selected plans and its persisted unattended worker, within the stack feature. */
 export function LayerFixWorker({
   stack,
-  url,
+  layer,
   fixes,
-  current,
 }: {
   stack: string
-  url: string
+  layer: BriefLayer
   fixes: BriefFix[]
-  current: boolean
 }) {
+  const { url, number, current } = layer
   const latest = useApiQuery(routes.latestLayerFix, { query: { url } })
   const [started, setStarted] = useState<LayerFixSession>()
   const [selected, setSelected] = useState(() => fixes.map((fix) => fix.id))
@@ -25,6 +26,7 @@ export function LayerFixWorker({
   const [error, setError] = useState('')
   const saved = latest.data?.session
   const session = started ?? (saved?.stack === stack ? saved : undefined)
+  const failure = error || latest.error
   useWorkerPolling(session, setStarted)
   async function act(run: () => Promise<LayerFixSession>) {
     setBusy(true)
@@ -39,12 +41,12 @@ export function LayerFixWorker({
   }
   return (
     <div>
-      <p className="stack-brief-detail">
-        Commits locally in an app-owned worktree. Pushes nothing.
-      </p>
-      {!session && (
-        <FixSelection fixes={fixes} busy={busy} selected={selected} setSelected={setSelected} />
-      )}
+      <FixSelection
+        fixes={fixes}
+        busy={busy || Boolean(session)}
+        selected={session ? session.fixes.map((fix) => fix.id) : selected}
+        setSelected={setSelected}
+      />
       {session ? (
         <>
           <p role="status">
@@ -61,10 +63,10 @@ export function LayerFixWorker({
             void act(() => call(routes.startLayerFix, { body: { stack, url, entries: selected } }))
           }
         >
-          Apply fixes
+          Apply {selected.length} {selected.length === 1 ? 'fix' : 'fixes'} locally on #{number}
         </Button>
       )}
-      {(error || latest.error) && <p role="alert">{error || latest.error}</p>}
+      {failure && <p role="alert">{failure}</p>}
     </div>
   )
 }
@@ -144,25 +146,41 @@ function FixSelection({
     <fieldset disabled={busy}>
       <legend>Fixes to apply</legend>
       {fixes.map((fix) => (
-        <label key={fix.id} style={{ display: 'block' }}>
-          <input
-            type="checkbox"
-            checked={selected.includes(fix.id)}
-            onChange={(event) => {
-              setSelected((previous) =>
-                event.target.checked
-                  ? [...previous, fix.id]
-                  : previous.filter((id) => id !== fix.id),
-              )
-            }}
-          />{' '}
-          {fix.title}
-          {fix.field && ' (left for the author)'}
-        </label>
+        <div className="stack-review-fix" key={fix.id}>
+          <label>
+            <input
+              type="checkbox"
+              checked={selected.includes(fix.id)}
+              onChange={(event) => {
+                setSelected((previous) =>
+                  event.target.checked
+                    ? [...previous, fix.id]
+                    : previous.filter((id) => id !== fix.id),
+                )
+              }}
+            />
+            {fix.title}
+          </label>
+          <p>{fix.plan ?? 'No plan recorded.'}</p>
+          <p className="stack-brief-detail">{fixMeta(fix)}</p>
+        </div>
       ))}
     </fieldset>
   )
 }
+function fixMeta(fix: BriefFix): string {
+  return [
+    fix.kind && groundingKindLabels[fix.kind],
+    fix.effort,
+    fix.field && `PR ${fix.field} · Left for the author`,
+    fix.derivedFrom && `Derived from ${fix.derivedFrom.join(', ')}`,
+    fix.alsoRaised.length && `Also raised as ${fix.alsoRaised.join(', ')}`,
+    fix.movedFrom && `Moved here from #${fix.movedFrom.layer}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
 function WorkerActions({
   session,
   busy,

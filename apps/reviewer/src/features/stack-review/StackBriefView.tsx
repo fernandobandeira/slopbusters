@@ -1,95 +1,63 @@
-import { LayerFixWorker } from './LayerFixWorker'
-import { groundingKindLabels } from '../../../shared/domain/grounding'
 import { groundingImpactLabels } from '../../../shared/domain/impact'
-import { short, type BriefFix, type StackBrief } from '../../../shared/domain/stackBrief'
-import { stackBriefMarkdown } from '../../../shared/domain/stackBriefMarkdown'
-import { CopyButton } from '../../components/CopyButton'
+import type { StackBrief } from '../../../shared/domain/stackBrief'
+import { layerMoved, movedReason } from '../../../shared/domain/stackBriefLayers'
+import { briefCounts, fixKindSummary } from '../../../shared/domain/stackReviewView'
+import { DecisionGroups } from './DecisionGroups'
+import { LayerFixWorker } from './LayerFixWorker'
+import { BriefNotes } from './BriefNotes'
 
-/** The stack brief: the decision queue first, then each layer's fixes bottom to top. */
 export function StackBriefView({
   brief,
-  repository,
+  fixGroups,
   sessionId,
 }: {
   brief: StackBrief
-  repository: string
-  sessionId?: string
+  fixGroups: StackBrief['fixes']
+  sessionId: string
 }) {
+  const { fixes } = briefCounts(brief)
   return (
-    <div className="stack-brief">
-      <div className="stack-brief-tools">
-        <CopyButton label="Copy" text={stackBriefMarkdown(brief, repository)} />
-      </div>
-      <ol className="stack-brief-list" aria-label="Reviewed layers, bottom to top">
-        {brief.layers.map((layer) => (
-          <li key={layer.number}>
-            #{layer.number} {layer.title}{' '}
-            <span className={layer.current ? 'stack-brief-detail' : 'stack-brief-stale'}>
-              {layer.current
-                ? `reviewed at ${short(layer.reviewedHead)}, still current`
-                : `reviewed at ${short(layer.reviewedHead)}, now at ${short(layer.currentHead)}`}
-            </span>
-          </li>
+    <>
+      {brief.serious.length > 0 && <SeriousList items={brief.serious} />}
+      <section className="stack-review-band">
+        <h2>Needs your answer · {brief.decisions.length}</h2>
+        <DecisionGroups decisions={brief.decisions} />
+      </section>
+      <section className="stack-review-band" hidden={!fixes}>
+        <h2>Ready to fix · {fixes}</h2>
+        <p className="stack-brief-detail">{fixKindSummary(brief)}</p>
+        <p className="stack-brief-detail">
+          Commits locally in an app-owned worktree. Pushes nothing.
+        </p>
+        {fixGroups.map(({ layer, items }) => (
+          <details
+            key={layer.number}
+            className="stack-review-disclosure"
+            hidden={!brief.fixes.some((group) => group.layer.number === layer.number)}
+          >
+            <summary>
+              #{layer.number} {layer.title} · {items.length} {items.length === 1 ? 'fix' : 'fixes'}
+            </summary>
+            {layerMoved(layer) && <p className="stack-warning">{movedReason(layer)}</p>}
+            <LayerFixWorker stack={sessionId} layer={layer} fixes={items} />
+          </details>
         ))}
-      </ol>
-      {brief.summary && <p className="stack-brief-summary">{brief.summary}</p>}
-      <SeriousList brief={brief} />
-      <h3>Needs your decision</h3>
-      {brief.decisions.length ? (
-        <ul className="stack-brief-list">
-          {brief.decisions.map((item) => (
-            <li key={item.id}>
-              <strong>{item.title}</strong> <code>{item.id}</code>
-              <p>{item.question}</p>
-              <p className="stack-brief-detail">
-                Recommendation: {item.recommendation ?? 'Leave it as it is.'} · Cost:{' '}
-                {item.cost ?? 'not recorded'}
-                {item.contested && ' · The second model did not approve this'}
-              </p>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="stack-brief-detail">Nothing needs your decision.</p>
-      )}
-      {brief.fixes.map(({ layer, items }) => (
-        <section key={layer.number} aria-label={`Fixes on PR #${String(layer.number)}`}>
-          <h3>
-            #{layer.number} {layer.title}
-            {!layer.current && <span className="stack-brief-stale"> · moved since its panel</span>}
-          </h3>
-          <ol className="stack-brief-list">
-            {items.map((item) => (
-              <FixItem key={item.id} fix={item} />
-            ))}
-          </ol>
-          {sessionId && (
-            <LayerFixWorker
-              stack={sessionId}
-              url={layer.url}
-              fixes={items}
-              current={layer.current}
-            />
-          )}
-        </section>
-      ))}
+      </section>
       <BriefNotes brief={brief} />
-    </div>
+    </>
   )
 }
 
-/** Entries with a serious consequence, wherever triage put them, each asking for a disposition. */
-function SeriousList({ brief }: { brief: StackBrief }) {
-  if (!brief.serious.length) return null
+function SeriousList({ items }: { items: StackBrief['serious'] }) {
   return (
-    <>
-      <h3>Serious consequences</h3>
+    <section className="stack-review-band">
+      <h2>Serious consequences</h2>
       <p className="stack-brief-detail">
         Settle each before other work: fixed and checked, refuted with evidence, accepted as a risk
         with a reason, or assigned for investigation with an owner.
       </p>
       <ul className="stack-brief-list">
-        {brief.serious.map((item) => (
+        {items.map((item) => (
           <li key={item.id}>
             <strong>{item.title}</strong> <code>{item.id}</code>
             <p>{item.consequence}</p>
@@ -99,81 +67,6 @@ function SeriousList({ brief }: { brief: StackBrief }) {
           </li>
         ))}
       </ul>
-    </>
-  )
-}
-
-function FixItem({ fix }: { fix: BriefFix }) {
-  const notes = [
-    fix.derivedFrom ? `Derived from ${fix.derivedFrom.join(', ')}` : '',
-    fix.alsoRaised.length ? `Also raised as ${fix.alsoRaised.join(', ')}` : '',
-    fix.movedFrom ? `Moved here from #${String(fix.movedFrom.layer)}` : '',
-  ].filter(Boolean)
-  return (
-    <li>
-      <strong>{fix.title}</strong> <code>{fix.id}</code>
-      {fix.plan && <p>{fix.plan}</p>}
-      <p className="stack-brief-detail">
-        {[fix.kind && groundingKindLabels[fix.kind], fix.effort, ...notes]
-          .filter(Boolean)
-          .join(' · ')}
-      </p>
-    </li>
-  )
-}
-
-function BriefNotes({ brief }: { brief: StackBrief }) {
-  return (
-    <>
-      {brief.chains.length > 0 && (
-        <>
-          <h3>Made unnecessary</h3>
-          <ul className="stack-brief-list">
-            {brief.chains.map((chain) => (
-              <li key={chain.cause.id}>
-                <code>{chain.cause.id}</code> makes{' '}
-                {chain.unnecessary.map((item) => item.id).join(', ')} unnecessary. {chain.reason}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      {brief.predictions.length > 0 && (
-        <details className="stack-brief-details">
-          <summary>
-            {brief.predictions.length} predicted reviewer comments · replies to have ready
-          </summary>
-          <ul className="stack-brief-list">
-            {brief.predictions.map((item) => (
-              <li key={item.id}>
-                <strong>{item.title}</strong> <code>{item.id}</code>
-                <p>Reply if the code stays: {item.reply}</p>
-                <p className="stack-brief-detail">
-                  Change that answers the reviewer: {item.plan ?? 'none recorded'}
-                  {item.effort && ` · ${item.effort}`}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-      {brief.followUps.length > 0 && (
-        <details className="stack-brief-details">
-          <summary>{brief.followUps.length} follow-ups</summary>
-          <ul className="stack-brief-list">
-            {brief.followUps.map((item) => (
-              <li key={item.id}>
-                {item.title} <code>{item.id}</code>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-      {[...brief.stale.map((item) => item.reason), ...brief.limitations].map((note) => (
-        <p className="stack-warning" key={note}>
-          {note}
-        </p>
-      ))}
-    </>
+    </section>
   )
 }

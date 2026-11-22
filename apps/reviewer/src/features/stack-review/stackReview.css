@@ -1,57 +1,221 @@
 .stack-review {
-  margin: 16px 8px 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--surface);
   font-size: 12px;
 }
-.stack-review-header {
+.stack-review-header,
+.stack-review-actions {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+.stack-review-header {
   justify-content: space-between;
-  gap: 12px;
+}
+.stack-review-actions {
+  flex-wrap: wrap;
+}
+.stack-review-header > .stack-review-actions {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+.stack-review-open {
+  color: var(--primary-foreground);
 }
 .stack-review-progress {
-  margin: 0;
   color: var(--muted-foreground);
   line-height: 1.6;
+}
+.stack-review-progress strong {
+  color: var(--foreground);
 }
 .stack-review-layers,
 .stack-brief-list {
   display: grid;
   gap: 6px;
-  margin: 10px 0 0;
+  margin: 8px 0;
   padding-left: 18px;
+  list-style: disc;
 }
-.stack-review-note,
 .stack-brief-detail {
-  display: block;
   color: var(--muted-foreground);
 }
-.stack-review-stopped .stack-review-note,
-.stack-brief-stale {
+.stack-review-layer .stack-brief-detail {
+  display: block;
+}
+.stack-review-stopped .stack-brief-detail {
   color: var(--warning);
 }
-.stack-brief h3 {
-  margin: 14px 0 0;
+.stack-review-page {
+  overflow: auto;
+  padding: 16px clamp(16px, 4vw, 56px) 32px;
+  font-size: 13px;
+}
+.stack-review-page-tools {
+  margin-bottom: 12px;
+}
+.stack-review-page-tools > :first-child {
+  margin-right: auto;
+}
+.stack-review-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, 24%) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--surface);
+}
+.stack-review-rail {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  max-height: 70vh;
+  overflow: auto;
+}
+.stack-review-rail .stack-review-rail-row {
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 32px;
+  padding-block: 4px;
+  font-size: 12px;
+  text-align: left;
+}
+.stack-review-rail-title {
+  display: -webkit-box;
+  overflow: hidden;
+  min-width: 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  line-height: 1.35;
+}
+.stack-review-rail-counts {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.stack-review-rail-counts .stack-warning {
+  font-weight: 600;
+}
+.stack-review-content {
+  min-width: 0;
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+  overflow-wrap: anywhere;
+}
+.stack-review-lead {
+  font-size: 14px;
+  font-weight: 600;
+}
+.stack-review-coverage {
+  line-height: 1.45;
+}
+.stack-review-content p + p {
+  margin-top: 4px;
+}
+.stack-review-band {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.stack-review-band h2,
+.stack-review-band > summary,
+.stack-review-card h3 {
   font-size: 13px;
   font-weight: 600;
 }
-.stack-brief p {
-  margin: 2px 0 0;
-  line-height: 1.5;
+.stack-review-band h3 {
+  margin: 8px 0 3px;
 }
-.stack-brief-tools {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 8px;
+.stack-review-breakdown {
+  margin-inline-start: 10px;
+  font-weight: 400;
 }
-.stack-brief-summary {
+.stack-review-band summary {
+  cursor: pointer;
+}
+.stack-review-disclosure {
+  margin-top: 4px;
+}
+.stack-review-disclosure > summary {
+  padding: 4px 0;
+}
+.stack-review-group-default {
+  float: right;
   color: var(--muted-foreground);
 }
-.stack-brief-details {
-  margin-top: 14px;
+.stack-review-card {
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--background);
 }
-.stack-brief-details summary {
-  cursor: pointer;
+.stack-review-card h3 {
+  margin-top: 0;
+}
+.stack-review-card .stack-brief-detail + p {
+  margin-top: 8px;
+}
+.stack-review-options {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+.stack-review-recommendation {
+  margin-inline-start: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.stack-review-evidence {
+  color: var(--muted-foreground);
+}
+.stack-review-evidence-item {
+  margin-top: 8px;
+}
+.stack-review-fix {
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+}
+.stack-review-fix label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   font-weight: 600;
+}
+.stack-review-fix input {
+  accent-color: var(--primary);
+}
+.stack-review-fix p {
+  margin-left: 19px;
+}
+
+@media (max-width: 720px) {
+  .stack-review-layout {
+    grid-template-columns: 1fr;
+  }
+  .stack-review-rail {
+    position: static;
+    max-height: 164px;
+  }
+  .stack-review-content {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .stack-review-header {
+    flex-wrap: wrap;
+  }
 }

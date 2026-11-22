@@ -71,11 +71,11 @@ describe('the stack brief across layers', () => {
     expect(brief?.fixes.flatMap(({ items }) => items.map((item) => item.id))).toEqual(['#203/g4'])
     expect(brief?.chains).toEqual([
       {
-        cause: { id: '#203/g4', title: 'Finding g4 on #203' },
+        cause: { id: '#203/g4', layer: 203, title: 'Finding g4 on #203' },
         reason: 'Once the job is gone, nothing reads the state the bottom layer adds.',
         unnecessary: [
-          { id: '#201/g1', title: 'Finding g1 on #201' },
-          { id: '#201/g2', title: 'Finding g2 on #201' },
+          { id: '#201/g1', layer: 201, title: 'Finding g1 on #201' },
+          { id: '#201/g2', layer: 201, title: 'Finding g2 on #201' },
         ],
       },
     ])
@@ -113,7 +113,7 @@ describe('the stack brief decision queue', () => {
 
     const brief = stackBrief(session)
 
-    expect(brief?.decisions).toEqual([
+    expect(brief?.decisions).toMatchObject([
       {
         id: '#202/g5',
         layer: 202,

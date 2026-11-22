@@ -1,40 +1,94 @@
 import { Layers } from 'lucide-react'
+import { Link } from 'react-router'
 import type { PanelSeatRequest } from '../../../shared/domain/panel'
-import { stackBrief } from '../../../shared/domain/stackBrief'
 import { layerProgress, type StackReviewSession } from '../../../shared/domain/stackReview'
+import { stripCounts } from '../../../shared/domain/stackReviewView'
 import { Button } from '~/components/ui/button'
-import { StackBriefView } from './StackBriefView'
 import { useStackReview } from './useStackReview'
 import './stackReview.css'
 
-/**
- * Review the whole stack a PR belongs to with the reviewers last picked: each layer's progress
- * while the panels work, then the stack brief.
- */
-export function StackReview({ url, reviewers }: { url: string; reviewers: PanelSeatRequest[] }) {
+export function StackReview({
+  url,
+  reviewers,
+  openPath,
+  onOpen,
+}: {
+  url: string
+  reviewers: PanelSeatRequest[]
+  openPath: string
+  onOpen: () => void
+}) {
   const review = useStackReview(url)
-  const { session } = review
-  const brief = session?.status === 'complete' ? stackBrief(session) : undefined
+  const counts = review.brief && stripCounts(review.brief)
   return (
     <section className="stack-review" aria-label="Stack review">
+      {review.brief ? (
+        <>
+          <div className="stack-review-header">
+            <p className="stack-review-progress" role="status">
+              <strong>Review complete</strong>
+              {counts && ` · ${counts}`}
+            </p>
+            <div className="stack-review-actions">
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={review.busy}
+                onClick={() => void review.start(reviewers)}
+              >
+                Review again
+              </Button>
+              <Button
+                className="stack-review-open"
+                size="sm"
+                render={<Link to={openPath} onClick={onOpen} />}
+              >
+                Open review
+              </Button>
+            </div>
+          </div>
+          <ReviewError review={review} />
+        </>
+      ) : (
+        <ReviewProgress review={review} reviewers={reviewers} />
+      )}
+    </section>
+  )
+}
+
+export function ReviewProgress({
+  review,
+  reviewers,
+}: {
+  review: ReturnType<typeof useStackReview>
+  reviewers: PanelSeatRequest[]
+}) {
+  const { session } = review
+  return (
+    <>
       <div className="stack-review-header">
         <p className="stack-review-progress" role="status">
-          {session
-            ? session.progress
-            : 'Review every layer with the panel, then read them together.'}
+          {session?.progress ??
+            (review.loading
+              ? 'Loading stack review…'
+              : 'Review every layer with the panel, then read them together.')}
         </p>
         <StackReviewAction review={review} reviewers={reviewers} />
       </div>
-      {review.error && (
-        <p className="stack-warning" role="alert">
-          {review.error}
-        </p>
-      )}
-      {session && !brief && <LayerProgress session={session} />}
-      {session && brief && (
-        <StackBriefView brief={brief} repository={session.repository} sessionId={session.id} />
-      )}
-    </section>
+      <ReviewError review={review} />
+      {session?.status === 'running' && <LayerProgress session={session} />}
+    </>
+  )
+}
+
+function ReviewError({ review }: { review: ReturnType<typeof useStackReview> }) {
+  const error = review.error || review.session?.error
+  return (
+    error && (
+      <p className="stack-warning" role="alert">
+        {error}
+      </p>
+    )
   )
 }
 
@@ -76,7 +130,7 @@ function StackReviewAction({
       onClick={() => void review.start(reviewers)}
     >
       <Layers size={13} aria-hidden="true" />
-      Review the whole stack
+      {session ? 'Review again' : 'Review the whole stack'}
     </Button>
   )
 }
@@ -87,7 +141,7 @@ function LayerProgress({ session }: { session: StackReviewSession }) {
       {session.layers.map((layer) => (
         <li key={layer.url} className={`stack-review-layer stack-review-${layer.state}`}>
           <span className="stack-pr-number">#{layer.number}</span> {layer.title}
-          <span className="stack-review-note">{layerProgress(layer)}</span>
+          <span className="stack-brief-detail">{layerProgress(layer)}</span>
         </li>
       ))}
     </ol>

@@ -145,6 +145,10 @@ function withoutKey({ key: _key, ...request }: EarlierRequest): Omit<EarlierRequ
 }
 
 /** Leave out skipped entries, newest layer first, until the view fits. */
+export const unreadBudgetNote = "To fit the cross-layer pass's budget,"
+export const remainingBudgetNote =
+  "Even without them, the cross-layer pass's input is over its budget; it read every remaining entry."
+
 function fitBudget(input: StackPassInput, budget: number) {
   const size = () => JSON.stringify(passView(input)).length
   const skipped = input.entries.filter((entry) => entry.disposition === 'skip')
@@ -156,10 +160,7 @@ function fitBudget(input: StackPassInput, budget: number) {
   }
   if (left.length)
     input.limitations.push(
-      `To fit the cross-layer pass's budget, ${String(left.length)} skipped entr${left.length === 1 ? 'y was' : 'ies were'} left out of it: ${left.join(', ')}.`,
+      `${unreadBudgetNote} ${String(left.length)} skipped entr${left.length === 1 ? 'y was' : 'ies were'} left out of it: ${left.join(', ')}.`,
     )
-  if (size() > budget)
-    input.limitations.push(
-      "Even without them, the cross-layer pass's input is over its budget; it read every remaining entry.",
-    )
+  if (size() > budget) input.limitations.push(remainingBudgetNote)
 }

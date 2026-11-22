@@ -6,8 +6,14 @@ import type {
   StackPassInput,
   StackReviewSession,
 } from './stackReview'
-import { contestedDoubts, entryDecisions, type BriefDecision } from './stackDecisions'
+import {
+  contestedDoubts,
+  entryDecisions,
+  structureDecision,
+  type BriefDecision,
+} from './stackDecisions'
 import { triage } from './triage'
+import { briefLayers, staleEntries, type BriefLayer, type BriefStale } from './stackBriefLayers'
 
 /**
  * The stack brief: one place to work a whole stack from, for a person or a coding agent. Its
@@ -27,19 +33,9 @@ export interface StackBrief {
   chains: BriefChain[]
   /** Entries triage left for later: problems already there, or cases needing several failures. */
   followUps: BriefFollowUp[]
+  unread: BriefEntry[]
   stale: BriefStale[]
   limitations: string[]
-}
-export interface BriefLayer {
-  number: number
-  title: string
-  url: string
-  reviewedHead?: string
-  currentHead?: string
-  reviewedBase?: string
-  currentBase?: string
-  /** False when the layer's head or base moved since its panel reviewed it. */
-  current: boolean
 }
 export interface BriefFix {
   id: string
@@ -79,9 +75,9 @@ export interface BriefPrediction {
   reply: string
 }
 export interface BriefChain {
-  cause: { id: string; title: string }
+  cause: BriefEntry
   reason: string
-  unnecessary: { id: string; title: string }[]
+  unnecessary: BriefEntry[]
 }
 export interface BriefFollowUp {
   id: string
@@ -89,10 +85,10 @@ export interface BriefFollowUp {
   title: string
   triage: string
 }
-export interface BriefStale {
+interface BriefEntry {
+  id: string
   layer: number
-  entries: string[]
-  reason: string
+  title: string
 }
 
 const emptyResult: CrossLayerResult = {
@@ -139,18 +135,15 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
             )
             .map(({ entry }) => entry),
         ],
-        { doubts, contested, entry: plan.entry },
+        { doubts, contested, entry: plan.entry, layerOf: plan.layerOf },
       ),
-      ...result.structure.map((item) => ({
-        id: `#${String(item.layer)}`,
-        layer: item.layer,
-        title: structureTitle(item),
-        question: `${structureTitle(item)}?`,
-        recommendation: item.reason,
-        cost: item.cost,
-        why: 'Only the whole stack shows this.',
-        contested: contested.has(`structure #${String(item.layer)}`),
-      })),
+      ...result.structure.map((item) =>
+        structureDecision(
+          item,
+          structureTitle(item),
+          contested.has(`structure #${String(item.layer)}`),
+        ),
+      ),
     ],
     fixes: layers
       .map((layer) => ({
@@ -163,11 +156,10 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
       }))
       .filter((group) => group.items.length),
     predictions: predictionsOf(current),
-    chains: result.chains.map((chain) => ({
-      cause: { id: chain.cause, title: plan.title(chain.cause) },
-      reason: chain.reason,
-      unnecessary: chain.unnecessary.map((id) => ({ id, title: plan.title(id) })),
-    })),
+    chains: result.chains.flatMap(({ cause, reason, unnecessary }) => {
+      const entry = plan.briefEntries([cause])[0]
+      return entry ? [{ cause: entry, reason, unnecessary: plan.briefEntries(unnecessary) }] : []
+    }),
     followUps: [...current, ...derived.map(({ entry }) => entry)]
       .filter((entry) => entry.followUp)
       .map((entry) => ({
@@ -177,6 +169,7 @@ export function stackBrief(session: StackReviewSession): StackBrief | undefined 
         triage: entry.triage,
       })),
     stale: staleEntries(input, layers),
+    unread: plan.briefEntries(input.left),
     limitations: [...input.limitations, ...passLimitations(session)],
   }
 }
@@ -198,7 +191,7 @@ function predictionsOf(entries: readonly StackEntry[]): BriefPrediction[] {
 
 interface Standing {
   plan: ReturnType<typeof placement>
-  doubts: ReadonlyMap<string, string[]>
+  doubts: ReturnType<typeof contestedDoubts>
   result: CrossLayerResult
 }
 
@@ -246,27 +239,6 @@ function approved(result: CrossLayerResult, contested: ReadonlySet<string>): Cro
   }
 }
 
-function briefLayers(session: StackReviewSession, input: StackPassInput): BriefLayer[] {
-  return session.layers.map((layer) => {
-    const reviewed = input.layers.find((item) => item.number === layer.number)
-    return {
-      number: layer.number,
-      title: layer.title,
-      url: layer.url,
-      ...(reviewed
-        ? { reviewedHead: reviewed.reviewedHead, reviewedBase: reviewed.reviewedBase }
-        : {}),
-      ...(layer.headSha ? { currentHead: layer.headSha } : {}),
-      ...(layer.baseSha ? { currentBase: layer.baseSha } : {}),
-      current: Boolean(
-        reviewed &&
-        layer.headSha === reviewed.reviewedHead &&
-        layer.baseSha === reviewed.reviewedBase,
-      ),
-    }
-  })
-}
-
 /**
  * Where each entry lands: merged into the owner of its duplicate group, made unnecessary by a
  * chain, or on the layer whose code must change, as the pass corrected it.
@@ -281,6 +253,11 @@ function placement(input: StackPassInput, result: CrossLayerResult) {
   const layers = new Set(input.layers.map((layer) => layer.number))
   return {
     entry: (id: string) => byId.get(id),
+    briefEntries: (ids: readonly string[]): BriefEntry[] =>
+      ids.flatMap((id) => {
+        const entry = byId.get(id)
+        return entry ? [{ id, layer: entry.layer, title: entry.title }] : []
+      }),
     merged: (id: string) => merged.has(id),
     unnecessary: (id: string) => unnecessary.has(id),
     title: (id: string) => byId.get(id)?.title ?? id,
@@ -289,7 +266,7 @@ function placement(input: StackPassInput, result: CrossLayerResult) {
       result.duplicates
         .filter((group) => group.owner === id)
         .flatMap((group) => group.entries.filter((other) => other !== id)),
-    layerOf(entry: StackEntry): number {
+    layerOf: (entry: StackEntry): number => {
       const target = moved.get(entry.id)?.layer ?? entry.destination?.pull ?? entry.layer
       return layers.has(target) ? target : entry.layer
     },
@@ -395,46 +372,6 @@ function derivedEntry(item: CrossLayerResult['derived'][number]): StackEntry {
   }
 }
 
-/**
- * Entries that may no longer hold: every entry of a layer that moved since its panel, and each
- * entry settled by a layer whose head is not the one its grounding read.
- */
-function staleEntries(input: StackPassInput, layers: readonly BriefLayer[]): BriefStale[] {
-  const heads = new Map(layers.map((layer) => [layer.number, layer.currentHead]))
-  const moved = layers
-    .filter((layer) => layer.reviewedHead && layer.currentHead && !layer.current)
-    .map((layer) => ({
-      layer: layer.number,
-      entries: input.entries
-        .filter((entry) => entry.layer === layer.number)
-        .map((entry) => entry.id),
-      reason: movedReason(layer),
-    }))
-  const settled = input.entries.flatMap((entry) => {
-    const layer = entry.settledBy
-    const read = input.layers
-      .find((item) => item.number === entry.layer)
-      ?.read.find((item) => item.pull === layer)?.headSha
-    const now = layer === undefined ? undefined : heads.get(layer)
-    if (layer === undefined || !read || !now || read === now) return []
-    return [
-      {
-        layer,
-        entries: [entry.id],
-        reason: `Settled by PR #${String(layer)} at \`${short(read)}\`, which is at \`${short(now)}\` now.`,
-      },
-    ]
-  })
-  return [...moved, ...settled]
-}
-
-function movedReason(layer: BriefLayer): string {
-  const name = `PR #${String(layer.number)}`
-  if (layer.currentHead !== layer.reviewedHead)
-    return `${name} moved since its panel reviewed \`${short(layer.reviewedHead)}\`; it is at \`${short(layer.currentHead)}\` now.`
-  return `${name}'s base moved since its panel reviewed it on \`${short(layer.reviewedBase)}\`; it is on \`${short(layer.currentBase)}\` now, so its diff may differ.`
-}
-
 function passLimitations({ pass }: StackReviewSession): string[] {
   if (pass?.outcome === 'single')
     return ['Only one provider was available, so no second model checked the cross-layer pass.']
@@ -449,8 +386,4 @@ function structureTitle(item: CrossLayerResult['structure'][number]): string {
   const layer = `PR #${String(item.layer)}`
   if (item.action === 'fold') return `Fold ${layer} into PR #${String(item.into ?? 0)}`
   return `${item.action === 'drop' ? 'Drop' : 'Split'} ${layer}`
-}
-
-export function short(sha: string | undefined): string {
-  return sha ? sha.slice(0, 7) : 'unknown'
 }

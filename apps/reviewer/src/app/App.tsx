@@ -53,7 +53,7 @@ import { OrganizationSettings } from '../features/settings/OrganizationSettings'
 import { TeammateSettings } from '../features/teammates/TeammateSettings'
 
 import { StackDialog } from '../features/stacks/StackPanel'
-import { renderStackReview } from './StackReviewSlot'
+import { renderStackReview, StackReviewRoute } from './StackReviewSlot'
 import { PullStatusDialog } from '../features/pull-status/PullStatusDialog'
 import { type PullStatusSection } from '../components/PullStatusIcons'
 
@@ -70,10 +70,7 @@ export function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const route = readRoute(location)
-  const visitedRepository =
-    route.kind === 'inbox' || route.kind === 'pull' || route.kind === 'sessions'
-      ? route.repository
-      : undefined
+  const visitedRepository = route.kind === 'not-found' ? undefined : route.repository
   const { recentRepositories, historyLoading, historyError } =
     useRepositoryHistory(visitedRepository)
   const lastRepository = recentRepositories[0] ?? ''
@@ -83,6 +80,9 @@ export function App() {
   const [urlDialog, setUrlDialog] = useState(false)
   const [url, setUrl] = useState('')
   const [stackTarget, setStackTarget] = useState<{ url: string; number: number }>()
+  const closeStack = () => {
+    setStackTarget(undefined)
+  }
   const [statusTarget, setStatusTarget] = useState<{ url: string; section?: PullStatusSection }>()
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
@@ -327,17 +327,7 @@ export function App() {
                 }}
               />
             ) : (
-              <h1>
-                {route.kind === 'sessions'
-                  ? 'Agent sessions'
-                  : route.kind === 'settings'
-                    ? 'Settings'
-                    : route.kind === 'issues' || route.kind === 'issue'
-                      ? 'Issues'
-                      : route.kind === 'not-found'
-                        ? 'Page not found'
-                        : `PR #${route.number}`}
-              </h1>
+              <h1>{appPageTitle(route)}</h1>
             )}
             {route.kind === 'inbox' && (
               <Button
@@ -355,7 +345,7 @@ export function App() {
         )}
       </AppTitleBar>
       <div className="app-shell">
-        {route.kind !== 'pull' && (
+        {route.kind !== 'pull' && route.kind !== 'stack-review' && (
           <AppSidebar
             filter={filter}
             inbox={inbox}
@@ -465,6 +455,12 @@ export function App() {
                 )
               }
             />
+            {route.kind === 'stack-review' && (
+              <Route
+                path="/repos/:owner/:repo/pulls/:number/stack-review"
+                element={<StackReviewRoute route={route} />}
+              />
+            )}
             <Route
               path="/repos/:owner/:repo/pulls/:number"
               element={
@@ -601,12 +597,10 @@ export function App() {
         )}
         <StackDialog
           url={stackTarget?.url}
-          renderReview={renderStackReview}
+          renderReview={renderStackReview(filter, closeStack)}
           currentNumber={stackTarget?.number ?? 0}
           filter={filter}
-          onClose={() => {
-            setStackTarget(undefined)
-          }}
+          onClose={closeStack}
         />
         <PullStatusDialog
           url={statusTarget?.url}
@@ -667,4 +661,24 @@ export function App() {
       <UpdateButton />
     </div>
   )
+}
+
+function appPageTitle(route: ReturnType<typeof readRoute>) {
+  switch (route.kind) {
+    case 'stack-review':
+      return 'Stack review'
+    case 'sessions':
+      return 'Agent sessions'
+    case 'settings':
+      return 'Settings'
+    case 'issue':
+    case 'issues':
+      return 'Issues'
+    case 'pull':
+      return `PR #${route.number}`
+    case 'not-found':
+      return 'Page not found'
+    case 'inbox':
+      return 'Pull requests'
+  }
 }

@@ -5,6 +5,7 @@ import {
   readRoute,
   readReviewView,
   reviewPath,
+  stackReviewPath,
   routeMatchesPull,
   updateReviewView,
 } from '../../../src/lib/routes'
@@ -175,5 +176,19 @@ describe('review view URLs', () => {
       {},
     )
     expect(query.toString()).toBe('group=authorization')
+  })
+})
+
+it('opens a stack review directly and retains the originating pull and inbox filter', () => {
+  const url = 'https://github.com/review-room/example/pull/201'
+  const path = new URL(stackReviewPath({ url, filter: 'requested' }), 'https://reviewer.test')
+  expect(readRoute(path)).toEqual({
+    kind: 'stack-review',
+    repository: 'review-room/example',
+    number: 201,
+    filter: 'requested',
+  })
+  expect(readRoute({ pathname: path.pathname.replace('201', '0'), search: '' })).toEqual({
+    kind: 'not-found',
   })
 })

@@ -26,8 +26,7 @@ it('starts selected fixes and renders the observed outcome', async () => {
   render(
     <LayerFixWorker
       stack="stack-1"
-      url={layerUrl(201)}
-      current
+      layer={{ url: layerUrl(201), number: 201, title: 'Layer 201', current: true }}
       fixes={[
         {
           id: '#201/g1',
@@ -39,7 +38,7 @@ it('starts selected fixes and renders the observed outcome', async () => {
       ]}
     />,
   )
-  const button = await screen.findByRole('button', { name: 'Apply fixes' })
+  const button = await screen.findByRole('button', { name: 'Apply 1 fix locally on #201' })
   await waitFor(() => {
     expect(button.hasAttribute('disabled')).toBe(false)
   })

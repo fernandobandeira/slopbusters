@@ -1,11 +1,37 @@
-import type { PanelSeatRequest } from '../../shared/domain/panel'
 import { savedPanelSelection } from '../features/panel/panelSelection'
 import { StackReview } from '../features/stack-review/StackReview'
+import { StackReviewPage } from '../features/stack-review/StackReviewPage'
+import { reviewPath, stackReviewPath, type AppRoute, type InboxFilter } from '../lib/routes'
 
-/** The whole-stack review inside the stack dialog, asking the reviewers last picked for a panel. */
-export function renderStackReview(url: string) {
-  const reviewers: PanelSeatRequest[] = savedPanelSelection().map(({ id, providers }) =>
+function reviewersLastPicked() {
+  return savedPanelSelection().map(({ id, providers }) =>
     providers?.length ? { id, providers } : id,
   )
-  return <StackReview url={url} reviewers={reviewers} />
+}
+
+export function renderStackReview(filter: InboxFilter, onClose: () => void) {
+  return (url: string) => (
+    <StackReview
+      url={url}
+      reviewers={reviewersLastPicked()}
+      openPath={stackReviewPath({ url, filter })}
+      onOpen={onClose}
+    />
+  )
+}
+
+export function StackReviewRoute({
+  route,
+}: {
+  route: Extract<AppRoute, { kind: 'stack-review' }>
+}) {
+  const url = `https://github.com/${route.repository}/pull/${route.number}`
+  return (
+    <StackReviewPage
+      key={url}
+      url={url}
+      reviewers={reviewersLastPicked()}
+      backPath={reviewPath({ url, filter: route.filter })}
+    />
+  )
 }

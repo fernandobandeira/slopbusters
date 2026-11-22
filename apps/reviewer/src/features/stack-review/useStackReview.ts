@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as routes from '../../../shared/api'
 import type { PanelSeatRequest } from '../../../shared/domain/panel'
+import { stackBrief } from '../../../shared/domain/stackBrief'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import type { StackReviewSession } from '../../../shared/domain/stackReview'
 import { call, message } from '../../lib/api'
@@ -19,6 +20,10 @@ export function useStackReview(url: string) {
   const [error, setError] = useState('')
   const session = started ?? latest.data?.session ?? undefined
   useStackReviewPolling(session, setStarted)
+  const brief = useMemo(
+    () => (session?.status === 'complete' ? stackBrief(session) : undefined),
+    [session],
+  )
 
   async function act(run: () => Promise<StackReviewSession>) {
     if (busy) return
@@ -34,6 +39,7 @@ export function useStackReview(url: string) {
   }
   return {
     session,
+    brief,
     loading: latest.loading,
     busy,
     error: error || latest.error,

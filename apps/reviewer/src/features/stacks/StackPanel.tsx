@@ -142,7 +142,7 @@ interface StackDialogProps {
   stack?: PullStack
   currentNumber: number
   filter: InboxFilter
-  /** What else the dialog shows under a loaded stack, such as a review of the whole stack. */
+  /** The whole-stack review strip, above the pull request list. */
   renderReview?: (url: string) => ReactNode
 }
 
@@ -294,6 +294,7 @@ function StackDialogView({
               </Button>
             </div>
           )}
+          {stack && url && renderReview?.(url)}
           {stack && (
             <StackPanel
               stack={stack}
@@ -302,7 +303,6 @@ function StackDialogView({
               onOpenLayer={onClose}
             />
           )}
-          {stack && url && renderReview?.(url)}
           {!loading && !error && !stack && (
             <p className="stack-message">No stack is available for this pull request.</p>
           )}

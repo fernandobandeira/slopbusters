@@ -19,6 +19,7 @@ type PullRoute = {
 export type AppRoute =
   | InboxRoute
   | PullRoute
+  | (Omit<PullRoute, 'kind' | 'revision'> & { kind: 'stack-review' })
   | { kind: 'sessions'; id?: string; repository?: string; filter: InboxFilter }
   | { kind: 'settings'; repository?: undefined; filter: InboxFilter }
   | { kind: 'issues'; view: TicketView; repository?: undefined; filter: InboxFilter }
@@ -34,10 +35,17 @@ export function readRoute(params: { pathname: string; search: string }): AppRout
   const query = new URLSearchParams(params.search)
   const filter = inboxFilter(query.get('inbox'))
   const page = readAppPage(params.pathname, query, filter)
-  if (page) return page
-  if (params.pathname === '/') return { kind: 'inbox', filter }
-  const pull = matchPath('/repos/:owner/:repo/pulls/:number', params.pathname)
-  const inbox = matchPath('/repos/:owner/:repo/pulls', params.pathname)
+  return page ?? readRepositoryRoute(params.pathname, query, filter)
+}
+
+function readRepositoryRoute(
+  pathname: string,
+  query: URLSearchParams,
+  filter: InboxFilter,
+): AppRoute {
+  const stackReview = matchPath('/repos/:owner/:repo/pulls/:number/stack-review', pathname)
+  const pull = stackReview ?? matchPath('/repos/:owner/:repo/pulls/:number', pathname)
+  const inbox = matchPath('/repos/:owner/:repo/pulls', pathname)
   const match = pull ?? inbox
   if (!match) return { kind: 'not-found' }
   const repository = validRepository(`${match.params.owner}/${match.params.repo}`)
@@ -46,6 +54,7 @@ export function readRoute(params: { pathname: string; search: string }): AppRout
   if (!pull.params.number || !/^\d+$/.test(pull.params.number)) return { kind: 'not-found' }
   const number = Number(pull.params.number)
   if (!Number.isSafeInteger(number) || number <= 0) return { kind: 'not-found' }
+  if (stackReview) return { kind: 'stack-review', repository, number, filter }
   const revision = query.get('revision') ?? undefined
   if (revision && !/^[a-zA-Z0-9-]+$/.test(revision)) return { kind: 'not-found' }
   return { kind: 'pull', repository, number, revision, filter }
@@ -69,6 +78,11 @@ export function reviewPath(params: { url: string; filter: InboxFilter; panel?: s
   if (params.panel) query.set('panel', params.panel)
   const pr = parsePullUrl(params.url)
   return `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}?${query}`
+}
+
+export function stackReviewPath({ url, filter }: { url: string; filter: InboxFilter }): string {
+  const { owner, repo, number } = parsePullUrl(url)
+  return `/repos/${owner}/${repo}/pulls/${number}/stack-review?${new URLSearchParams({ inbox: filter })}`
 }
 
 export function routeMatchesPull(route: AppRoute, pull: PullRequest): boolean {
@@ -131,6 +145,7 @@ function readAppPage(
   query: URLSearchParams,
   filter: InboxFilter,
 ): AppRoute | undefined {
+  if (pathname === '/') return { kind: 'inbox', filter }
   if (pathname === '/settings') return { kind: 'settings', filter }
   return readSessionRoute(pathname, query, filter) ?? readIssueRoute(pathname, query, filter)
 }

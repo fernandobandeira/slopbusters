@@ -28,6 +28,9 @@ export function ReviewPage(props: Props) {
   const updates = usePullUpdates(pull)
   const { stack, summary: stackSummary } = usePullStack(pull)
   const [stackOpen, setStackOpen] = useState(false)
+  const closeStack = () => {
+    setStackOpen(false)
+  }
   const pullStatus = usePullStatus(pull.url, pull.id)
   const [statusOpen, setStatusOpen] = useState(false)
   const [statusSection, setStatusSection] = useState<PullStatusSection>()
@@ -55,13 +58,11 @@ export function ReviewPage(props: Props) {
       />
       <StackDialog
         url={stackOpen ? pull.url : undefined}
-        renderReview={renderStackReview}
+        renderReview={renderStackReview(inboxFilter, closeStack)}
         stack={stack ?? undefined}
         currentNumber={pull.number}
         filter={inboxFilter}
-        onClose={() => {
-          setStackOpen(false)
-        }}
+        onClose={closeStack}
       />
       <PullStatusDialog
         url={statusOpen ? pull.url : undefined}
