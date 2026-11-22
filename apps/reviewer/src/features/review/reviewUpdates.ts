@@ -56,6 +56,7 @@ type ItemOptions = {
   full: boolean
   /** Files that also show the edits other groups own; those never count toward this group. */
   revealed?: (fileId: string) => boolean
+  hidden?: ReadonlySet<string>
 }
 
 /** A regular group shows its PR hunks. The updates group shows, per file, new sections as PR hunks,
@@ -93,7 +94,9 @@ function addFileItems(
   const regular = hunks.filter((hunk) => !interdiffs.has(hunk.id))
   const ids = regular.map((hunk) => hunk.id)
   const shown = options.revealed?.(file.id)
-    ? file.hunks.filter((hunk) => !interdiffs.has(hunk.id)).map((hunk) => hunk.id)
+    ? file.hunks
+        .filter((hunk) => !interdiffs.has(hunk.id) && !options.hidden?.has(hunk.id))
+        .map((hunk) => hunk.id)
     : ids
   const items = ids.length
     ? diffItems(

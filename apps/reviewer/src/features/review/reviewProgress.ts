@@ -1,3 +1,4 @@
+import { questionSections } from './questionSections'
 import type { ChangeGroup, PullRequest, ReviewDraft } from '../../../shared/domain/types'
 
 export function reviewedHunkIds(pull: PullRequest, draft: ReviewDraft): Set<string> {
@@ -10,6 +11,15 @@ export function reviewedHunkIds(pull: PullRequest, draft: ReviewDraft): Set<stri
 }
 
 export function groupIsViewed(group: ChangeGroup, draft: ReviewDraft, pull?: PullRequest): boolean {
+  if (group.question) {
+    const key = questionSections(group).key
+    if (pull) {
+      const viewed = reviewedHunkIds(pull, draft)
+      return key.every((id) => viewed.has(id))
+    }
+    if (draft.viewedHunkIds) return key.every((id) => draft.viewedHunkIds?.includes(id))
+    if (!key.length) return true
+  }
   // A group of only dropped edits has no PR section left to view.
   if (!group.hunkIds.length && !group.fileIds.length) return true
   if (
@@ -36,7 +46,7 @@ export function nextUnreviewedGroup(
   if (index < 0) return undefined
   for (let offset = 1; offset < groups.length; offset++) {
     const group = groups[(index + offset) % groups.length]
-    if (group && !groupIsViewed(group, draft, pull)) return group
+    if (group && !group.lane && !groupIsViewed(group, draft, pull)) return group
   }
   return undefined
 }

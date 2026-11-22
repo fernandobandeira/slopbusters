@@ -7,17 +7,18 @@ import {
   type ReviewDraft,
 } from '../../../shared/domain/types'
 import type { ReviewView } from '../../lib/routes'
+import type { LinePlace } from './transferNotes'
 import { discussionGroup } from './discussions/discussions'
 interface EditorOptions {
   selected?: ChangeGroup
   changeView: (changes: Partial<ReviewView>) => void
-  setFileCollapsed: (fileId: string, collapsed: boolean, groupId?: string) => void
+  revealFile: (fileId: string, groupId?: string, line?: Omit<LinePlace, 'fileId'>) => void
   setDraft: Dispatch<SetStateAction<ReviewDraft>>
   setNotice: (message: string) => void
   setSubmitted: (url: string | undefined) => void
 }
 export function useCommentEditor(pull: PullRequest, options: EditorOptions) {
-  const { selected, changeView, setFileCollapsed } = options
+  const { selected, changeView, revealFile } = options
   const { setDraft, setNotice, setSubmitted } = options
   const [editor, setEditor] = useState<Omit<DraftComment, 'body'> | null>(null)
   const [body, setBody] = useState('')
@@ -34,7 +35,7 @@ export function useCommentEditor(pull: PullRequest, options: EditorOptions) {
       setNotice('Organize changes before editing line comments.')
       return
     }
-    setFileCollapsed(file.id, false, group.id)
+    revealFile(file.id, group.id, comment)
     changeView({ groupId: group.id })
     setEditor(comment)
     setBody(comment.body)

@@ -12,11 +12,11 @@ const [source] = pull.files
 it('opens the group holding the other end, then scrolls to it once its file is shown', () => {
   const scrollTo = vi.fn()
   const changeView = vi.fn()
-  const setFileCollapsed = vi.fn()
+  const revealFile = vi.fn()
   const viewerRef = { current: { scrollTo } }
   const { result, rerender } = renderHook(
     ({ selected, items }: { selected: ChangeGroup; items: { id: string }[] }) =>
-      useTransferJump({ selected, items, changeView, setFileCollapsed, viewerRef }),
+      useTransferJump({ selected, items, changeView, revealFile, viewerRef }),
     { initialProps: { selected: destination, items: [{ id: pull.files[1]?.id ?? '' }] } },
   )
 
@@ -24,7 +24,12 @@ it('opens the group holding the other end, then scrolls to it once its file is s
     result.current({ fileId: source?.id ?? '', side: DiffSide.left, line: 13, groupId: both.id })
   })
   expect(changeView).toHaveBeenCalledWith({ groupId: both.id })
-  expect(setFileCollapsed).toHaveBeenCalledWith(source?.id, false, both.id)
+  expect(revealFile).toHaveBeenCalledWith(source?.id, both.id, {
+    fileId: source?.id ?? '',
+    side: DiffSide.left,
+    line: 13,
+    groupId: both.id,
+  })
   expect(scrollTo).not.toHaveBeenCalled()
 
   rerender({ selected: both, items: pull.files.map((file) => ({ id: file.id })) })

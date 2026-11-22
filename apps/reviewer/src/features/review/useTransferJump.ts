@@ -9,7 +9,7 @@ interface JumpOptions {
   selected?: ChangeGroup
   items: readonly Pick<CodeViewItem<undefined>, 'id'>[]
   changeView: (changes: Partial<ReviewView>) => void
-  setFileCollapsed: (fileId: string, collapsed: boolean, groupId?: string) => void
+  revealFile: (fileId: string, groupId?: string, line?: Omit<LinePlace, 'fileId'>) => void
   viewerRef: RefObject<Pick<CodeViewHandle<never, undefined>, 'scrollTo'> | null>
 }
 
@@ -18,7 +18,7 @@ interface JumpOptions {
  * group first and scrolls once its viewer shows the file.
  */
 export function useTransferJump(options: JumpOptions) {
-  const { selected, items, changeView, setFileCollapsed, viewerRef } = options
+  const { selected, items, changeView, revealFile, viewerRef } = options
   const pending = useRef<LinePlace & { groupId: string }>(undefined)
   const scrollTo = (place: LinePlace) => {
     viewerRef.current?.scrollTo({
@@ -37,13 +37,13 @@ export function useTransferJump(options: JumpOptions) {
     scrollTo(place)
   })
   return (target: Counterpart) => {
-    if ('groupId' in target && target.groupId !== selected?.id) {
-      pending.current = target
-      setFileCollapsed(target.fileId, false, target.groupId)
-      changeView({ groupId: target.groupId })
+    const groupId = 'groupId' in target ? target.groupId : selected?.id
+    revealFile(target.fileId, groupId, target)
+    if (groupId && (groupId !== selected?.id || selected.question)) {
+      pending.current = { ...target, groupId }
+      if (groupId !== selected?.id) changeView({ groupId })
       return
     }
-    setFileCollapsed(target.fileId, false, selected?.id)
     scrollTo(target)
   }
 }

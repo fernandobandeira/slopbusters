@@ -9,13 +9,14 @@ import {
   type PullRequest,
 } from '../../../shared/domain/types'
 import type { ReviewLocation } from '../../../shared/domain/review'
+import type { LinePlace } from './transferNotes'
 import { updateReviewView } from '../../lib/routes'
 import { discussionGroup, type LineDiscussion } from './discussions/discussions'
 
 interface FocusOptions {
   searchParams: URLSearchParams
   setSearchParams: SetURLSearchParams
-  setFileCollapsed: (fileId: string, collapsed: boolean, groupId?: string) => void
+  revealFile: (fileId: string, groupId?: string, line?: Omit<LinePlace, 'fileId'>) => void
   selected?: ChangeGroup
   items: CodeViewItem<undefined>[]
   viewerRef: RefObject<Pick<
@@ -36,7 +37,7 @@ export function useReviewFocus(pull: PullRequest, options: FocusOptions) {
   const group = location && (shown ? options.selected : discussionGroup({ pull, ...location }))
   const reveal = useEffectEvent(() => {
     if (!file || !group) return
-    options.setFileCollapsed(file.id, false, group.id)
+    options.revealFile(file.id, group.id, location)
     const next = updateReviewView(options.searchParams, { groupId: group.id })
     if (next.toString() !== options.searchParams.toString()) options.setSearchParams(next)
   })

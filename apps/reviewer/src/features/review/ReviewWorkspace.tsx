@@ -6,6 +6,7 @@ import { useReviewDiff } from './useReviewDiff'
 import { useReviewFocus } from './useReviewFocus'
 import { ReviewDiffViewer } from './ReviewDiffViewer'
 import { UPDATES_GROUP_ID } from './reviewUpdates'
+import { ReviewQuestion } from './ReviewQuestion'
 import { GroupSidebar } from './GroupSidebar'
 import { SubmitReviewDialog } from './SubmitReviewDialog'
 import { ReviewSubmitButton } from './ReviewSubmitButton'
@@ -139,6 +140,9 @@ export function ReviewWorkspace({
     contextLines,
     setContextLines,
     items,
+    question,
+    revealFile,
+    toggleQuestionSections,
     setFileCollapsed,
     setFileRevealed,
     toggleFile,
@@ -167,7 +171,7 @@ export function ReviewWorkspace({
   const focus = useReviewFocus(pull, {
     searchParams,
     setSearchParams,
-    setFileCollapsed,
+    revealFile,
     selected,
     items,
     viewerRef,
@@ -210,7 +214,7 @@ export function ReviewWorkspace({
   } = useCommentEditor(pull, {
     selected,
     changeView,
-    setFileCollapsed,
+    revealFile,
     setDraft,
     setNotice,
     setSubmitted,
@@ -235,7 +239,7 @@ export function ReviewWorkspace({
     selected,
     items,
     changeView,
-    setFileCollapsed,
+    revealFile,
     viewerRef,
   })
   useEffect(() => {
@@ -510,6 +514,15 @@ export function ReviewWorkspace({
             >
               {selected ? (
                 <>
+                  {question.sections && (
+                    <ReviewQuestion
+                      pull={pull}
+                      group={selected}
+                      sections={question.sections}
+                      open={question.open}
+                      onToggle={toggleQuestionSections}
+                    />
+                  )}
                   {items.length ? (
                     <ReviewDiffViewer
                       key={selected.id}
@@ -538,7 +551,7 @@ export function ReviewWorkspace({
                       navigateSymbol={navigateSymbol}
                       onJumpToTransfer={jumpToTransfer}
                     />
-                  ) : (
+                  ) : !question.hidden.size ? (
                     <div className="empty-state">
                       <strong>No text patch in this group</strong>
                       <span className="muted">
@@ -548,7 +561,7 @@ export function ReviewWorkspace({
                         Inspect files on GitHub
                       </a>
                     </div>
-                  )}
+                  ) : null}
                 </>
               ) : (
                 <div className="empty-state">
@@ -584,7 +597,12 @@ export function ReviewWorkspace({
                   return
                 }
                 const file = pull.files.find((file) => file.path === location.path)
-                if (file) setFileCollapsed(file.id, false, group.id)
+                const { line, side } = location
+                if (group.question && line != null && side != null) {
+                  focus.focusLine({ ...location, line, side })
+                  return
+                }
+                if (file) revealFile(file.id, group.id)
                 changeView({ groupId: group.id })
               }}
             />
