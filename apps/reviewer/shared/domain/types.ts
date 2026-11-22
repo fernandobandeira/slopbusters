@@ -56,6 +56,12 @@ export interface ChangedFile {
   patch?: string
   oldContent?: string
 }
+/**
+ * Sections to read together. A group with a `question` asks the reviewer one thing: `claim` is
+ * what the code chose, said plainly enough to be wrong, and the sections not named as support or
+ * tests are the few needed to check it. A group with a `lane` asks nothing and says why it is set
+ * aside. A group with neither is a plain behavior group, as every group was before questions.
+ */
 export interface ChangeGroup {
   id: string
   title: string
@@ -63,6 +69,13 @@ export interface ChangeGroup {
   reason: string
   hunkIds: string[]
   fileIds: string[]
+  claim?: string
+  question?: string
+  /** Sections of `hunkIds` that only carry the choice out; opened when a key section raises doubt. */
+  supportHunkIds?: string[]
+  /** Sections of `hunkIds` holding tests that would fail if the claim were false. */
+  testHunkIds?: string[]
+  lane?: 'evidence' | 'implementation' | 'mechanical'
 }
 /** One hunk of edits made inside a moved or copied block, in old/new file coordinates. */
 export interface TransferChange {

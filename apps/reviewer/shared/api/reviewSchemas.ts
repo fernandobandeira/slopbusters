@@ -43,6 +43,11 @@ const group = z.object({
   reason: z.string(),
   hunkIds: z.array(z.string()),
   fileIds: z.array(z.string()),
+  claim: z.string().optional(),
+  question: z.string().optional(),
+  supportHunkIds: z.array(z.string()).optional(),
+  testHunkIds: z.array(z.string()).optional(),
+  lane: z.enum(['evidence', 'implementation', 'mechanical']).optional(),
 })
 const transferChange = z.object({
   header: z.string(),
