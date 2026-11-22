@@ -23,7 +23,12 @@ export interface JobDependencies {
   /** Lease a checkout of the PR head for agents to read. */
   openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
   /** Evidence about what the PR is meant to do, such as its linked ticket. */
-  context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
+  context?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewEvidence | undefined>
+}
+
+export interface ReviewEvidence {
+  text: string
+  limitation?: string
 }
 
 /** What jobs that push branches to GitHub add: the app's data directory and Git identity. */

@@ -53,6 +53,7 @@ export function groundingLimitations(
           `${capped.map((review) => name(review.reviewer)).join(', ')} returned as many findings as allowed and may have had more.`,
         ]
       : []),
+    ...(pending.contextLimitation ? [pending.contextLimitation] : []),
     ...stackLimitations(layers, stack),
     ...deferredLimitation(state),
     ...settlementLimitations(state),

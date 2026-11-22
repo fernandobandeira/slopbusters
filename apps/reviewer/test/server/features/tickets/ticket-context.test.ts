@@ -49,7 +49,7 @@ describe('linked tickets as review evidence', () => {
     vi.mocked(loadLinusSkill).mockResolvedValue('Linus')
     vi.mocked(reviewWithLinus).mockResolvedValue(keep)
     vi.mocked(reconcileWithLinus).mockResolvedValue(keep)
-    const context = vi.fn(() => Promise.resolve('{"identifier":"SCH-760"}'))
+    const context = vi.fn(() => Promise.resolve({ text: '{"identifier":"SCH-760"}' }))
     const jobs = new LinusJobs({
       store,
       turns: recordingTurns().turns,

@@ -12,13 +12,14 @@ import { publicError, UserError } from '../../errors'
 import { MAX_PANEL_STACK_LAYERS, PANEL_PREPARE_CONCURRENCY } from './limits'
 import { pullFingerprint } from '../../reviewSnapshot'
 import { settleEach } from '../flows/panel'
+import type { JobDependencies } from '../jobDependencies'
 
 interface Sources {
   loadPull: (url: string) => Promise<PullRequest>
   /** What reviewers already said on a PR, which every seat reads. */
   history?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewHistory>
   stack?: (url: string) => Promise<PullStackResult>
-  context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
+  context?: JobDependencies['context']
   signal: AbortSignal
   progress: (progress: string) => void
 }
@@ -101,7 +102,11 @@ function loadSnapshots(urls: readonly string[], sources: Sources, withContext: b
       signal.throwIfAborted()
       const context = withContext ? await sources.context?.(pull, signal) : undefined
       signal.throwIfAborted()
-      return { pull, fingerprint: pullFingerprint(pull), ...(context ? { context } : {}) }
+      return {
+        pull,
+        fingerprint: pullFingerprint(pull),
+        ...(context ? { context: context.text, contextLimitation: context.limitation } : {}),
+      }
     },
     failure: () => 'The PR could not be loaded.',
   })

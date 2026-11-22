@@ -62,6 +62,7 @@ const session = z.object({
       pull: pullSchema,
       fingerprint: z.string(),
       context: z.string().optional(),
+      contextLimitation: z.string().optional(),
       reviews: z.array(review),
       grounding: groundingStateSchema.optional(),
     })

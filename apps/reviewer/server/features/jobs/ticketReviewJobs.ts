@@ -11,7 +11,7 @@ import type { OrganizationPreferences } from '../../../shared/domain/preferences
 import type { Ticket } from '../../../shared/domain/tickets'
 import type { ReviewCheckout } from '../../adapters/reviewWorkspaces'
 import { publicError, UserError } from '../../errors'
-import type { JobDependencies } from '../jobDependencies'
+import type { JobDependencies, ReviewEvidence } from '../jobDependencies'
 import { savedModels } from '../models'
 import { FlowJobs } from '../flows/flowJobs'
 import { failedSeats, reviewSeats } from '../flows/panel'
@@ -24,12 +24,12 @@ export interface TicketReviewOptions extends Pick<
 > {
   skillDirectory?: string
   tickets: Pick<TicketService, 'get' | 'update'>
-  evidence: (ticket: Ticket, signal: AbortSignal) => Promise<string>
+  evidence: (ticket: Ticket, signal: AbortSignal) => Promise<ReviewEvidence>
   openSource?: (repository: string, signal: AbortSignal) => Promise<ReviewCheckout>
 }
 interface Prepared {
   ticket: Ticket
-  evidence: string
+  evidence: ReviewEvidence
   skill: string
   repository?: ReviewCheckout
   limitation?: string
@@ -245,7 +245,7 @@ export class TicketReviewJobs {
   private request(prepared: Prepared, model: OrganizationPreferences, signal: AbortSignal) {
     return {
       turns: this.options.turns,
-      evidence: prepared.evidence,
+      evidence: prepared.evidence.text,
       ticket: prepared.ticket,
       model,
       skill: prepared.skill,
@@ -306,6 +306,9 @@ export class TicketReviewJobs {
     prepared: Prepared,
     revision: Omit<JobsSession['revisions'][number], 'createdAt'>,
   ) {
+    const { limitation } = prepared.evidence
+    if (limitation && !revision.advice.limitations.includes(limitation))
+      revision.advice.limitations.unshift(limitation)
     if (prepared.limitation) revision.advice.limitations.unshift(prepared.limitation)
     session.revisions.push({ ...revision, createdAt: new Date().toISOString() })
     session.pending = undefined

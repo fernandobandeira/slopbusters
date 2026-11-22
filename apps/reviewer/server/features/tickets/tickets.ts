@@ -17,6 +17,7 @@ import {
 } from './limits'
 import * as queries from './linearQueries'
 import { downloadTicket } from './ticketDownload'
+import { readTicketDocuments, type TicketDocuments } from './ticketDocuments'
 import { createTicketLinks } from './ticketLinks'
 
 export function createTicketService(linear: Linear, github: GitHub) {
@@ -55,12 +56,18 @@ export function createTicketService(linear: Linear, github: GitHub) {
       throw new LinearError('Linear did not save the issue. Retry in a moment.', 502, 'invalid')
     return get(ticket.identifier, { refresh: true })
   }
+  const documentsForTicket = (ticket: Ticket, signal?: AbortSignal) =>
+    readTicketDocuments(linear, ticket, signal)
+
   /** Ticket evidence for PR reviewers, or nothing when Linear is not connected or unlinked. */
   async function contextForPull(pull: PullRequest, signal?: AbortSignal) {
     if (!linear.configured()) return undefined
     try {
       const identifier = await links.forPull(pull, signal)
-      return identifier ? ticketContext(await get(identifier, { signal })) : undefined
+      if (!identifier) return undefined
+      const ticket = await get(identifier, { signal })
+      const documents = await documentsForTicket(ticket, signal)
+      return { text: ticketContext(ticket, documents), limitation: documents.documentLimitations }
     } catch (error) {
       signal?.throwIfAborted()
       logError('Loading the linked Linear issue for review', error)
@@ -72,6 +79,7 @@ export function createTicketService(linear: Linear, github: GitHub) {
     get,
     update,
     contextForPull,
+    documentsForTicket,
     forPull: links.forPull,
     forPullUrl: links.forPullUrl,
     status: () => linearStatus(linear),
@@ -79,7 +87,7 @@ export function createTicketService(linear: Linear, github: GitHub) {
 }
 export type TicketService = ReturnType<typeof createTicketService>
 
-export function ticketContext(ticket: Ticket): string {
+function ticketContext(ticket: Ticket, documents: TicketDocuments): string {
   return JSON.stringify({
     identifier: ticket.identifier,
     title: ticket.title,
@@ -93,6 +101,7 @@ export function ticketContext(ticket: Ticket): string {
       description: clip(ticket.parentTicket.description, MAX_TICKET_RELATIVE_CHARACTERS),
     },
     children: ticket.children.map((child) => `${child.identifier}: ${child.title}`),
+    ...documents,
   })
 }
 

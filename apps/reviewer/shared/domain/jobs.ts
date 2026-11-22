@@ -78,6 +78,11 @@ export const jobsSnapshotSchema = z.object({
   updatedAt: z.string(),
 })
 
+// Saved revisions also record source and document limitations found by the app.
+const savedAdvice = jobsAdviceSchema.extend({
+  limitations: z.array(jobsAdviceSchema.shape.limitations.element).max(14),
+})
+
 const reviewKind = z.enum(['review', 'answers'])
 export const jobsSessionSchema = z.object({
   id: z.string(),
@@ -93,7 +98,7 @@ export const jobsSessionSchema = z.object({
   revisions: z.array(
     z.object({
       kind: reviewKind,
-      advice: jobsAdviceSchema,
+      advice: savedAdvice,
       reviewers: z.array(organizationSchema),
       answers: z.array(jobsAnswerSchema),
       createdAt: z.string(),

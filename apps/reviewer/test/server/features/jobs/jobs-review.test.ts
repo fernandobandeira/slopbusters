@@ -43,7 +43,7 @@ beforeEach(() => {
     turns: recordingTurns().turns,
     staticDirectory: directory,
     tickets: { get: () => Promise.resolve(current), update },
-    evidence: (ticket) => Promise.resolve(JSON.stringify({ ticket: ticket.identifier })),
+    evidence: (ticket) => Promise.resolve({ text: JSON.stringify({ ticket: ticket.identifier }) }),
   })
   vi.mocked(loadJobsSkill).mockResolvedValue('Jobs skill')
   vi.mocked(reviewTicket).mockImplementation(() => Promise.resolve(fixtureJobsAdvice()))

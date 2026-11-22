@@ -181,7 +181,8 @@ export function createServices(options: ReviewerServerOptions) {
     ...dependencies,
     skillDirectory: options.jobsSkillDirectory,
     tickets,
-    evidence: (ticket, signal) => ticketEvidence(github, ticket, signal),
+    evidence: (ticket, signal) =>
+      ticketEvidence({ github, documentsForTicket: tickets.documentsForTicket }, ticket, signal),
     openSource: async (name, signal) =>
       openRepository(await defaultBranchSnapshot(github, name, signal), signal),
   })

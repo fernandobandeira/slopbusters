@@ -61,6 +61,7 @@ export interface PanelSnapshot {
   pull: PullRequest
   fingerprint: string
   context?: string
+  contextLimitation?: string
   history?: ReviewHistory
 }
 /**

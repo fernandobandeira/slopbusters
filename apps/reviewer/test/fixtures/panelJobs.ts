@@ -28,7 +28,7 @@ export const everyone: ReviewerId[] = ['unclebob', 'terminator', 'teammate:avery
 
 type Options = ConstructorParameters<typeof PanelJobs>[0]
 type Sources = Pick<Options, 'loadPull' | 'stack' | 'history' | 'openRepository'> &
-  Partial<Pick<Options, 'judges' | 'previousRound'>>
+  Partial<Pick<Options, 'judges' | 'previousRound' | 'context'>>
 
 /**
  * A data directory, skill roots and teammate Avery (Claude only, five findings) for each test,

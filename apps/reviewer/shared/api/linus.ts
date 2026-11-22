@@ -7,6 +7,10 @@ import { pullSchema } from './reviewSchemas'
 
 const thenPanel = z.object({ reviewers: z.array(panelSeatRequestSchema).min(1).max(8) }).strict()
 const guidance = z.string().trim().min(1).max(4000)
+// Reconciliation adds application limitations for source, patches, reviewers and documents.
+const resultAdvice = adviceSchema.extend({
+  limitations: z.array(adviceSchema.shape.limitations.element).max(16),
+})
 const session = z.object({
   id: z.string(),
   repository: z.string(),
@@ -23,7 +27,7 @@ const session = z.object({
     z.object({
       pull: pullSchema,
       fingerprint: z.string(),
-      advice: adviceSchema,
+      advice: resultAdvice,
       reviewers: z.array(organizationSchema),
       panelSessionId: z.string().optional(),
       panelError: z.string().optional(),

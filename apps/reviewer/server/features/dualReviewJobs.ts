@@ -15,7 +15,7 @@ import type { ReviewCheckout } from '../adapters/reviewWorkspaces'
 import { pullFingerprint } from '../reviewSnapshot'
 import { FlowJobs } from './flows/flowJobs'
 import { failedSeats, reviewSeats } from './flows/panel'
-import type { JobDependencies } from './jobDependencies'
+import type { JobDependencies, ReviewEvidence } from './jobDependencies'
 
 /** What a dual review takes to start; PRs load from GitHub unless `loadPull` says otherwise. */
 export type DualReviewDependencies = Pick<
@@ -39,7 +39,7 @@ interface ReviewStrategy<
   loadPull: (url: string) => Promise<PullRequest>
   openRepository?: (pull: PullRequest, signal: AbortSignal) => Promise<ReviewCheckout>
   /** Evidence about what the PR is meant to do, such as its linked ticket. */
-  context?: (pull: PullRequest, signal: AbortSignal) => Promise<string | undefined>
+  context?: JobDependencies['context']
   review: (request: {
     pull: PullRequest
     model: OrganizationPreferences
@@ -250,6 +250,8 @@ export class DualReviewJobs<
           )
         : await execute()
       this.preserveSourceLimitations(pending, advice)
+      if (pending.contextLimitation && !advice.limitations.includes(pending.contextLimitation))
+        advice.limitations.unshift(pending.contextLimitation)
       signal.throwIfAborted()
       const result: ReviewResult<Advice> = {
         pull: pending.pull,
@@ -283,7 +285,7 @@ export class DualReviewJobs<
     skill: string
     signal: AbortSignal
     repository?: ReviewCheckout
-    context?: string
+    context?: ReviewEvidence
   }): Promise<PendingReview<Advice>> {
     const { session, pull, skill, signal, repository, context } = request
     this.progress(session, `Two reviewers are looking at PR #${String(pull.number)}…`)
@@ -303,7 +305,7 @@ export class DualReviewJobs<
             companion: reviewer === 1,
             repository,
             observer,
-            context,
+            context: context?.text,
             guidance: session.guidance,
           })
         return this.strategy.sessions
@@ -322,7 +324,7 @@ export class DualReviewJobs<
     return {
       pull,
       fingerprint: pullFingerprint(pull),
-      ...(context ? { context } : {}),
+      ...(context ? { context: context.text, contextLimitation: context.limitation } : {}),
       reviews: outcomes.map((outcome, reviewer) => ({
         model: models[reviewer === 0 ? 0 : 1],
         ...outcome,

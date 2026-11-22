@@ -189,3 +189,36 @@ function progress(children: z.infer<typeof childStates>): TicketProgress {
     total: children.nodes.length,
   }
 }
+
+const documentReference = z.object({
+  id: z.string(),
+  slugId: z.string(),
+  url: z.string(),
+})
+const documentConnection = z.object({
+  nodes: z.array(documentReference),
+  pageInfo: z.object({ hasNextPage: z.boolean() }),
+})
+const issueDocuments = `documents(first: $first, includeArchived: true) {
+  nodes { id slugId url }
+  pageInfo { hasNextPage }
+}`
+export const ticketDocumentsQuery = `query SlopbustersTicketDocuments($id: String!, $first: Int!) {
+  issue(id: $id) {
+    ${issueDocuments}
+    parent { identifier ${issueDocuments} }
+  }
+}`
+export const ticketDocumentsSchema = z.object({
+  issue: z.object({
+    documents: documentConnection,
+    parent: z.object({ identifier: z.string(), documents: documentConnection }).nullable(),
+  }),
+})
+
+export const ticketDocumentQuery = `query SlopbustersTicketDocument($id: String!) {
+  document(id: $id) { id slugId title url content }
+}`
+export const ticketDocumentSchema = z.object({
+  document: documentReference.extend({ title: z.string(), content: z.string().nullable() }),
+})

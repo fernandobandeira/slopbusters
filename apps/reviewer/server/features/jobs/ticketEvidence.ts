@@ -4,7 +4,8 @@ import type { Ticket } from '../../../shared/domain/tickets'
 import type { GitHub } from '../../adapters/github'
 import { logError } from '../../errors'
 import { MAX_TICKET_CONTEXT_CHARACTERS, MAX_TICKET_RELATIVE_CHARACTERS } from '../tickets/limits'
-import { clip } from '../tickets/tickets'
+import type { ReviewEvidence } from '../jobDependencies'
+import { clip, type TicketService } from '../tickets/tickets'
 
 const pullBody = z.object({ body: z.string().nullable(), head: z.object({ ref: z.string() }) })
 const pullFile = z.object({
@@ -17,12 +18,18 @@ const MAX_EVIDENCE_FILES = 300
 
 /** Everything Jobs reads about a ticket: the issue, its family, and what its PRs say and touch. */
 export async function ticketEvidence(
-  github: GitHub,
+  {
+    github,
+    documentsForTicket,
+  }: { github: GitHub; documentsForTicket: TicketService['documentsForTicket'] },
   ticket: Ticket,
   signal?: AbortSignal,
-): Promise<string> {
-  const pulls = await Promise.all(ticket.pulls.map((pull) => pullEvidence(github, pull, signal)))
-  return JSON.stringify({
+): Promise<ReviewEvidence> {
+  const [pulls, documents] = await Promise.all([
+    Promise.all(ticket.pulls.map((pull) => pullEvidence(github, pull, signal))),
+    documentsForTicket(ticket, signal),
+  ])
+  const text = JSON.stringify({
     ticket: {
       identifier: ticket.identifier,
       title: ticket.title,
@@ -51,7 +58,9 @@ export async function ticketEvidence(
       blockedBy: child.blockedBy.map((issue) => issue.identifier),
     })),
     linkedPulls: pulls,
+    ...documents,
   })
+  return { text, limitation: documents.documentLimitations }
 }
 
 async function pullEvidence(github: GitHub, pull: Ticket['pulls'][number], signal?: AbortSignal) {
