@@ -17,7 +17,7 @@ export function useQuestionSections(
   }
   const { openSections } = state
   const sections = useMemo(
-    () => (selected?.question ? questionSections(selected) : undefined),
+    () => (selected?.claim ? questionSections(selected) : undefined),
     [selected],
   )
   const open = selected && openSections.get(selected.id)
@@ -53,7 +53,7 @@ export function useQuestionSections(
   ) {
     const group = pull.groups.find((group) => group.id === groupId)
     const file = pull.files.find((file) => file.id === fileId)
-    if (!group?.question || !file) return
+    if (!group?.claim || !file) return
     const section = line && questionSectionAt(group, file, line)
     if (section === 'key') return
     if (section) {

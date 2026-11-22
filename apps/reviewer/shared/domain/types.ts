@@ -57,10 +57,12 @@ export interface ChangedFile {
   oldContent?: string
 }
 /**
- * Sections to read together. A group with a `question` asks the reviewer one thing: `claim` is
- * what the code chose, said plainly enough to be wrong, and the sections not named as support or
- * tests are the few needed to check it. A group with a `lane` asks nothing and says why it is set
- * aside. A group with neither is a plain behavior group, as every group was before questions.
+ * Sections to read together. A group with a `claim` is a key change the reviewer has to read:
+ * `claim` is what the code chose, said plainly enough to be wrong, and the sections not named as
+ * support or tests are the few needed to check it. It carries a `question` only when the code
+ * picked between reasonable behaviors and a person has to say which is right. A group with a
+ * `lane` is set aside and says why. A group with neither is a plain behavior group, as every
+ * group was before key changes.
  */
 export interface ChangeGroup {
   id: string

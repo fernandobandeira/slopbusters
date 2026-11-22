@@ -2,7 +2,7 @@ import type { PullRequest } from '../../shared/domain/types'
 
 export function fixtureGroupingReply(pull: PullRequest) {
   return {
-    questions: [],
+    keyChanges: [],
     rest: [
       {
         title: 'Fixture changes',

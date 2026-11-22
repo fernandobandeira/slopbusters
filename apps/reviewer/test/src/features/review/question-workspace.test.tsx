@@ -160,6 +160,8 @@ it('reveals a test-only file for discussions without a matching line', () => {
 
 it('counts hidden drafts and GitHub threads on their section controls without listing them in the footer', () => {
   const pull = questionPull()
+  const [first, ...rest] = pull.groups
+  const { question: _, ...group } = required(first)
   const { path, line } = supportingLine(pull)
   discussions.threads = [threadAt(path, line)]
   const testFile = required(pull.files.find((file) => file.path === 'test/projects.test.ts'))
@@ -177,7 +179,7 @@ it('counts hidden drafts and GitHub threads on their section controls without li
       side: DiffSide.right,
     },
   ]
-  render(workspace(pull))
+  render(workspace({ ...pull, groups: [group, ...rest] }))
 
   const support = screen.getByRole('button', { name: /Show 2 supporting sections.*1 discussion/ })
   expect(screen.getByRole('button', { name: /Show 3 test sections.*1 discussion/ })).toBeTruthy()
@@ -197,6 +199,18 @@ it('shows the reason above the diff when a set-aside group is opened', () => {
   ).toBeTruthy()
 })
 
+it('shows a key change without a question as its claim alone, with its key sections', () => {
+  const pull = questionPull()
+  const group = required(pull.groups.find((group) => group.claim && !group.question))
+  render(workspace(pull))
+
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(group.title) }))
+
+  const heading = screen.getByRole('heading', { name: group.claim })
+  expect(heading.nextElementSibling?.className).toBe('review-question-sections')
+  expect(within(screen.getByRole('complementary')).getByText('Key changes')).toBeTruthy()
+})
+
 it('starts regenerated groups with optional sections closed even when an id is reused', () => {
   const pull = questionPull()
   const { rerender } = render(workspace(pull))
@@ -206,10 +220,12 @@ it('starts regenerated groups with optional sections closed even when an id is r
   rerender(
     workspace({
       ...pull,
-      groups: [{ ...required(group), question: 'Which callers can update a project?' }, ...rest],
+      groups: [{ ...required(group), claim: 'Only editors and admins update a project.' }, ...rest],
     }),
   )
 
-  expect(screen.getByRole('heading', { name: 'Which callers can update a project?' })).toBeTruthy()
+  expect(
+    screen.getByRole('heading', { name: 'Only editors and admins update a project.' }),
+  ).toBeTruthy()
   expect(screen.getByRole('button', { name: /Show 2 supporting sections/ })).toBeTruthy()
 })

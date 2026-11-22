@@ -111,7 +111,7 @@ it('lists questions, changed-line counts and set-aside lanes in review order', (
     'Project updates require an editor or admin in the same organization.',
   )
   expect(claim.nextElementSibling?.textContent).toBe(
-    'Can a viewer or an editor from another organization update a project?',
+    'To decide: Can a viewer or an editor from another organization update a project?',
   )
 })
 

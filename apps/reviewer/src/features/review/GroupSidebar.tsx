@@ -37,9 +37,9 @@ export function GroupSidebar({
 }: Props) {
   const groups = pull.groups
   const grouped = pull.groupingSource !== 'files'
-  const questions = groups.filter((group) => group.question)
-  const plain = groups.filter((group) => !group.question && !group.lane)
-  const setAside = groups.filter((group) => !group.question && group.lane)
+  const keyChanges = groups.filter((group) => group.claim)
+  const plain = groups.filter((group) => !group.claim && !group.lane)
+  const setAside = groups.filter((group) => !group.claim && group.lane)
   function row(group: ChangeGroup) {
     return (
       <GroupRow
@@ -75,7 +75,7 @@ export function GroupSidebar({
         </Link>
         {groups.length > 0 && (
           <div className="group-navigation-title">
-            <span>{questions.length ? 'Review questions' : 'Groups'}</span>
+            <span>{keyChanges.length ? 'Key changes' : 'Groups'}</span>
             <button
               className="regenerate-icon"
               aria-label="Regenerate groups"
@@ -91,8 +91,8 @@ export function GroupSidebar({
           </div>
         )}
       </div>
-      {questions.length > 0 && (
-        <p className="review-read-count muted">{questionReadCount(pull, questions)}</p>
+      {keyChanges.length > 0 && (
+        <p className="review-read-count muted">{questionReadCount(pull, keyChanges)}</p>
       )}
       <div className="group-list">
         {updates && (
@@ -108,7 +108,7 @@ export function GroupSidebar({
             onDismiss={onDismissUpdates}
           />
         )}
-        {questions.map(row)}
+        {keyChanges.map(row)}
         {plain.map(row)}
         {setAside.length > 0 && (
           <section aria-labelledby="set-aside-groups">
@@ -139,14 +139,14 @@ function GroupRow({
   updated: number
   onSelect: () => void
 }) {
-  const sections = group.question ? questionSections(group) : undefined
+  const sections = group.claim ? questionSections(group) : undefined
   const totals = groupChangeTotals(pull, sections ? { ...group, hunkIds: sections.key } : group)
   return (
     <button
       className={`group-row ${selected ? 'selected' : ''}`}
       data-reviewed={done ? true : undefined}
       data-lane={group.lane}
-      data-question={sections ? true : undefined}
+      data-key-change={sections ? true : undefined}
       onClick={onSelect}
     >
       <div className="group-row-top">

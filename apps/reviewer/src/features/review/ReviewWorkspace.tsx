@@ -528,7 +528,7 @@ export function ReviewWorkspace({
                   )}
                   {selected.lane && (
                     <div className="review-question">
-                      <p className="review-question-claim">{selected.reason}</p>
+                      <p className="review-question-reason">{selected.reason}</p>
                     </div>
                   )}
                   {items.length ? (
@@ -608,7 +608,7 @@ export function ReviewWorkspace({
                 const { line, side } = location
                 if (
                   file &&
-                  group.question &&
+                  group.claim &&
                   line != null &&
                   side != null &&
                   questionSectionAt(group, file, { line, side })

@@ -147,7 +147,7 @@ function fileReviewActions(options: {
     const markingViewed = ids.every((id) => nextDraft.viewedHunkIds?.includes(id))
     options.setFileCollapsed(itemId, markingViewed)
     setDraft(nextDraft)
-    if (markingViewed && (!selected.question || !groupIsViewed(selected, draft, pull)))
+    if (markingViewed && (!selected.claim || !groupIsViewed(selected, draft, pull)))
       advanceIfComplete(nextDraft)
   }
   function fileSectionsViewed(itemId: string) {

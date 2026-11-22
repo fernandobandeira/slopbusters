@@ -11,7 +11,7 @@ export function reviewedHunkIds(pull: PullRequest, draft: ReviewDraft): Set<stri
 }
 
 export function groupIsViewed(group: ChangeGroup, draft: ReviewDraft, pull: PullRequest): boolean {
-  if (group.question) {
+  if (group.claim) {
     const key = questionSections(group).key
     const viewed = reviewedHunkIds(pull, draft)
     return key.every((id) => viewed.has(id))

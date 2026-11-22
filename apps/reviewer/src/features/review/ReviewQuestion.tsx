@@ -22,8 +22,12 @@ export function ReviewQuestion({
 }) {
   return (
     <div className="review-question">
-      {group.claim && <p className="review-question-claim">{group.claim}</p>}
-      <h2>{group.question}</h2>
+      <h2>{group.claim}</h2>
+      {group.question && (
+        <p className="review-question-ask">
+          <span className="muted">To decide:</span> {group.question}
+        </p>
+      )}
       <div className="review-question-sections">
         {optionalSections.map((section) => {
           const ids = sections[section]

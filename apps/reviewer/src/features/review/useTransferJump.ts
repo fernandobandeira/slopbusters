@@ -41,7 +41,7 @@ export function useTransferJump(options: JumpOptions) {
     if (groupId && groupId !== selected?.id) {
       pending.current = { ...target, groupId }
       changeView({ groupId })
-    } else if (selected?.question && !lineIsDisplayed(items, target)) {
+    } else if (selected?.claim && !lineIsDisplayed(items, target)) {
       pending.current = { ...target, groupId: selected.id }
     } else {
       scrollTo(target)

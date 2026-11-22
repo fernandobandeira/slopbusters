@@ -23,7 +23,6 @@ export function questionPull(): PullRequest {
       {
         ...required(audit),
         claim: 'The audit helper returns the entry it records.',
-        question: 'Do callers need the recorded entry?',
       },
       { ...required(docs), lane: 'evidence' },
       { ...required(slug), lane: 'mechanical' },

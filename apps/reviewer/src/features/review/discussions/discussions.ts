@@ -96,7 +96,7 @@ export function annotateDiscussions(params: AnnotationParams): {
   hiddenCounts: Record<OptionalSections, number>
 } {
   const group = params.pull.groups.find((group) => group.id === params.groupId)
-  const fileIds = new Set(group?.question ? group.fileIds : params.items.map((item) => item.id))
+  const fileIds = new Set(group?.claim ? group.fileIds : params.items.map((item) => item.id))
   const selectedFiles = params.pull.files.filter((file) => fileIds.has(file.id))
   const threads =
     params.discussions?.threads.filter((thread) =>
@@ -167,7 +167,7 @@ function hiddenDiscussions(
 ) {
   const hiddenCounts = { supporting: 0, test: 0 }
   const hiddenThreads = new Set<string>()
-  if (!group?.question) return { hiddenCounts, hiddenThreads }
+  if (!group?.claim) return { hiddenCounts, hiddenThreads }
 
   const count = (location: { path: string; line: number; side: DiffSide }) => {
     const file = params.pull.files.find((file) => file.path === location.path)

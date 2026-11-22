@@ -58,7 +58,7 @@ describe('canonical change sections', () => {
     expect(first.sourceHunkId).toBe(second.sourceHunkId)
 
     const groups = validateGrouping(pull, {
-      questions: [
+      keyChanges: [
         {
           title: 'New first value',
           priority: 2,

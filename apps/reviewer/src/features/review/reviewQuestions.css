@@ -12,13 +12,13 @@
   font-weight: 500;
 }
 
-.group-row[data-question],
+.group-row[data-key-change],
 .group-row[data-lane] {
   gap: 5px;
   padding-block: 10px;
 }
 
-.group-row:is([data-question], [data-lane]) .group-change-stats {
+.group-row:is([data-key-change], [data-lane]) .group-change-stats {
   flex-wrap: wrap;
   gap: 3px 7px;
   justify-content: flex-start;
@@ -32,24 +32,24 @@
   font-variant-numeric: tabular-nums;
 }
 
-.group-row[data-question] .priority.p1,
+.group-row[data-key-change] .priority.p1,
 .no-test-marker {
   color: color-mix(in srgb, var(--warning) 40%, var(--foreground));
 }
 
-.group-row:is([data-question], [data-lane]) .group-change-stats .green {
+.group-row:is([data-key-change], [data-lane]) .group-change-stats .green {
   color: color-mix(in srgb, var(--success) 60%, var(--foreground));
 }
 
-.group-row[data-question][data-reviewed='true'] {
+.group-row[data-key-change][data-reviewed='true'] {
   opacity: 1;
 }
 
-.group-row[data-question][data-reviewed='true'] .group-change-stats {
+.group-row[data-key-change][data-reviewed='true'] .group-change-stats {
   display: flex;
 }
 
-.group-row[data-question] :is(.group-change-stats, .question-row-details) {
+.group-row[data-key-change] :is(.group-change-stats, .question-row-details) {
   color: var(--contrast-muted-foreground);
 }
 
@@ -68,17 +68,23 @@
   overflow-wrap: anywhere;
 }
 
-.review-question-claim {
+.review-question-reason {
   color: var(--muted-foreground);
   font-size: 12px;
   line-height: 1.5;
 }
 
 .review-question h2 {
-  margin-block: 3px 0;
+  margin: 0;
   font-size: 15px;
   font-weight: 600;
   line-height: 1.45;
+}
+
+.review-question-ask {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .review-question-sections {
