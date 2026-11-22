@@ -5,8 +5,10 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxPull } from '../../../../shared/domain/types'
 import type { PullStatus } from '../../../../shared/domain/pullStatus'
+import { AppSidebar } from '../../../../src/app/AppSidebar'
 import type { InboxChip } from '../../../../src/features/inbox/inboxChips'
 import { InboxPage } from '../../../../src/features/inbox/InboxPage'
+import type { InboxFilter } from '../../../../src/lib/routes'
 
 afterEach(cleanup)
 
@@ -60,20 +62,29 @@ function Inbox({
   actions?: ReactNode
 }) {
   const [urls, onChange] = useState<string[]>([])
+  const [filter, onFilter] = useState<InboxFilter>('mine')
+  const inbox = { viewer: 'alice', pulls }
   return createElement(
     MemoryRouter,
     null,
+    createElement(AppSidebar, {
+      filter,
+      inbox,
+      settings: false,
+      inboxPage: true,
+      onFilter,
+      onOpenUrl: vi.fn(),
+    }),
     createElement(InboxPage, {
       repository: 'example/project',
-      filter: 'mine',
-      inbox: { viewer: 'alice', pulls },
+      filter,
+      inbox,
       inboxLoading: false,
       statusLoading,
       chips,
       chipContext: { panelReviewed: () => false },
       onChips,
       selection: { purpose, urls, max: 2, onChange, actions, onCancel: vi.fn() },
-      onFilter: vi.fn(),
       renderPullActions: () => null,
     }),
   )
@@ -81,6 +92,29 @@ function Inbox({
 
 const titles = () =>
   [...document.querySelectorAll('.pr-row-link strong')].map((title) => title.textContent)
+
+describe('inbox navigation', () => {
+  it('switches inbox views from the sidebar', () => {
+    const mine = pull(1)
+    const other = { ...pull(2), author: 'bob' }
+    const requested = { ...pull(3), author: 'bob', reviewRequested: true }
+
+    render(createElement(Inbox, { pulls: [mine, other, requested] }))
+
+    const sidebar = within(screen.getByRole('navigation', { name: 'Pull request inbox' }))
+    expect(screen.queryByRole('heading', { name: 'Pull requests' })).toBeNull()
+    expect(screen.queryByRole('tablist')).toBeNull()
+    expect(titles()).toEqual([mine.title])
+
+    fireEvent.click(sidebar.getByRole('button', { name: 'Others’ PRs (2)' }))
+    expect(titles()).toEqual([requested.title, other.title])
+
+    const requests = sidebar.getByRole('button', { name: 'Review requested (1)' })
+    fireEvent.click(requests)
+    expect(requests.getAttribute('aria-current')).toBe('page')
+    expect(titles()).toEqual([requested.title])
+  })
+})
 
 describe('the PR list', () => {
   it('lists my PRs newest opened first, in one list whatever their status', () => {

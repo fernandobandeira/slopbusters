@@ -84,7 +84,6 @@ describe('Gandalf selection and session feedback', () => {
           chips={[]}
           chipContext={{ panelReviewed: () => false }}
           onChips={vi.fn()}
-          onFilter={vi.fn()}
           renderPullActions={() => null}
           onResolveConflicts={choose}
         />
@@ -159,7 +158,6 @@ describe('Gandalf CI fixes', () => {
           chips={[]}
           chipContext={{ panelReviewed: () => false }}
           onChips={vi.fn()}
-          onFilter={vi.fn()}
           renderPullActions={() => null}
           onResolveConflicts={vi.fn()}
           onFixCi={fix}

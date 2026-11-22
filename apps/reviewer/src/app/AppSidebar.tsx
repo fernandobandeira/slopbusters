@@ -1,5 +1,13 @@
 import { Link } from 'react-router'
-import { GitPullRequest, Plus, Settings, MessagesSquare, CircleDot } from 'lucide-react'
+import {
+  GitPullRequestArrow,
+  Plus,
+  Settings,
+  MessagesSquare,
+  CircleDot,
+  UserRound,
+  UsersRound,
+} from 'lucide-react'
 import { ticketViews, type TicketView } from '../../shared/domain/tickets'
 import { issuesPath } from '../lib/routes'
 import { Button } from '~/components/ui/button'
@@ -7,6 +15,9 @@ import { ConnectionStatus } from '../components/ConnectionStatus'
 import { inboxPulls, inboxFilters as filters } from '../features/inbox/inbox'
 import type { InboxFilter } from '../lib/routes'
 import type { AppStatus, RepositoryInbox } from '../../shared/domain/types'
+
+const filterIcons = { mine: UserRound, others: UsersRound, requested: GitPullRequestArrow }
+
 export function AppSidebar({
   filter,
   repository,
@@ -35,19 +46,27 @@ export function AppSidebar({
     <aside className="app-sidebar">
       <div className="sidebar-label">PULL REQUESTS</div>
       <nav aria-label="Pull request inbox">
-        {filters.map((item) => (
-          <button
-            key={item.id}
-            className={`nav-row ${filter === item.id && inboxPage ? 'active' : ''}`}
-            onClick={() => {
-              onFilter(item.id)
-            }}
-          >
-            <GitPullRequest size={15} />
-            <span>{item.label}</span>
-            <span className="count">{inbox ? inboxPulls(inbox, item.id).length : '—'}</span>
-          </button>
-        ))}
+        {filters.map((item) => {
+          const Icon = filterIcons[item.id]
+          const active = filter === item.id && inboxPage
+          const count = inbox ? inboxPulls(inbox, item.id).length : undefined
+          return (
+            <button
+              key={item.id}
+              className={`nav-row ${active ? 'active' : ''}`}
+              aria-current={active ? 'page' : undefined}
+              aria-label={count === undefined ? item.label : `${item.label} (${String(count)})`}
+              title={item.label}
+              onClick={() => {
+                onFilter(item.id)
+              }}
+            >
+              <Icon size={15} aria-hidden="true" />
+              <span>{item.label}</span>
+              <span className="count">{count ?? '—'}</span>
+            </button>
+          )
+        })}
       </nav>
       <Button
         variant="ghost"

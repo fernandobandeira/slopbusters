@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Button } from '~/components/ui/button'
 import { Check, CheckSquare, LoaderCircle } from 'lucide-react'
 import type { RepositoryInbox, InboxPull } from '../../../shared/domain/types'
-import { inboxPulls, inboxFilters as filters } from './inbox'
+import { inboxPulls } from './inbox'
 import type { InboxFilter } from '../../lib/routes'
 import {
   byOpenedDate,
@@ -31,7 +31,6 @@ interface Props {
   selection?: PullSelection
   /** Start picking PRs for the panel. */
   onSelect?: () => void
-  onFilter: (filter: InboxFilter) => void
   onResolveConflicts?: (pulls: InboxPull[]) => void
   onFixCi?: (pulls: InboxPull[]) => void
   renderPullActions: (pull: InboxPull) => ReactNode
@@ -41,25 +40,7 @@ export function InboxPage(props: Props) {
   const tabPulls = inbox ? inboxPulls(inbox, filter) : []
   const visible = byOpenedDate(filterByChips(tabPulls, chips, chipContext))
   return (
-    <div className="inbox-content">
-      <div className="eyebrow">YOUR REVIEW WORKSPACE</div>
-      <h1>Pull requests</h1>
-      <p className="muted">Pick a change. Read the code. Leave useful feedback.</p>
-      <div className="inbox-tabs" role="tablist" aria-label="Inbox filter">
-        {filters.map((item) => (
-          <button
-            role="tab"
-            aria-selected={item.id === filter}
-            key={item.id}
-            onClick={() => {
-              props.onFilter(item.id)
-            }}
-          >
-            {item.label}
-            <span className="count">{inbox ? inboxPulls(inbox, item.id).length : '—'}</span>
-          </button>
-        ))}
-      </div>
+    <div className="inbox-content pull-inbox">
       <InboxToolbar {...props} tabPulls={tabPulls} />
       <InboxWarnings {...props} />
       {inboxLoading ? (
@@ -220,7 +201,7 @@ function EmptyInbox({
       <strong>{repository ? 'No open PRs in this view' : 'Choose a repository to begin'}</strong>
       <span className="muted">
         {repository
-          ? 'Switch tabs to see other pull requests.'
+          ? 'Choose another view in the sidebar to see more pull requests.'
           : 'Sign in with gh auth login, then select a repository.'}
       </span>
     </div>

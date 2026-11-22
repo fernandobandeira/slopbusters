@@ -274,7 +274,6 @@ export function App() {
       onSelect={() => {
         setSelection({ repository, urls: [] })
       }}
-      onFilter={(next) => void navigate(inboxPath(repository, next, chips))}
       onResolveConflicts={() => {
         openGandalf('conflicts')
       }}
