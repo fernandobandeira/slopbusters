@@ -237,6 +237,22 @@ export const stackReviewSessionSchema = z.object({
 })
 export type StackReviewSession = z.infer<typeof stackReviewSessionSchema>
 
+export const crossLayerProgress = 'Reading every layer’s findings together…'
+
+/** Progress over the open layers included in the session. */
+export function stackReviewProgress(session: StackReviewSession) {
+  const done = session.layers.filter(
+    ({ state }) => state === 'reviewed' || state === 'reused',
+  ).length
+  const failed = session.layers.filter(({ state }) => state === 'stopped').length
+  return {
+    done,
+    total: session.layers.length,
+    failed,
+    crossLayer: session.status === 'running' && session.progress === crossLayerProgress,
+  }
+}
+
 /** What the pass may refer to: the entries it was given and the stack's layers. */
 export interface CrossLayerScope {
   entries: readonly Pick<StackEntry, 'id' | 'reverses' | 'opposes'>[]

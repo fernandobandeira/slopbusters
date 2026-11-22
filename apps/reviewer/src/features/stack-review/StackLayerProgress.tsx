@@ -38,9 +38,7 @@ export function StackLayerProgress({ session }: { session: StackReviewSession })
 }
 
 function panelProgress(layer: StackLayer, panel?: PanelSession) {
-  if (layer.state !== 'reviewing') return layerProgress(layer)
-  if (!panel) return layerProgress(layer)
-  if (layer.note) return `${layer.note} ${panel.progress}`
+  if (layer.state !== 'reviewing' || !panel || layer.note) return layerProgress(layer)
   const pending = panel.pending
   if (pending && pending.pull.url !== layer.url) return 'Waiting for its turn in the panel.'
   const finished = new Set(
@@ -49,7 +47,9 @@ function panelProgress(layer: StackLayer, panel?: PanelSession) {
   const names = panel.reviewers
     .filter((seat) => finished.has(seat.id))
     .map((seat) => seatName(panel, seat))
-  return names.length ? `${panel.progress} Finished · ${names.join(', ')}` : panel.progress
+  if (names.length)
+    return `${String(names.length)} of ${String(panel.reviewers.length)} reviewers finished · ${names.join(', ')}`
+  return panel.progress.replace(new RegExp(` (?:on )?PR #${String(layer.number)}\\b`), '')
 }
 
 function seatName(panel: PanelSession, seat: PanelReviewer) {

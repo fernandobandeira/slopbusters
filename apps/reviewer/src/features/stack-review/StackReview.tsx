@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { PanelSeatRequest } from '../../../shared/domain/panel'
+import { stackReviewProgress, type StackReviewSession } from '../../../shared/domain/stackReview'
 import { stripCounts } from '../../../shared/domain/stackReviewView'
 import { Button } from '~/components/ui/button'
 import { StackLayerProgress } from './StackLayerProgress'
@@ -65,6 +66,8 @@ export function ReviewProgress({
   renderStart: RenderStackStart
 }) {
   const { session } = review
+  if (session?.status === 'running')
+    return <RunningReview key={session.id} session={session} review={review} />
   return (
     <>
       <div className="stack-review-header">
@@ -77,7 +80,51 @@ export function ReviewProgress({
         <StackReviewAction review={review} renderStart={renderStart} />
       </div>
       <ReviewError review={review} />
-      {session?.status === 'running' && <StackLayerProgress key={session.id} session={session} />}
+    </>
+  )
+}
+
+function RunningReview({
+  session,
+  review,
+}: {
+  session: StackReviewSession
+  review: ReturnType<typeof useStackReview>
+}) {
+  const [showLayers, setShowLayers] = useState(false)
+  const { done, total, failed, crossLayer } = stackReviewProgress(session)
+  return (
+    <>
+      <div className="stack-review-header">
+        <p className="stack-review-progress" role="status">
+          {crossLayer
+            ? session.progress
+            : `Reviewing the stack · ${String(done)} of ${String(total)} ${total === 1 ? 'layer' : 'layers'} done`}
+          {failed > 0 && ` · ${String(failed)} failed`}
+        </p>
+        <div className="stack-review-actions">
+          <Button
+            size="sm"
+            variant="outline"
+            aria-expanded={showLayers}
+            onClick={() => {
+              setShowLayers(!showLayers)
+            }}
+          >
+            {showLayers ? 'Hide layers' : 'Show layers'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={review.busy}
+            onClick={() => void review.cancel(session.id)}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+      <ReviewError review={review} />
+      {showLayers && <StackLayerProgress session={session} />}
     </>
   )
 }
@@ -101,17 +148,6 @@ function StackReviewAction({
   renderStart: RenderStackStart
 }) {
   const { session, busy } = review
-  if (session?.status === 'running')
-    return (
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={busy}
-        onClick={() => void review.cancel(session.id)}
-      >
-        Cancel
-      </Button>
-    )
   if (session && session.status !== 'complete')
     return (
       <div className="stack-review-actions">

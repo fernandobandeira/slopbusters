@@ -3,14 +3,54 @@ import type { ResolvedEntry } from '../../../shared/domain/grounding'
 import type { PanelResult } from '../../../shared/domain/panelSession'
 import { passView, stackPassInput } from '../../../shared/domain/stackPassInput'
 import {
+  crossLayerProgress,
   crossLayerProblems,
+  stackReviewProgress,
   type CrossLayerResult,
   type CrossLayerScope,
+  type StackLayer,
 } from '../../../shared/domain/stackReview'
 import { Provider } from '../../../shared/domain/types'
 import { fixturePanelFinding } from '../../fixtures/panel'
 import { fixturePull } from '../../fixtures/pull'
-import { emptyResult } from '../../fixtures/stackReview'
+import { emptyResult, finishedStackReview, layerUrl } from '../../fixtures/stackReview'
+
+describe('stack review progress', () => {
+  it('counts reviewed and reused layers as done and stopped layers as failed', () => {
+    const states = ['reviewed', 'reused', 'reviewing', 'waiting', 'stopped'] as const
+    const layers = states.map((state, index): StackLayer => ({
+      number: index + 1,
+      url: layerUrl(index + 1),
+      title: 'Layer',
+      state,
+    }))
+    const session = { ...finishedStackReview([]), layers, status: 'running' as const }
+
+    expect(stackReviewProgress(session)).toEqual({
+      done: 2,
+      total: 5,
+      failed: 1,
+      crossLayer: false,
+    })
+  })
+
+  it('identifies the cross-layer pass only when the session is running it', () => {
+    const session = { ...finishedStackReview([]), status: 'running' as const }
+    expect(stackReviewProgress({ ...session, progress: crossLayerProgress })).toEqual({
+      done: 3,
+      total: 3,
+      failed: 0,
+      crossLayer: true,
+    })
+    expect(
+      stackReviewProgress({ ...session, progress: 'Retrying the stack review…' }).crossLayer,
+    ).toBe(false)
+    expect(
+      stackReviewProgress({ ...session, status: 'complete', progress: crossLayerProgress })
+        .crossLayer,
+    ).toBe(false)
+  })
+})
 
 const scope: CrossLayerScope = {
   entries: [{ id: '#201/g1' }, { id: '#202/g1' }, { id: '#203/g2' }],

@@ -9,7 +9,11 @@ import { judgeRoles } from '../../../shared/domain/grounding'
 import type { ModelPair, OrganizationPreferences } from '../../../shared/domain/preferences'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import { stackPassInput } from '../../../shared/domain/stackPassInput'
-import type { StackLayer, StackReviewSession } from '../../../shared/domain/stackReview'
+import {
+  crossLayerProgress,
+  type StackLayer,
+  type StackReviewSession,
+} from '../../../shared/domain/stackReview'
 import type { StackReviewSessionStore } from '../../adapters/stackReviewSessionStore'
 import type { StructuredTurns } from '../../adapters/t3Engine/engineTurns'
 import { UserError } from '../../errors'
@@ -114,6 +118,9 @@ export class StackReviewJobs {
     if (session.status === 'complete')
       throw new UserError('This stack review finished. Start another to review the stack again.')
     Object.assign(session, { status: 'running', error: undefined })
+    for (const layer of session.layers) {
+      if (layer.state === 'stopped') Object.assign(layer, { state: 'waiting', note: undefined })
+    }
     this.progress(session, 'Retrying the stack review…')
     this.launch(session, true)
     return session
@@ -192,7 +199,7 @@ export class StackReviewJobs {
       turns: [],
       positions: {},
     }
-    this.progress(session, 'Reading every layer’s findings together…')
+    this.progress(session, crossLayerProgress)
     if (session.pass.outcome) return
     await runCrossLayerPass({
       turns: this.options.turns,

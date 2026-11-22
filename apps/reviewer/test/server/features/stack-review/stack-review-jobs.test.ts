@@ -271,7 +271,10 @@ describe('retrying a stack review', () => {
     const stopped = await settled(jobs, started.id)
     failing = false
     const before = requests.length
-    const retried = await settled(jobs, jobs.retry(started.id).id)
+    const retrying = jobs.retry(started.id)
+    expect(retrying.layers.map((layer) => layer.state)).toEqual(['reviewed', 'waiting', 'reviewed'])
+
+    const retried = await settled(jobs, retrying.id)
     const during = requests.slice(before)
 
     expect(stopped.status).toBe('partial')
