@@ -13,6 +13,7 @@ import { startReviewerServer } from '../../../server/app'
 import { fetchPull } from '../../../server/features/pulls/github'
 import { getMcpEndpoint, getPull } from '../../../shared/api'
 import { Provider } from '../../../shared/domain/types'
+import { fixtureGroupingReply } from '../../fixtures/grouping'
 import { reply } from '../../fixtures/panelJobs'
 import { fixturePull } from '../../fixtures/pull'
 import { temporarySkillRoots } from '../../fixtures/skills'
@@ -115,8 +116,9 @@ const hanging: StructuredTurns = {
 describe('panel results over MCP', () => {
   it('returns a grounded review and saves the PR with its groups', async () => {
     const pull = fixturePull()
+    const grouping = fixtureGroupingReply(pull)
     const { turns } = recordingTurns((request) =>
-      request.purpose?.startsWith('Organize') ? { groups: pull.groups } : reply(request),
+      request.purpose?.startsWith('Organize') ? grouping : reply(request),
     )
     const { mcpUrl, url } = await start(turns)
     const agent = await connect(mcpUrl ?? '')
@@ -150,7 +152,9 @@ describe('panel results over MCP', () => {
     expect(review.text).toContain('Plan: Reuse the audit helper.')
     await vi.waitFor(async () => {
       const saved = await fetch(`${url}/api/pulls/${pull.id}`)
-      expect(getPull.response.parse(await saved.json()).groupingSource).toBe(Provider.claude)
+      const snapshot = getPull.response.parse(await saved.json())
+      expect(snapshot.groupingSource).toBe(Provider.claude)
+      expect(snapshot.groups).toMatchObject(grouping.rest)
     })
   })
 })

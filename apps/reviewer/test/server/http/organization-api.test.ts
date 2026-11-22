@@ -12,6 +12,7 @@ import { recordingTurns } from '../../fixtures/turns'
 vi.mock('../../../server/features/organization/organize', () => ({ organizePull: vi.fn() }))
 const paths: string[] = []
 const { turns } = recordingTurns()
+const offline = () => Promise.reject(new Error('No GitHub data in fixture.'))
 const anySignal: unknown = expect.any(AbortSignal)
 const anyObserver: unknown = expect.any(Function)
 afterEach(() => {
@@ -30,6 +31,7 @@ async function server() {
     staticDirectory: path,
     port: 0,
     structuredTurns: turns,
+    github: { rest: offline, graphql: offline, paginate: offline },
   })
 }
 const organization = { provider: Provider.claude, model: 'claude-opus-5-5' }

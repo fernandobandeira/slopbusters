@@ -9,6 +9,7 @@ import { anchorProblem } from '../../../shared/domain/anchors'
 import type { LinusAdvice } from '../../../shared/domain/linus'
 import { DiffSide, Provider, type PullRequest } from '../../../shared/domain/types'
 import { required } from '../../fixtures/required'
+import { fixtureGroupingReply } from '../../fixtures/grouping'
 import { fixturePull } from '../../fixtures/pull'
 import { recordingTurns } from '../../fixtures/turns'
 
@@ -108,14 +109,7 @@ describe('moved code in model prompts', () => {
   it('explains the markers to a reviewer and to the organizer', async () => {
     const pull = fixturePull()
     const review = recordingTurns(() => keep)
-    const organize = recordingTurns(() => ({
-      groups: pull.groups.map(({ title, priority, reason, hunkIds }) => ({
-        title,
-        priority,
-        reason,
-        hunkIds,
-      })),
-    }))
+    const organize = recordingTurns(() => fixtureGroupingReply(pull))
 
     await reviewWithLinus({
       turns: review.turns,
@@ -133,6 +127,8 @@ describe('moved code in model prompts', () => {
     expect(reviewPrompt).toContain('[moved unchanged from src/lib/utils.ts:')
     expect(organizePrompt).toContain('A code line of kind moved or copied is a marker')
     expect(organizePrompt).toContain('moved: [moved to src/lib/slug.ts:')
+    expect(organizePrompt).toContain('copied: [copied unchanged from ')
+    expect(organizePrompt).toContain('"transfers":[{"kind":')
   })
   it('leaves prompts without transfers as they were', async () => {
     const pull = { ...fixturePull(), transfers: [] }

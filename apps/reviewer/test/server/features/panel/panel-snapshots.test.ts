@@ -15,7 +15,8 @@ import { fetchPull } from '../../../../server/features/pulls/github'
 import { createStackService } from '../../../../server/features/pulls/stacks'
 import { createServices, type Services } from '../../../../server/services'
 import type { LocalRound } from '../../../../shared/domain/panelFix'
-import { Priority, Provider } from '../../../../shared/domain/types'
+import { Provider } from '../../../../shared/domain/types'
+import { fixtureGroupingReply } from '../../../fixtures/grouping'
 import { fixturePanelAdvice } from '../../../fixtures/panel'
 import { primary, reply, repository } from '../../../fixtures/panelJobs'
 import { fixturePull } from '../../../fixtures/pull'
@@ -52,14 +53,7 @@ const pull = fixturePull()
 const sibling = { ...pull, number: 129, url: pull.url.replace(/128$/, '129'), id: 'sibling' }
 const getStackMetadata = vi.fn<ReturnType<typeof createStackService>['getStackMetadata']>()
 const offline = () => Promise.reject(new UserError('No GitHub data in fixture.'))
-const groups = [
-  {
-    title: 'Model group',
-    priority: Priority.normal,
-    reason: 'Related changes.',
-    hunkIds: pull.files.flatMap((file) => file.hunks.map((hunk) => hunk.id)),
-  },
-]
+const groupingReply = fixtureGroupingReply(pull)
 let data: string
 let services: Services | undefined
 
@@ -140,7 +134,7 @@ describe('snapshots from completed panels', () => {
     const group = vi.fn(() => {
       expect(app.store.getPull(pull.id).groupingSource).toBe('files')
       expect(app.panelJobs.latest(repository, pull.url)?.status).toBe('complete')
-      return { groups }
+      return groupingReply
     })
     const { turns } = recordingTurns((request) =>
       request.purpose?.startsWith('Organize') ? group() : panelReply(request),
@@ -154,7 +148,7 @@ describe('snapshots from completed panels', () => {
     await complete(app)
 
     expect(group).toHaveBeenCalledTimes(1)
-    expect(app.store.getPull(pull.id).groups).toMatchObject(groups)
+    expect(app.store.getPull(pull.id).groups).toMatchObject(groupingReply.rest)
     expect(fetchPull).toHaveBeenCalledWith(sibling.url)
     expect(() => app.store.getPull(sibling.id)).toThrow(ReviewNotFoundError)
   })
@@ -222,7 +216,7 @@ describe('background grouping jobs', () => {
           return request.schema.parse(fixturePanelAdvice([]))
         group(request.purpose)
         await Promise.race([finish, cancelled(request.signal)])
-        return request.schema.parse({ groups })
+        return request.schema.parse(groupingReply)
       },
     })
 
@@ -258,7 +252,7 @@ describe('grouping asked for from the review screen', () => {
           return request.schema.parse(fixturePanelAdvice([]))
         group(request.purpose)
         await finish
-        return request.schema.parse({ groups })
+        return request.schema.parse(groupingReply)
       },
     })
 

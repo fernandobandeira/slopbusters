@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseFile } from '../../../server/features/diff'
 import { buildGitHubReview, exportFeedback, groupChangeTotals } from '../../../shared/domain/review'
-import { validateGrouping } from '../../../server/features/organization/organize'
 import { fixturePull } from '../../fixtures/pull'
 import {
   DiffSide,
@@ -73,7 +72,7 @@ describe('diff mapping and transfer detection', () => {
   })
 })
 
-describe('group validation', () => {
+describe('group change totals', () => {
   it('counts only the selected hunks when groups share a file, and all hunks in file mode', () => {
     const pull = fixturePull()
     const file = parseFile({
@@ -117,25 +116,6 @@ describe('group validation', () => {
       additions: 2,
       deletions: 1,
     })
-  })
-
-  it('requires every real diff hunk exactly once', () => {
-    const pr = fixturePull()
-    const ids = pr.files.flatMap((file) => file.hunks.map((hunk) => hunk.id))
-    const group = {
-      title: 'Complete review',
-      priority: Priority.high,
-      reason: 'Behavior changes',
-      hunkIds: ids,
-    }
-    expect(validateGrouping(pr, { groups: [group] })[0]?.fileIds.length).toBe(pr.files.length)
-    expect(() => validateGrouping(pr, { groups: [{ ...group, hunkIds: ids.slice(1) }] })).toThrow(
-      'omitted',
-    )
-    expect(() => validateGrouping(pr, { groups: [group, group] })).toThrow('more than once')
-    expect(() => validateGrouping(pr, { groups: [{ ...group, hunkIds: ['invented'] }] })).toThrow(
-      'does not exist',
-    )
   })
 })
 

@@ -23,7 +23,6 @@ describe('canonical change sections', () => {
     const file = required(pull.files[0])
     expect(parsePatch(`--- a/shared.ts\n+++ b/shared.ts\n${file.patch}`)[0]?.hunks).toHaveLength(1)
     expect(file.hunks).toHaveLength(2)
-    // Grouping keeps one Git hunk together; review updates can still show its sections apart.
     const groups = file.hunks.map((hunk, index) => ({
       id: `group-${index}`,
       title: `Behavior ${index}`,
@@ -51,20 +50,36 @@ describe('canonical change sections', () => {
     expect(combined.fileDiff.hunks[0]?.deletionCount).toBe(7)
   })
 
-  it('keeps the sections of one Git hunk in the same group', () => {
+  it('can assign adjacent sections from one Git hunk to a question and a set-aside lane', () => {
     const pull = sectionPull(base, both)
-    const file = required(pull.files[0])
+    const first = required(pull.files[0]?.hunks[0])
+    const second = required(pull.files[0]?.hunks[1])
+    expect(first.sourceHunkId).toBeDefined()
+    expect(first.sourceHunkId).toBe(second.sourceHunkId)
+
     const groups = validateGrouping(pull, {
-      groups: file.hunks.map((hunk, index) => ({
-        title: `Behavior ${index}`,
-        priority: Priority.normal,
-        reason: '',
-        hunkIds: [hunk.id],
-      })),
+      questions: [
+        {
+          title: 'New first value',
+          priority: 2,
+          question: 'Should first return ten?',
+          claim: 'First now returns ten.',
+          keyHunkIds: [first.id],
+          supportHunkIds: [],
+          evidenceHunkIds: [],
+        },
+      ],
+      rest: [
+        {
+          title: 'Refresh example value',
+          lane: 'implementation',
+          reason: 'Updates the example to the current value.',
+          hunkIds: [second.id],
+        },
+      ],
     })
-    expect(groups.map((group) => [group.title, group.hunkIds])).toEqual([
-      ['Behavior 0', file.hunks.map((hunk) => hunk.id)],
-    ])
+
+    expect(groups.map((group) => group.hunkIds)).toEqual([[first.id], [second.id]])
   })
 
   it('splits added paragraphs with correct source coordinates and keeps every edit once', () => {
