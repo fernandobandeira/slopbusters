@@ -116,10 +116,9 @@ describe('the panel for a coding agent', () => {
   it('lists the built-in reviewers and teammates with the ids to ask them by', async () => {
     const reviewers = await toolsFor(hanging).reviewers()
 
-    expect(reviewers).toContain('- `unclebob`: Uncle Bob. Clean code')
-    expect(reviewers).toContain('- `terminator`: Terminator. Repository rules')
-    expect(reviewers).toContain('- `teammate:avery`: Avery.')
-    expect(reviewers).toContain('the AveryReview skill (Claude only)')
+    expect(reviewers).toContain('- `unclebob`: Uncle Bob (codex, claude). Clean code')
+    expect(reviewers).toContain('- `terminator`: Terminator (codex, claude). Repository rules')
+    expect(reviewers).toContain('- `teammate:avery`: Avery (claude).')
     expect(reviewers).toContain('Without a choice, a panel is Uncle Bob and Terminator.')
   })
 })

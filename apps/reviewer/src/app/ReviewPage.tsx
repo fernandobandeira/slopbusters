@@ -58,7 +58,7 @@ export function ReviewPage(props: Props) {
       />
       <StackDialog
         url={stackOpen ? pull.url : undefined}
-        renderReview={renderStackReview(inboxFilter, closeStack)}
+        renderReview={renderStackReview(inboxFilter, closeStack, props.organization?.provider)}
         stack={stack ?? undefined}
         currentNumber={pull.number}
         filter={inboxFilter}

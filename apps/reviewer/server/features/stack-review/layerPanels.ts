@@ -1,3 +1,4 @@
+import { seatReviewer, type PanelSeatRequest } from '../../../shared/domain/panel'
 import {
   stoppedWithWork,
   type PanelResult,
@@ -8,7 +9,7 @@ import type { StackLayer, StackReviewSession } from '../../../shared/domain/stac
 import type { PanelJobs } from '../panel/panelJobs'
 
 export interface LayerPanels {
-  panels: Pick<PanelJobs, 'start' | 'latest' | 'get' | 'retry'>
+  panels: Pick<PanelJobs, 'start' | 'latest' | 'get' | 'retry' | 'cancel'>
   /** A PR's newest panel results, newest first. */
   results: (repository: string, url: string) => { session: string; result: PanelResult }[]
   pollMs: number
@@ -18,14 +19,16 @@ interface Run {
   signal: AbortSignal
   /** Whether this run retries a stack review that stopped, so stopped panels run again. */
   retry: boolean
+  /** Panels from the prior stack review that an explicit new selection can replace if stopped. */
+  previousPanels?: readonly string[]
   save: () => void
 }
 
 /**
  * Give every layer an up-to-date panel result: reuse one reviewed at the layer's current head
- * and base, wait for a panel already working on it, and start one otherwise. Panels on different
- * layers run side by side as the panel's own slots allow. Resolves once no panel is working; a
- * layer whose panel failed or waits on the author is left stopped with the reason.
+ * and base with the selected seats, wait for an active panel, or start one. Panels run side by
+ * side as slots allow. Resolves once no panel is working. A layer whose panel failed or waits on
+ * the author is left stopped with the reason.
  */
 export async function runLayerPanels(
   session: StackReviewSession,
@@ -34,7 +37,7 @@ export async function runLayerPanels(
 ): Promise<void> {
   for (const layer of session.layers) {
     run.signal.throwIfAborted()
-    Object.assign(layer, await panelFor(session, layer, layers, run), { note: undefined })
+    Object.assign(layer, { note: undefined }, await panelFor(session, layer, layers, run))
     if (layer.state === 'stopped')
       layer.note = stoppedNote(layer, layers.panels.get(layer.panel ?? ''))
     run.save()
@@ -64,20 +67,54 @@ async function panelFor(
   session: StackReviewSession,
   layer: StackLayer,
   { panels, results }: LayerPanels,
-  { retry }: Run,
-): Promise<Pick<StackLayer, 'state' | 'panel'>> {
+  { retry, previousPanels }: Run,
+): Promise<Pick<StackLayer, 'state' | 'panel' | 'note'>> {
   const active = panels.latest(session.repository, layer.url)
   if (active && working(active, layer.url, retry)) {
-    if (active.status === 'running') return { state: 'reviewing', panel: active.id }
-    if (!retry) return { state: 'stopped', panel: active.id }
-    return { state: 'reviewing', panel: panels.retry(active.id).id }
+    if (active.status === 'running') return attach(active, session.reviewers)
+    if (retry) return { state: 'reviewing', panel: panels.retry(active.id).id }
+    const replace = active.urls.length === 1 && previousPanels?.includes(active.id)
+    if (!replace || sameSeats(active, session.reviewers))
+      return { state: 'stopped', panel: active.id }
+    panels.cancel(active.id)
   }
   const newest = results(session.repository, layer.url)[0]
-  const pull = newest?.result.pull
-  if (newest && pull && pull.headSha === layer.headSha && pull.baseSha === layer.baseSha)
+  if (
+    newest &&
+    newest.result.pull.headSha === layer.headSha &&
+    newest.result.pull.baseSha === layer.baseSha &&
+    sameSeats(panels.get(newest.session), session.reviewers)
+  )
     return { state: 'reused', panel: newest.session }
+  // A panel covering several PRs can still hold the layer after it has reviewed it.
+  if (active?.status === 'running') return attach(active, session.reviewers)
   const started = await panels.start(session.repository, [layer.url], session.reviewers)
   return { state: 'reviewing', panel: started.id }
+}
+
+function attach(panel: PanelSession, reviewers: readonly PanelSeatRequest[]) {
+  const names = panel.reviewers.map((seat) => seat.name).join(', ')
+  return {
+    state: 'reviewing' as const,
+    panel: panel.id,
+    note: sameSeats(panel, reviewers) ? undefined : `Already being reviewed by ${names}.`,
+  }
+}
+
+function sameSeats(panel: PanelSession, requested: readonly PanelSeatRequest[]): boolean {
+  const wanted = new Set(
+    requested.flatMap((seat) =>
+      typeof seat === 'string'
+        ? []
+        : (seat.providers ?? []).map((provider) => `${seat.id}@${provider}`),
+    ),
+  )
+  const seats = new Set(
+    panel.reviewers.map(
+      (seat) => `${seatReviewer(seat.id)}@${seat.model?.provider ?? panel.model.provider}`,
+    ),
+  )
+  return seats.size === wanted.size && [...seats].every((seat) => wanted.has(seat))
 }
 
 /** A panel still on its way to this layer's result: running, waiting on the author, or stopped. */
@@ -91,6 +128,7 @@ function settle(layer: StackLayer, panel: PanelSession) {
   if (panel.status === 'running') return
   if (panel.results.some((result) => result.pull.url === layer.url)) {
     layer.state = 'reviewed'
+    layer.note = undefined
     return
   }
   layer.state = 'stopped'

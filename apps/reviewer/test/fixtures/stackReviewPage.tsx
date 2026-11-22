@@ -7,6 +7,8 @@ import { latestLayerFix } from '../../shared/api/layerFix'
 import type { ApiContract } from '../../shared/api/contract'
 import { stackBrief } from '../../shared/domain/stackBrief'
 import type { StackRecord } from '../../shared/domain/stackReviewRecords'
+import { Provider } from '../../shared/domain/types'
+import { renderStackStart } from '../../src/app/StackReviewSlot'
 import { StackReviewPage } from '../../src/features/stack-review/StackReviewPage'
 import { call } from '../../src/lib/api'
 import { stackDecisionRecord } from './stackDecisionRecord'
@@ -81,7 +83,11 @@ export function renderPage(session = savedReview()) {
   })
   render(
     <MemoryRouter>
-      <StackReviewPage url={layerUrl(202)} reviewers={['unclebob']} backPath="/pull" />
+      <StackReviewPage
+        url={layerUrl(202)}
+        renderStart={renderStackStart(Provider.codex)}
+        backPath="/pull"
+      />
     </MemoryRouter>,
   )
   return { session, records, brief, response }

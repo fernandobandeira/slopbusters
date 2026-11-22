@@ -19,6 +19,7 @@ export function useStackReview(url: string) {
   const [started, setStarted] = useState<StackReviewSession>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [startError, setStartError] = useState('')
   const session = started ?? latest.data?.session ?? undefined
   useStackReviewPolling(session, setStarted)
   const records = useStackRecords(session?.id ?? '', session?.status === 'complete')
@@ -28,14 +29,17 @@ export function useStackReview(url: string) {
     [session, records.data],
   )
 
-  async function act(run: () => Promise<StackReviewSession>) {
-    if (busy) return
+  async function act(run: () => Promise<StackReviewSession>, reportError = setError) {
+    if (busy) return false
     setBusy(true)
     setError('')
+    setStartError('')
     try {
       setStarted(await run())
+      return true
     } catch (cause) {
-      setError(message(cause))
+      reportError(message(cause))
+      return false
     } finally {
       setBusy(false)
     }
@@ -46,9 +50,10 @@ export function useStackReview(url: string) {
     records,
     loading: latest.loading,
     busy,
+    startError,
     error: error || records.error || latest.error,
     start: (reviewers: PanelSeatRequest[]) =>
-      act(() => call(routes.startStackReview, { body: { url, reviewers } })),
+      act(() => call(routes.startStackReview, { body: { url, reviewers } }), setStartError),
     retry: (id: string) => act(() => call(routes.retryStackReview, { params: { id } })),
     cancel: (id: string) => act(() => call(routes.cancelStackReview, { params: { id } })),
   }

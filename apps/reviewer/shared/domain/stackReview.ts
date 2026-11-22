@@ -408,7 +408,7 @@ export function layerProgress(layer: StackLayer): string {
     case 'reused':
       return 'Reuses its panel result, reviewed at its current head.'
     case 'reviewing':
-      return 'The panel is reviewing it.'
+      return layer.note ?? 'The panel is reviewing it.'
     case 'reviewed':
       return 'The panel reviewed it.'
     case 'stopped':

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { buildStackBrief } from '../../../../shared/domain/projectStackBrief'
 import { StackReviewTools } from '../../../../server/features/mcp/stackReviewTools'
 import type { StackReviewSession } from '../../../../shared/domain/stackReview'
+import { Provider } from '../../../../shared/domain/types'
 import { finishedStackReview, layerUrl, stackEntry } from '../../../fixtures/stackReview'
 
 const listening = () => new AbortController().signal
@@ -34,12 +35,14 @@ function toolsWith(session: StackReviewSession | undefined) {
 const running: StackReviewSession = {
   ...finished,
   status: 'running',
+  reviewers: [{ id: 'teammate:avery', providers: [Provider.codex] }],
   progress: 'Running the panel on the layers without an up-to-date review…',
   input: undefined,
   pass: undefined,
   layers: finished.layers.map((layer, index) => ({
     ...layer,
     state: index ? 'reviewing' : 'reused',
+    note: index === 1 ? 'Already being reviewed by Terminator.' : undefined,
   })),
 }
 
@@ -51,7 +54,7 @@ describe('the stack review for a coding agent', () => {
 
     expect(jobs.start).toHaveBeenCalledWith(layerUrl(202), ['teammate:avery'])
     expect(started).toBe(
-      'The stack review of PR #201 to PR #203 is working. Running the panel on the layers without an up-to-date review…\n\n- PR #201 "Layer 201": Reuses its panel result, reviewed at its current head.\n- PR #202 "Layer 202": The panel is reviewing it.\n- PR #203 "Layer 203": The panel is reviewing it.\n\nCall get_stack_review with any PR of the stack to wait for the brief. Each layer\'s panel takes several minutes.',
+      'The stack review of PR #201 to PR #203 is working. Running the panel on the layers without an up-to-date review…\n\nPanel seats: teammate:avery (Codex).\n\n- PR #201 "Layer 201": Reuses its panel result, reviewed at its current head.\n- PR #202 "Layer 202": Already being reviewed by Terminator.\n- PR #203 "Layer 203": The panel is reviewing it.\n\nCall get_stack_review with any PR of the stack to wait for the brief. Each layer\'s panel takes several minutes.',
     )
   })
 

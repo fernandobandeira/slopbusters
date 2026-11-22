@@ -3,14 +3,15 @@ import {
   builtInReviewers,
   defaultPanelReviewers,
   teammateReviewerId,
-  type ReviewerId,
+  type PanelSeatRequest,
 } from '../../../shared/domain/panel'
 import { chosenFixes, panelBriefMarkdown } from '../../../shared/domain/panelBrief'
 import { gateItems } from '../../../shared/domain/panelGate'
 import type { PanelResult, PanelSession } from '../../../shared/domain/panelSession'
 import { parsePullUrl } from '../../../shared/domain/pullUrl'
 import { blocksNewReview } from '../../../shared/domain/reviewSession'
-import { availabilityLabels, skillAvailability } from '../../../shared/domain/teammates'
+import { installedFor } from '../../../shared/domain/teammates'
+import { Provider } from '../../../shared/domain/types'
 import { logError, UserError } from '../../errors'
 import type { PanelJobs } from '../panel/panelJobs'
 import type { Teammates } from '../teammates/teammates'
@@ -35,23 +36,26 @@ export class PanelTools {
   /** Who can sit on a panel, with the ids `start` takes. */
   async reviewers(): Promise<string> {
     const teammates = await this.options.teammates.list()
+    const providers = [Provider.codex, Provider.claude]
     const lines = [
       ...builtInReviewerIds.map(
-        (id) => `- \`${id}\`: ${builtInReviewers[id].name}. ${builtInReviewers[id].description}`,
+        (id) =>
+          `- \`${id}\`: ${builtInReviewers[id].name} (${providers.join(', ')}). ${builtInReviewers[id].description}`,
       ),
-      ...teammates.map(
-        (teammate) =>
-          `- \`${teammateReviewerId(teammate.id)}\`: ${[teammate.name, teammate.title].filter(Boolean).join(', ')}. Predicts this teammate's comments from the ${teammate.skill} skill (${availabilityLabels[skillAvailability(teammate.locations)]}).`,
-      ),
+      ...teammates.map((teammate) => {
+        const available = providers.filter((provider) => installedFor(teammate.locations, provider))
+        const name = [teammate.name, teammate.title].filter(Boolean).join(', ')
+        return `- \`${teammateReviewerId(teammate.id)}\`: ${name} (${available.join(', ') || 'no providers installed'}). Predicts this teammate's comments from the ${teammate.skill} skill.`
+      }),
     ]
     const defaults = defaultPanelReviewers.map((id) => builtInReviewers[id].name).join(' and ')
-    return `Reviewers who can sit on a panel:\n\n${lines.join('\n')}\n\nWithout a choice, a panel is ${defaults}.`
+    return `Reviewers who can sit on a panel:\n\n${lines.join('\n')}\n\nA bare id runs a built-in reviewer on the primary provider only and a teammate on every provider where its skill is installed.\n\nWithout a choice, a panel is ${defaults}.`
   }
 
   /** Start a panel on a PR, or return the one already working on it with the same reviewers. */
   async start(
     pullRequest: string,
-    reviewers: readonly ReviewerId[] = defaultPanelReviewers,
+    reviewers: readonly PanelSeatRequest[] = defaultPanelReviewers,
   ): Promise<string> {
     const { repository, url } = target(pullRequest)
     return report(await this.options.jobs.start(repository, [url], [...reviewers]), url)

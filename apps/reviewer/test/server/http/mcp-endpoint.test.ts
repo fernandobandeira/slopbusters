@@ -9,14 +9,18 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StructuredTurns } from '../../../server/adapters/t3Engine/engineTurns'
 import { ReviewerStore } from '../../../server/adapters/store'
+import { TeammateStore } from '../../../server/adapters/teammateStore'
 import { startReviewerServer } from '../../../server/app'
+import { PanelJobs } from '../../../server/features/panel/panelJobs'
+import { StackReviewJobs } from '../../../server/features/stack-review/stackReviewJobs'
 import { fetchPull } from '../../../server/features/pulls/github'
 import { getMcpEndpoint, getPull } from '../../../shared/api'
 import { Provider } from '../../../shared/domain/types'
 import { fixtureGroupingReply } from '../../fixtures/grouping'
 import { reply } from '../../fixtures/panelJobs'
 import { fixturePull } from '../../fixtures/pull'
-import { temporarySkillRoots } from '../../fixtures/skills'
+import { installSkill, temporarySkillRoots } from '../../fixtures/skills'
+import { finishedStackReview } from '../../fixtures/stackReview'
 import { recordingTurns } from '../../fixtures/turns'
 
 vi.mock('../../../server/features/pulls/github', async (original) => ({
@@ -107,6 +111,7 @@ async function callTool(client: Client, name: string, input: Record<string, unkn
 const hanging: StructuredTurns = {
   run: ({ signal }) =>
     new Promise((_resolve, reject) => {
+      signal.throwIfAborted()
       signal.addEventListener('abort', () => {
         reject(new Error('Cancelled'))
       })
@@ -214,6 +219,85 @@ describe('the MCP endpoint for coding agents', () => {
     // The wait ended with the connection, instead of failing on a store that had closed.
     expect(errors.mock.calls.flat().join('\n')).not.toContain('Slopbusters could not do that')
   })
+})
+
+describe('choosing panel seats over MCP', () => {
+  const seats = [{ id: 'unclebob', providers: [Provider.codex, Provider.claude] }, 'terminator']
+
+  async function withTeammate() {
+    installSkill(roots.codex, 'AveryReview')
+    await new TeammateStore(data).save({
+      id: 'avery',
+      name: 'Avery',
+      skill: 'AveryReview',
+      maxFindings: 20,
+      updatedAt: new Date().toISOString(),
+    })
+    const server = await start(hanging)
+    return connect(server.mcpUrl ?? '')
+  }
+
+  it('passes explicit providers and bare ids to the panel job', async () => {
+    const started = vi.spyOn(PanelJobs.prototype, 'start')
+    const server = await start(hanging)
+    const agent = await connect(server.mcpUrl ?? '')
+
+    const result = await callTool(agent, 'start_panel_review', {
+      pull_request: pullRequest,
+      reviewers: seats,
+    })
+
+    expect(result.failed).toBe(false)
+    expect(started).toHaveBeenCalledWith('review-room/example', [pullRequest], seats)
+  })
+
+  it('passes explicit providers and bare ids to the stack job', async () => {
+    const started = vi.spyOn(StackReviewJobs.prototype, 'start').mockResolvedValue({
+      ...finishedStackReview([]),
+      status: 'running',
+    })
+    const server = await start(hanging)
+    const agent = await connect(server.mcpUrl ?? '')
+
+    const result = await callTool(agent, 'start_stack_review', {
+      pull_request: pullRequest,
+      reviewers: seats,
+    })
+
+    expect(result.failed).toBe(false)
+    expect(started).toHaveBeenCalledWith(pullRequest, seats)
+  })
+
+  it('lists available providers for built-in reviewers and teammates', async () => {
+    const agent = await withTeammate()
+
+    const result = await callTool(agent, 'list_reviewers')
+
+    expect(result.failed).toBe(false)
+    expect(result.text).toContain('- `unclebob`: Uncle Bob (codex, claude)')
+    expect(result.text).toContain('- `terminator`: Terminator (codex, claude)')
+    expect(result.text).toContain(
+      "- `teammate:avery`: Avery (codex). Predicts this teammate's comments from the AveryReview skill.",
+    )
+    expect(result.text).toContain(
+      'A bare id runs a built-in reviewer on the primary provider only and a teammate on every provider where its skill is installed.',
+    )
+  })
+
+  it.each(['start_panel_review', 'start_stack_review'])(
+    'rejects a teammate’s unsupported provider in %s',
+    async (tool) => {
+      const agent = await withTeammate()
+
+      const result = await callTool(agent, tool, {
+        pull_request: pullRequest,
+        reviewers: [{ id: 'teammate:avery', providers: [Provider.claude] }],
+      })
+
+      expect(result.failed).toBe(true)
+      expect(result.text).toContain("Avery's skill, AveryReview, is not installed for Claude.")
+    },
+  )
 })
 
 describe('where the MCP endpoint is', () => {

@@ -1,5 +1,10 @@
 import type { StackReviewRecords } from '../stack-review/stackReviewRecords'
-import type { ReviewerId } from '../../../shared/domain/panel'
+import {
+  builtInReviewers,
+  type BuiltInReviewer,
+  type PanelSeatRequest,
+} from '../../../shared/domain/panel'
+import { providerLabel } from '../../../shared/domain/preferences'
 import { stackBriefMarkdown } from '../../../shared/domain/stackBriefMarkdown'
 import { layerProgress, type StackReviewSession } from '../../../shared/domain/stackReview'
 import { UserError } from '../../errors'
@@ -22,7 +27,7 @@ export class StackReviewTools {
   constructor(private readonly options: Options) {}
 
   /** Review the stack a PR belongs to, or return the review already working on it. */
-  async start(pullRequest: string, reviewers?: readonly ReviewerId[]): Promise<string> {
+  async start(pullRequest: string, reviewers?: readonly PanelSeatRequest[]): Promise<string> {
     const { url } = target(pullRequest)
     return this.report(await this.options.jobs.start(url, reviewers && [...reviewers]))
   }
@@ -79,14 +84,26 @@ export class StackReviewTools {
 
 function progressReport(session: StackReviewSession): string {
   const stack = `the stack review of PR #${String(session.layers[0]?.number ?? 0)} to PR #${String(session.layers.at(-1)?.number ?? 0)}`
+  const seats = session.reviewers.map((seat) => {
+    const id = typeof seat === 'string' ? seat : seat.id
+    const name = Object.hasOwn(builtInReviewers, id)
+      ? builtInReviewers[id as BuiltInReviewer].name
+      : id
+    const providers = typeof seat === 'string' ? undefined : seat.providers
+    return providers?.length ? `${name} (${providers.map(providerLabel).join(', ')})` : name
+  })
   const layers = session.layers
-    .map((layer) => `- PR #${String(layer.number)} "${layer.title}": ${layerProgress(layer)}`)
+    .map(
+      (layer) =>
+        `- PR #${String(layer.number)} "${layer.title}": ${layer.note ?? layerProgress(layer)}`,
+    )
     .join('\n')
+  const detail = `Panel seats: ${seats.join(', ')}.\n\n${layers}`
   if (session.status === 'running')
-    return `${capitalized(stack)} is working. ${session.progress}\n\n${layers}\n\nCall get_stack_review with any PR of the stack to wait for the brief. Each layer's panel takes several minutes.`
+    return `${capitalized(stack)} is working. ${session.progress}\n\n${detail}\n\nCall get_stack_review with any PR of the stack to wait for the brief. Each layer's panel takes several minutes.`
   if (session.status === 'partial')
-    return `${capitalized(stack)} stopped on some layers:\n${session.error ?? session.progress}\n\n${layers}\n\nCall retry_stack_review to continue from there; layers that finished are kept.`
-  return `${capitalized(stack)} did not finish. ${[session.progress, session.error].filter(Boolean).join('\n')}\n\n${layers}\n\nCall retry_stack_review to run it again; panel results are kept.`
+    return `${capitalized(stack)} stopped on some layers:\n${session.error ?? session.progress}\n\n${detail}\n\nCall retry_stack_review to continue from there; layers that finished are kept.`
+  return `${capitalized(stack)} did not finish. ${[session.progress, session.error].filter(Boolean).join('\n')}\n\n${detail}\n\nCall retry_stack_review to run it again; panel results are kept.`
 }
 
 function capitalized(text: string): string {

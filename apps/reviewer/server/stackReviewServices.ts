@@ -11,6 +11,8 @@ export function createStackReviewServices({
   retryingTurns,
   agentSessions,
   panelJobs,
+  panelMembers,
+  models,
   stacks,
   pulls,
   judges,
@@ -19,6 +21,8 @@ export function createStackReviewServices({
   retryingTurns: StackOptions['turns']
   agentSessions: StackOptions['sessions']
   panelJobs: StackOptions['panels']
+  panelMembers: StackOptions['members']
+  models: StackOptions['models']
   stacks: { getStackMetadata: Parameters<typeof createStackResolver>[0] }
   pulls: Pick<ReturnType<typeof createPullService>, 'fetchPullRevision'>
   judges: StackOptions['judges']
@@ -29,6 +33,8 @@ export function createStackReviewServices({
     turns: retryingTurns,
     sessions: agentSessions,
     panels: panelJobs,
+    members: panelMembers,
+    models,
     results: (name, url) => store.panel.results(name, url, 3),
     resolve: createStackResolver(stacks.getStackMetadata),
     revision,

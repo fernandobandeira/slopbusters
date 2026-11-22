@@ -40,6 +40,7 @@ export function panelHarness() {
     roots: ReturnType<typeof temporarySkillRoots>
     store: ReviewerStore
     teammates: Teammates
+    members: PanelMembers
     jobs?: PanelJobs
     panel: (turns: StructuredTurns, sources?: Sources) => PanelJobs
   }
@@ -53,6 +54,10 @@ export function panelHarness() {
     )
     installSkill(harness.roots.claude, 'AveryReview', { description: 'Review the way Avery does.' })
     await harness.teammates.create({ name: 'Avery', skill: 'AveryReview', maxFindings: 5 })
+    harness.members = new PanelMembers({
+      teammates: harness.teammates,
+      builtIn: (id) => Promise.resolve(`The ${id} skill.`),
+    })
   })
   afterEach(async () => {
     await harness.jobs?.close()
@@ -65,10 +70,7 @@ export function panelHarness() {
     harness.jobs = new PanelJobs({
       store: harness.store.panel,
       turns,
-      members: new PanelMembers({
-        teammates: harness.teammates,
-        builtIn: (id) => Promise.resolve(`The ${id} skill.`),
-      }),
+      members: harness.members,
       models: () => ({ primary, companion }),
       judges: () => ({ primary: judge, companion: companionJudge }),
       ...sources,

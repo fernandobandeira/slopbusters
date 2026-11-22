@@ -1,20 +1,28 @@
-import { Layers } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { PanelSeatRequest } from '../../../shared/domain/panel'
-import { layerProgress, type StackReviewSession } from '../../../shared/domain/stackReview'
 import { stripCounts } from '../../../shared/domain/stackReviewView'
 import { Button } from '~/components/ui/button'
+import { StackLayerProgress } from './StackLayerProgress'
 import { useStackReview } from './useStackReview'
 import './stackReview.css'
 
+export type RenderStackStart = (options: {
+  label: 'Review the whole stack' | 'Review again'
+  disabled: boolean
+  busy: boolean
+  error: string
+  start: (reviewers: PanelSeatRequest[]) => Promise<boolean>
+}) => ReactNode
+
 export function StackReview({
   url,
-  reviewers,
+  renderStart,
   openPath,
   onOpen,
 }: {
   url: string
-  reviewers: PanelSeatRequest[]
+  renderStart: RenderStackStart
   openPath: string
   onOpen: () => void
 }) {
@@ -30,14 +38,7 @@ export function StackReview({
               {counts && ` · ${counts}`}
             </p>
             <div className="stack-review-actions">
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={review.busy}
-                onClick={() => void review.start(reviewers)}
-              >
-                Review again
-              </Button>
+              <StackStart review={review} label="Review again" renderStart={renderStart} />
               <Button
                 className="stack-review-open"
                 size="sm"
@@ -50,7 +51,7 @@ export function StackReview({
           <ReviewError review={review} />
         </>
       ) : (
-        <ReviewProgress review={review} reviewers={reviewers} />
+        <ReviewProgress review={review} renderStart={renderStart} />
       )}
     </section>
   )
@@ -58,10 +59,10 @@ export function StackReview({
 
 export function ReviewProgress({
   review,
-  reviewers,
+  renderStart,
 }: {
   review: ReturnType<typeof useStackReview>
-  reviewers: PanelSeatRequest[]
+  renderStart: RenderStackStart
 }) {
   const { session } = review
   return (
@@ -73,10 +74,10 @@ export function ReviewProgress({
               ? 'Loading stack review…'
               : 'Review every layer with the panel, then read them together.')}
         </p>
-        <StackReviewAction review={review} reviewers={reviewers} />
+        <StackReviewAction review={review} renderStart={renderStart} />
       </div>
       <ReviewError review={review} />
-      {session?.status === 'running' && <LayerProgress session={session} />}
+      {session?.status === 'running' && <StackLayerProgress key={session.id} session={session} />}
     </>
   )
 }
@@ -94,10 +95,10 @@ function ReviewError({ review }: { review: ReturnType<typeof useStackReview> }) 
 
 function StackReviewAction({
   review,
-  reviewers,
+  renderStart,
 }: {
   review: ReturnType<typeof useStackReview>
-  reviewers: PanelSeatRequest[]
+  renderStart: RenderStackStart
 }) {
   const { session, busy } = review
   if (session?.status === 'running')
@@ -113,37 +114,41 @@ function StackReviewAction({
     )
   if (session && session.status !== 'complete')
     return (
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={busy}
-        onClick={() => void review.retry(session.id)}
-      >
-        Retry the stack review
-      </Button>
+      <div className="stack-review-actions">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void review.retry(session.id)}
+        >
+          Retry the stack review
+        </Button>
+        <StackStart review={review} label="Review again" renderStart={renderStart} />
+      </div>
     )
   return (
-    <Button
-      size="sm"
-      variant="outline"
-      disabled={busy || review.loading}
-      onClick={() => void review.start(reviewers)}
-    >
-      <Layers size={13} aria-hidden="true" />
-      {session ? 'Review again' : 'Review the whole stack'}
-    </Button>
+    <StackStart
+      review={review}
+      label={session ? 'Review again' : 'Review the whole stack'}
+      renderStart={renderStart}
+    />
   )
 }
 
-function LayerProgress({ session }: { session: StackReviewSession }) {
-  return (
-    <ol className="stack-review-layers" aria-label="Layers, bottom to top">
-      {session.layers.map((layer) => (
-        <li key={layer.url} className={`stack-review-layer stack-review-${layer.state}`}>
-          <span className="stack-pr-number">#{layer.number}</span> {layer.title}
-          <span className="stack-brief-detail">{layerProgress(layer)}</span>
-        </li>
-      ))}
-    </ol>
-  )
+export function StackStart({
+  review,
+  label,
+  renderStart,
+}: {
+  review: ReturnType<typeof useStackReview>
+  label: Parameters<RenderStackStart>[0]['label']
+  renderStart: RenderStackStart
+}) {
+  return renderStart({
+    label,
+    disabled: review.busy || review.loading,
+    busy: review.busy,
+    error: review.startError,
+    start: review.start,
+  })
 }

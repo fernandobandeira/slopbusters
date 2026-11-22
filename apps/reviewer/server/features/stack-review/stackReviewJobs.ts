@@ -17,10 +17,13 @@ import type { AgentSessions } from '../agent-sessions/agentSessions'
 import { FlowJobs } from '../flows/flowJobs'
 import { runCrossLayerPass } from './crossLayerPass'
 import { layerRounds, runLayerPanels, type LayerPanels } from './layerPanels'
+import type { PanelMembers } from '../panel/panelMembers'
 import { MAX_STACK_PASS_INPUT_CHARS, STACK_REVIEW_POLL_MS } from './limits'
 import type { ResolvedLayer } from './stackResolution'
 
 interface Options extends Omit<LayerPanels, 'pollMs'> {
+  members: Pick<PanelMembers, 'describe'>
+  models: () => ModelPair
   store: StackReviewSessionStore
   turns: StructuredTurns
   /** The open layers of a PR's stack, bottom to top; refuses a stack it cannot use. */
@@ -58,8 +61,13 @@ export class StackReviewJobs {
   /** Review the stack `url` belongs to, or return the review already running on it. */
   async start(url: string, reviewers?: PanelSeatRequest[]): Promise<StackReviewSession> {
     const repository = repositoryOf(url)
+    const picked = reviewers && (await this.resolveSeats(reviewers))
     const layers = await this.options.resolve(url, new AbortController().signal)
     const urls = layers.map((layer) => layer.url)
+    const seats =
+      picked ??
+      this.lastReviewers(repository, urls) ??
+      (await this.resolveSeats(defaultPanelReviewers))
     const previous = this.latest(repository, urls)
     if (previous?.status === 'running') {
       if (JSON.stringify(previous.urls) === JSON.stringify(urls)) return previous
@@ -73,7 +81,7 @@ export class StackReviewJobs {
       repository,
       url: layers.find((layer) => layer.number === parsePullUrl(url).number)?.url ?? url,
       urls,
-      reviewers: reviewers ?? this.lastReviewers(repository, urls),
+      reviewers: seats,
       status: 'running',
       progress: 'Reading each layer’s head…',
       createdAt: new Date().toISOString(),
@@ -81,7 +89,11 @@ export class StackReviewJobs {
     }
     this.options.sessions?.start(session.id, 'stack', session)
     this.save(session)
-    this.launch(session, false)
+    this.launch(
+      session,
+      false,
+      picked ? previous?.layers.flatMap(({ panel }) => panel ?? []) : undefined,
+    )
     return session
   }
   get(id: string): StackReviewSession {
@@ -125,17 +137,26 @@ export class StackReviewJobs {
     })
   }
 
-  private launch(session: StackReviewSession, retry: boolean) {
-    this.jobs.launch(session, (signal) => this.run(session, signal, retry))
+  private launch(session: StackReviewSession, retry: boolean, previousPanels?: readonly string[]) {
+    this.jobs.launch(session, (signal) => this.run(session, signal, retry, previousPanels))
   }
-  private async run(session: StackReviewSession, signal: AbortSignal, retry: boolean) {
+  private async run(
+    session: StackReviewSession,
+    signal: AbortSignal,
+    retry: boolean,
+    previousPanels?: readonly string[],
+  ) {
     if (retry) await this.resolveAgain(session, signal)
+    // Older stack reviews may have stored reviewer ids without providers.
+    if (session.reviewers.some((seat) => typeof seat === 'string' || !seat.providers))
+      session.reviewers = await this.resolveSeats(session.reviewers)
     await this.readHeads(session, signal)
     this.progress(session, 'Running the panel on the layers without an up-to-date review…')
     const layers = { ...this.options, pollMs: this.options.pollMs ?? STACK_REVIEW_POLL_MS }
     await runLayerPanels(session, layers, {
       signal,
       retry,
+      previousPanels,
       save: () => {
         this.save(session)
       },
@@ -200,14 +221,17 @@ export class StackReviewJobs {
     }
     this.save(session)
   }
-  /** The seats of the newest panel on any layer, else the default panel. */
-  private lastReviewers(repository: string, urls: readonly string[]): PanelSeatRequest[] {
+  private async resolveSeats(requests: readonly PanelSeatRequest[]): Promise<PanelSeatRequest[]> {
+    const models = this.options.models()
+    const reviewers = await this.options.members.describe(requests, models)
+    return seatRequests(reviewers, models.primary.provider)
+  }
+  /** The seats of the newest panel on any layer. */
+  private lastReviewers(repository: string, urls: readonly string[]) {
     const newest = urls
       .flatMap((url) => this.options.panels.latest(repository, url) ?? [])
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-    return newest
-      ? seatRequests(newest.reviewers, newest.model.provider)
-      : [...defaultPanelReviewers]
+    return newest && seatRequests(newest.reviewers, newest.model.provider)
   }
   private recover(session: StackReviewSession): StackReviewSession {
     return this.jobs.recover(

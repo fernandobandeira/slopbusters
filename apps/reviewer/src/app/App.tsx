@@ -458,7 +458,9 @@ export function App() {
             {route.kind === 'stack-review' && (
               <Route
                 path="/repos/:owner/:repo/pulls/:number/stack-review"
-                element={<StackReviewRoute route={route} />}
+                element={
+                  <StackReviewRoute route={route} provider={preferences?.organization?.provider} />
+                }
               />
             )}
             <Route
@@ -597,7 +599,7 @@ export function App() {
         )}
         <StackDialog
           url={stackTarget?.url}
-          renderReview={renderStackReview(filter, closeStack)}
+          renderReview={renderStackReview(filter, closeStack, preferences?.organization?.provider)}
           currentNumber={stackTarget?.number ?? 0}
           filter={filter}
           onClose={closeStack}

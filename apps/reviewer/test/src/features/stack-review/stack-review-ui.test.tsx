@@ -1,14 +1,18 @@
-import { getStackRecords } from '../../../../shared/api/stackReviewRecords'
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as routes from '../../../../shared/api'
 import type { ApiContract } from '../../../../shared/api/contract'
+import { getStackRecords } from '../../../../shared/api/stackReviewRecords'
+import type { PanelSession } from '../../../../shared/domain/panelSession'
+import { modelFor } from '../../../../shared/domain/preferences'
 import type { StackReviewSession } from '../../../../shared/domain/stackReview'
 import { Provider } from '../../../../shared/domain/types'
-import { StackReview } from '../../../../src/features/stack-review/StackReview'
+import { renderStackReview } from '../../../../src/app/StackReviewSlot'
 import { call } from '../../../../src/lib/api'
+import { fixturePanelAdvice } from '../../../fixtures/panel'
+import { fixturePull } from '../../../fixtures/pull'
 import { finishedStackReview, layerUrl, stackEntry } from '../../../fixtures/stackReview'
 
 vi.mock('../../../../src/lib/api', async (original) => ({
@@ -18,6 +22,7 @@ vi.mock('../../../../src/lib/api', async (original) => ({
 
 afterEach(() => {
   cleanup()
+  localStorage.clear()
   vi.clearAllMocks()
   vi.useRealTimers()
 })
@@ -29,42 +34,86 @@ const finished = finishedStackReview([
 const running: StackReviewSession = {
   ...finished,
   status: 'running',
+  reviewers: [
+    { id: 'unclebob', providers: [Provider.claude] },
+    { id: 'teammate:avery', providers: [Provider.codex] },
+  ],
   progress: 'Running the panel on the layers without an up-to-date review…',
   input: undefined,
   pass: undefined,
   layers: finished.layers.map((layer, index) => ({
     ...layer,
     state: index ? 'reviewing' : 'reused',
+    panel: `panel-${String(layer.number)}`,
   })),
+}
+
+const avery = {
+  id: 'avery',
+  name: 'Avery',
+  skill: 'AveryReview',
+  locations: { codex: '/codex/AveryReview' },
+  avatars: [],
+  maxFindings: 20,
+  updatedAt: '2026-10-01',
+}
+const panel: PanelSession = {
+  id: 'panel-202',
+  repository: running.repository,
+  urls: [layerUrl(202)],
+  model: modelFor(Provider.codex),
+  reviewers: [
+    { id: 'unclebob', name: 'Uncle Bob', maxFindings: 10, model: modelFor(Provider.claude) },
+    { id: 'teammate:avery', name: 'Avery', maxFindings: 20, model: modelFor(Provider.codex) },
+  ],
+  status: 'running',
+  progress: '1 of 2 reviewers finished PR #202…',
+  createdAt: running.createdAt,
+  results: [],
+  pending: {
+    pull: { ...fixturePull(), url: layerUrl(202), number: 202 },
+    fingerprint: 'fingerprint',
+    reviews: [{ reviewer: 'unclebob', advice: fixturePanelAdvice() }],
+  },
 }
 
 function renderStrip() {
   const onOpen = vi.fn()
-  render(
-    <MemoryRouter>
-      <StackReview
-        url={layerUrl(202)}
-        reviewers={[{ id: 'unclebob', providers: [Provider.codex] }]}
-        openPath="/review"
-        onOpen={onOpen}
-      />
-    </MemoryRouter>,
-  )
+  const strip = renderStackReview('mine', onOpen, Provider.codex)
+  render(<MemoryRouter>{strip(layerUrl(202))}</MemoryRouter>)
   return onOpen
+}
+
+function mockProgress() {
+  const review = { stack: running, panel }
+  vi.mocked(call).mockImplementation((route: ApiContract, input: { params?: unknown }) => {
+    if (route === getStackRecords)
+      return Promise.resolve({ records: [], revisions: [], applied: [] })
+    if (route === routes.latestStackReview) return Promise.resolve({ session: null })
+    if (route === routes.listTeammates) return Promise.resolve({ teammates: [avery] })
+    if (route === routes.startStackReview) return Promise.resolve(running)
+    if (route === routes.getPanel) {
+      const working =
+        routes.getPanel.params.parse(input.params).id === 'panel-202'
+          ? review.panel
+          : {
+              ...panel,
+              id: 'panel-203',
+              pending: undefined,
+              progress: 'Waiting for panels on other PRs to finish…',
+            }
+      return Promise.resolve({ revision: review.panel === panel ? 1 : 2, session: working })
+    }
+    if (route === routes.getStackReview) return Promise.resolve({ ...review.stack })
+    return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
+  })
+  return review
 }
 
 describe('stack review strip', () => {
   it('starts with the picked reviewers, shows progress, then opens the separate review', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    let session = running
-    vi.mocked(call).mockImplementation((route: ApiContract) => {
-      if (route === getStackRecords)
-        return Promise.resolve({ records: [], revisions: [], applied: [] })
-      if (route === routes.latestStackReview) return Promise.resolve({ session: null })
-      if (route === routes.startStackReview) return Promise.resolve(running)
-      if (route === routes.getStackReview) return Promise.resolve(session)
-      return Promise.reject(new Error(`Unexpected ${route.method} ${route.path}`))
-    })
+    const review = mockProgress()
     const onOpen = renderStrip()
     const start = screen.getByRole('button', { name: 'Review the whole stack' })
     await waitFor(() => {
@@ -75,25 +124,75 @@ describe('stack review strip', () => {
     ).toBeTruthy()
 
     fireEvent.click(start)
-    expect(await screen.findAllByText('The panel is reviewing it.')).toHaveLength(2)
+    expect(call).not.toHaveBeenCalledWith(routes.startStackReview, expect.anything())
+    expect(await screen.findByText('Who should review this stack?')).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: /Ask Linus first/ })).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: 'Avery on Codex' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Uncle Bob on Claude' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Uncle Bob on Codex' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Terminator on Codex' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review with 2 reviewers' }))
+
+    expect(await screen.findByText('Panel seats · Uncle Bob (Claude), Avery (Codex)')).toBeTruthy()
+    expect(screen.getByText(/Finished · Uncle Bob \(Claude\)/)).toBeTruthy()
+    expect(screen.getByText('Waiting for panels on other PRs to finish…')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
     expect(call).toHaveBeenCalledWith(routes.startStackReview, {
-      body: { url: layerUrl(202), reviewers: [{ id: 'unclebob', providers: [Provider.codex] }] },
+      body: { url: layerUrl(202), reviewers: running.reviewers },
     })
 
-    session = finished
+    review.panel = { ...panel, progress: 'Grounding the findings on PR #202…' }
+    await act(() => vi.advanceTimersByTimeAsync(2000))
+    expect(await screen.findByText(/Grounding the findings on PR #202/)).toBeTruthy()
+
+    review.stack = finished
     await act(() => vi.advanceTimersByTimeAsync(2000))
     const open = await screen.findByRole('link', { name: 'Open review' })
-    expect(open.getAttribute('href')).toBe('/review')
+    expect(open.getAttribute('href')).toContain('/stack-review')
     expect(screen.getByRole('status').textContent).toBe(
       'Review complete · 0 of 1 answered · 1 question needs you · 1 fix ready',
     )
-    expect(screen.getByRole('button', { name: 'Review again' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Review again' }))
+    expect(await screen.findByText('Who should review this stack?')).toBeTruthy()
+    expect(
+      (await screen.findByRole('button', { name: 'Avery on Codex' })).getAttribute('aria-pressed'),
+    ).toBe('true')
+    expect(
+      screen.getByRole('button', { name: 'Uncle Bob on Claude' }).getAttribute('aria-pressed'),
+    ).toBe('true')
+    expect(
+      vi.mocked(call).mock.calls.filter(([route]) => route === routes.startStackReview),
+    ).toHaveLength(1)
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() => {
+      expect(screen.queryByText('Who should review this stack?')).toBeNull()
+    })
     expect(screen.queryByText('Keep the column?')).toBeNull()
     expect(screen.queryByRole('list')).toBeNull()
 
     fireEvent.click(open)
     expect(onOpen).toHaveBeenCalledOnce()
+  })
+})
+
+describe('stopped stack reviews and start errors', () => {
+  it('shows a start error only inside the picker', async () => {
+    vi.mocked(call).mockImplementation((route: ApiContract) => {
+      if (route === routes.latestStackReview) return Promise.resolve({ session: null })
+      if (route === routes.listTeammates) return Promise.resolve({ teammates: [avery] })
+      return Promise.reject(new Error('Could not start this review.'))
+    })
+    renderStrip()
+    const start = screen.getByRole('button', { name: 'Review the whole stack' })
+    await waitFor(() => {
+      expect(start.hasAttribute('disabled')).toBe(false)
+    })
+
+    fireEvent.click(start)
+    fireEvent.click(await screen.findByRole('button', { name: 'Review with 2 reviewers' }))
+
+    const error = await screen.findByText('Could not start this review.')
+    expect(screen.getByRole('dialog').contains(error)).toBe(true)
   })
 
   it.each(['partial', 'failed', 'cancelled'] as const)('retries a %s review', async (status) => {
@@ -109,7 +208,8 @@ describe('stack review strip', () => {
     })
     renderStrip()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Retry the stack review' }))
+    expect(await screen.findByRole('button', { name: 'Review again' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry the stack review' }))
 
     expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy()
     expect(call).toHaveBeenCalledWith(routes.retryStackReview, { params: { id: 'stack-1' } })

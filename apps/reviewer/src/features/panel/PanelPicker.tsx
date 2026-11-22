@@ -50,6 +50,7 @@ export function PanelPicker({
   return (
     <PanelPickerPopover
       label={`Ask the review panel about PR #${String(pull.number)}`}
+      triggerLabel="Ask the panel"
       subject={`PR #${String(pull.number)}`}
       provider={provider}
       start={start}
@@ -62,6 +63,7 @@ export function PanelPicker({
 /** The "Ask the panel" button and its picker; `start` decides what the chosen reviewers review. */
 export function PanelPickerPopover({
   label,
+  triggerLabel = label,
   subject,
   provider,
   start,
@@ -70,6 +72,7 @@ export function PanelPickerPopover({
   disabled = false,
 }: {
   label: string
+  triggerLabel?: string
   subject: string
   provider?: Provider
   start: PanelStart
@@ -78,13 +81,14 @@ export function PanelPickerPopover({
   disabled?: boolean
 }) {
   const [open, setOpen] = useState(openOnMount)
+  const [selected, setSelected] = useState(savedPanelSelection)
   function changeOpen(next: boolean) {
+    if (next) setSelected(savedPanelSelection())
     setOpen(next)
     if (!next) onClose?.()
   }
   const teammates = useApiQuery(routes.listTeammates, {}, { enabled: open })
   const candidates = panelCandidates(teammates.data?.teammates ?? [])
-  const [selected, setSelected] = useState(savedPanelSelection)
   const chosen = provider ? resolveChoices(selected, candidates, provider) : []
   function choose(next: Required<PanelChoice>[]) {
     setSelected(next)
@@ -98,7 +102,7 @@ export function PanelPickerPopover({
         disabled={disabled}
       >
         <Users size={13} aria-hidden="true" />
-        Ask the panel
+        {triggerLabel}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner

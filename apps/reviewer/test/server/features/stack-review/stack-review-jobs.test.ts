@@ -6,13 +6,16 @@ import type {
 import { StackReviewJobs } from '../../../../server/features/stack-review/stackReviewJobs'
 import { parsePullUrl } from '../../../../shared/domain/pullUrl'
 import { stackBrief } from '../../../../shared/domain/stackBrief'
+import { Provider } from '../../../../shared/domain/types'
 import { fixturePanelAdvice } from '../../../fixtures/panel'
 import {
+  companion,
   companionJudge,
   groundingReply,
   isGrounding,
   judge,
   panelHarness,
+  primary,
 } from '../../../fixtures/panelJobs'
 import { fixturePull } from '../../../fixtures/pull'
 import { emptyResult, layerUrl } from '../../../fixtures/stackReview'
@@ -69,6 +72,8 @@ function stackReview(turns: StructuredTurns) {
     store: harness.store.stackReview,
     turns,
     panels,
+    members: harness.members,
+    models: () => ({ primary, companion }),
     results: (repository, url) => harness.store.panel.results(repository, url, 3),
     resolve: () =>
       Promise.resolve(
@@ -115,7 +120,10 @@ describe('a whole-stack review', () => {
 
     expect(session.status).toBe('complete')
     expect(session.url).toBe(layerUrl(202))
-    expect(session.reviewers).toEqual(['unclebob', 'terminator'])
+    expect(session.reviewers).toEqual([
+      { id: 'unclebob', providers: ['claude'] },
+      { id: 'terminator', providers: ['claude'] },
+    ])
     expect(session.layers.map((layer) => layer.state)).toEqual(['reviewed', 'reviewed', 'reviewed'])
     expect(requests.filter(isCrossLayer).map((request) => request.model)).toEqual([
       judge,
@@ -151,7 +159,105 @@ describe('a whole-stack review', () => {
       '#203/g1',
     ])
   })
+})
 
+describe('choosing stack review seats', () => {
+  it('reuses current results with the same seats and starts new panels for different seats', async () => {
+    const { turns, requests } = recordingTurns(reply)
+    const jobs = stackReview(turns)
+    const original = await settled(
+      jobs,
+      (await jobs.start(layerUrl(201), ['unclebob', 'terminator'])).id,
+    )
+
+    const same = await settled(
+      jobs,
+      (
+        await jobs.start(layerUrl(201), [
+          'terminator',
+          { id: 'unclebob', providers: [Provider.claude, Provider.claude] },
+        ])
+      ).id,
+    )
+    const before = requests.length
+    const different = await settled(jobs, (await jobs.start(layerUrl(201), ['teammate:avery'])).id)
+
+    expect(same.layers.map((layer) => layer.state)).toEqual(['reused', 'reused', 'reused'])
+    expect(same.layers.map((layer) => layer.panel)).toEqual(
+      original.layers.map((layer) => layer.panel),
+    )
+    expect(different.layers.map((layer) => layer.state)).toEqual([
+      'reviewed',
+      'reviewed',
+      'reviewed',
+    ])
+    expect(different.reviewers).toEqual([{ id: 'teammate:avery', providers: ['claude'] }])
+    for (const number of numbers) {
+      expect(seatTurns(requests.slice(before), number).map((request) => request.purpose)).toEqual([
+        `Avery on the panel · review-room/example#${String(number)}`,
+      ])
+    }
+  })
+})
+
+describe('stack review seats on existing panels', () => {
+  it('attaches to a running panel with different seats and names its reviewers', async () => {
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { turns, requests } = recordingTurns(reply)
+    const jobs = stackReview({
+      run: async (request) => {
+        if (request.purpose === 'Uncle Bob on the panel · review-room/example#201') await held
+        return turns.run(request)
+      },
+    })
+    const active = await harness.jobs?.start('review-room/example', [layerUrl(201)], ['unclebob'])
+
+    try {
+      const started = await jobs.start(layerUrl(201), ['teammate:avery'])
+      await vi.waitFor(() => {
+        expect(jobs.get(started.id).layers[0]).toMatchObject({
+          panel: active?.id,
+          state: 'reviewing',
+          note: 'Already being reviewed by Uncle Bob.',
+        })
+      })
+      release()
+
+      const finished = await settled(jobs, started.id)
+      expect(finished.status).toBe('complete')
+      expect(seatTurns(requests, 201).map((request) => request.purpose)).toEqual([
+        'Uncle Bob on the panel · review-room/example#201',
+      ])
+    } finally {
+      release()
+    }
+  })
+
+  it('replaces a partial panel from the previous stack review when the author changes seats', async () => {
+    const { turns } = recordingTurns((request) => {
+      if (request.purpose === 'Avery on the panel · review-room/example#202')
+        throw new Error('Provider unavailable.')
+      return reply(request)
+    })
+    const jobs = stackReview(turns)
+    const stopped = await settled(
+      jobs,
+      (await jobs.start(layerUrl(201), ['unclebob', 'teammate:avery'])).id,
+    )
+
+    const next = await settled(jobs, (await jobs.start(layerUrl(201), ['unclebob'])).id)
+
+    expect(stopped.status).toBe('partial')
+    expect(next.status).toBe('complete')
+    expect(next.layers.map((layer) => layer.state)).toEqual(['reviewed', 'reviewed', 'reviewed'])
+    expect(next.layers[1]?.panel).not.toBe(stopped.layers[1]?.panel)
+  })
+})
+
+describe('retrying a stack review', () => {
   it('stops partial on a layer waiting on the author, and a retry continues from there', async () => {
     let failing = true
     const { turns, requests } = recordingTurns((request) => {

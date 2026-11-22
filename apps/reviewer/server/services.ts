@@ -201,6 +201,8 @@ export function createServices(options: ReviewerServerOptions) {
     retryingTurns,
     agentSessions,
     panelJobs,
+    panelMembers,
+    models,
     stacks,
     pulls,
     judges,

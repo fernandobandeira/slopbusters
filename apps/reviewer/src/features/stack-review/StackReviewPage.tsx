@@ -1,7 +1,6 @@
 import type { StackRecordActions } from './useStackRecords'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import type { PanelSeatRequest } from '../../../shared/domain/panel'
 import type { StackBrief } from '../../../shared/domain/stackBrief'
 import { layerMoved, type BriefLayer } from '../../../shared/domain/stackBriefLayers'
 import { stackBriefMarkdown } from '../../../shared/domain/stackBriefMarkdown'
@@ -14,16 +13,16 @@ import {
 import { CopyButton } from '../../components/CopyButton'
 import { Button } from '~/components/ui/button'
 import { StackBriefView } from './StackBriefView'
-import { ReviewProgress } from './StackReview'
+import { ReviewProgress, StackStart, type RenderStackStart } from './StackReview'
 import { useStackReview } from './useStackReview'
 
 export function StackReviewPage({
   url,
-  reviewers,
+  renderStart,
   backPath,
 }: {
   url: string
-  reviewers: PanelSeatRequest[]
+  renderStart: RenderStackStart
   backPath: string
 }) {
   const review = useStackReview(url)
@@ -40,14 +39,7 @@ export function StackReviewPage({
               label="Copy full brief"
               text={stackBriefMarkdown(brief, session.repository)}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={review.busy}
-              onClick={() => void review.start(reviewers)}
-            >
-              Review again
-            </Button>
+            <StackStart review={review} label="Review again" renderStart={renderStart} />
           </>
         )}
       </header>
@@ -60,7 +52,7 @@ export function StackReviewPage({
           error={review.error}
         />
       ) : (
-        <ReviewProgress review={review} reviewers={reviewers} />
+        <ReviewProgress review={review} renderStart={renderStart} />
       )}
     </div>
   )

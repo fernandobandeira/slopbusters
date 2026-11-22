@@ -3,7 +3,7 @@ import type { LayerFixTools } from '../features/mcp/layerFixTools'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
-import { reviewerIdSchema } from '../../shared/domain/panel'
+import { panelSeatRequestSchema } from '../../shared/domain/panel'
 import { pullUrlSchema } from '../../shared/domain/pullUrl'
 import { publicError } from '../errors'
 import { DEFAULT_PANEL_WAIT_SECONDS, MAX_PANEL_WAIT_SECONDS } from '../features/mcp/limits'
@@ -14,11 +14,17 @@ const instructions = `Slopbusters review panels. Reviewers read a GitHub pull re
 
 Start a panel with start_panel_review once the PR's branch is pushed, then call get_panel_review until it returns the review. A panel takes several minutes and runs on the user's own Claude and Codex accounts, so start one when the user or their instructions ask for a panel review, not on your own.
 
+Call list_reviewers for reviewer ids and available providers. Both start tools accept a reviewer id or an object such as {"id":"unclebob","providers":["codex","claude"]} in reviewers.
+
 For a stack of PRs, start_stack_review runs the panel on every layer that needs it and then reads all layers' findings together; get_stack_review returns one brief for the whole stack. It runs a panel per layer, so ask for it only when the user wants the whole stack reviewed.`
 
 const pullRequest = pullUrlSchema.describe(
   'The GitHub pull request URL, such as https://github.com/owner/repo/pull/123.',
 )
+
+const reviewerSeats = z.array(panelSeatRequestSchema).min(1).max(8).optional()
+const seatChoices =
+  'Reviewer ids or objects with id and providers (codex, claude, or both). Use list_reviewers for available providers. A bare id uses that reviewer’s default providers.'
 
 /** The panel as MCP tools: each tool's name, what it tells the agent, and what it takes. */
 export function panelMcpServer(
@@ -69,7 +75,7 @@ function listReviewers(server: McpServer, tools: PanelTools) {
     {
       title: 'List panel reviewers',
       description:
-        'List who can sit on a review panel: the built-in reviewers and the teammates the user set up, with the ids start_panel_review takes.',
+        'List who can sit on a review panel: the built-in reviewers and the teammates the user set up, with their ids and available providers.',
       annotations: { readOnlyHint: true },
     },
     () => answer(() => tools.reviewers()),
@@ -82,17 +88,12 @@ function startPanelReview(server: McpServer, tools: PanelTools) {
     {
       title: 'Start a panel review',
       description:
-        'Ask the Slopbusters panel to review a GitHub pull request at its pushed head. Returns at once while the panel works; call get_panel_review to wait for the review. Asking again for a PR whose panel is still working with the same reviewers returns that panel.',
+        'Ask the Slopbusters panel to review a GitHub pull request at its pushed head. Returns at once while the panel works; call get_panel_review to wait for the review. Choose reviewers and their providers with reviewers. Asking again for a PR whose panel is still working with the same seats returns that panel.',
       inputSchema: {
         pull_request: pullRequest,
-        reviewers: z
-          .array(reviewerIdSchema)
-          .min(1)
-          .max(8)
-          .optional()
-          .describe(
-            'Reviewer ids from list_reviewers. Leave it out for Uncle Bob and the Terminator.',
-          ),
+        reviewers: reviewerSeats.describe(
+          `${seatChoices} Leave it out for Uncle Bob and the Terminator.`,
+        ),
       },
     },
     ({ pull_request, reviewers }) => answer(() => tools.start(pull_request, reviewers)),
@@ -173,17 +174,12 @@ function startStackReview(server: McpServer, tools: StackReviewTools) {
     {
       title: 'Start a stack review',
       description:
-        "Review the whole stack a GitHub pull request belongs to: the panel reviews every open layer whose newest review is missing or was made at another head or base, then two models read all layers' findings together. Returns at once; call get_stack_review to wait for the brief. It runs a panel per layer on the user's own Claude and Codex accounts, so start one only when asked. Asking again while it works returns that review.",
+        "Review the whole stack a GitHub pull request belongs to: the panel reviews every open layer whose newest review is missing or was made at another head or base, then two models read all layers' findings together. Returns at once; call get_stack_review to wait for the brief. The reviewers and providers you choose apply to every new panel. Start one only when asked, because it runs on the user's own Claude and Codex accounts. Asking again while it works returns that review.",
       inputSchema: {
         pull_request: pullRequest.describe('The URL of any pull request in the stack.'),
-        reviewers: z
-          .array(reviewerIdSchema)
-          .min(1)
-          .max(8)
-          .optional()
-          .describe(
-            'Reviewer ids from list_reviewers. Leave it out for the reviewers last used on the stack.',
-          ),
+        reviewers: reviewerSeats.describe(
+          `${seatChoices} Leave it out for the reviewers last used on the stack.`,
+        ),
       },
     },
     ({ pull_request, reviewers }) => answer(() => tools.start(pull_request, reviewers)),
