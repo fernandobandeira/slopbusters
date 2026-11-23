@@ -8,6 +8,13 @@ export const startLayerFix = defineRoute('POST', '/layer-fixes', {
     .strict(),
   response: layerFixSessionSchema,
 })
+export const startStackFixes = defineRoute('POST', '/layer-fixes/batch', {
+  request: z.object({
+    stack: z.string(),
+    groups: z.array(z.object({ url: pullUrlSchema, entries: z.array(z.string()).min(1) })).min(1),
+  }),
+  response: z.array(layerFixSessionSchema),
+})
 export const latestLayerFix = defineRoute('GET', '/layer-fixes/latest', {
   query: z.object({
     url: pullUrlSchema,

@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, expect, it, vi } from 'vitest'
 import * as routes from '../../../../shared/api/layerFix'
 import type { ApiContract } from '../../../../shared/api/contract'
+import type { ComponentProps } from 'react'
+import { useStackFixSelection } from '../../../../src/features/stack-review/useStackFixSelection'
 import { LayerFixWorker } from '../../../../src/features/stack-review/LayerFixWorker'
 import { call } from '../../../../src/lib/api'
 import { fixtureLayerFix } from '../../../fixtures/layerFix'
@@ -18,15 +20,35 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+function Worker(props: Omit<ComponentProps<typeof LayerFixWorker>, 'selection'>) {
+  const selection = useStackFixSelection(props.stack, [{ layer: props.layer, items: props.fixes }])
+  return (
+    <>
+      <button disabled={selection.disabled} onClick={() => void selection.apply()}>
+        Fix selected
+      </button>
+      <LayerFixWorker key={selection.revision} {...props} selection={selection} />
+    </>
+  )
+}
+
 it('starts selected fixes and renders the observed outcome', async () => {
+  let started = false
   vi.mocked(call).mockImplementation((route: ApiContract) => {
     if (route === routes.latestLayerFix)
-      return Promise.resolve({ session: null, availability: { applied: [] }, retryable: false })
-    if (route === routes.startLayerFix) return Promise.resolve(fixtureLayerFix())
+      return Promise.resolve({
+        session: started ? fixtureLayerFix() : null,
+        availability: { applied: [] },
+        retryable: false,
+      })
+    if (route === routes.startStackFixes) {
+      started = true
+      return Promise.resolve([fixtureLayerFix()])
+    }
     return Promise.reject(new Error('Unexpected route'))
   })
   render(
-    <LayerFixWorker
+    <Worker
       stack="stack-1"
       layer={{ url: layerUrl(201), number: 201, title: 'Layer 201', current: true }}
       fixes={[
@@ -40,7 +62,7 @@ it('starts selected fixes and renders the observed outcome', async () => {
       ]}
     />,
   )
-  const button = await screen.findByRole('button', { name: 'Apply 1 fix locally on #201' })
+  const button = await screen.findByRole('button', { name: 'Fix selected' })
   await waitFor(() => {
     expect(button.hasAttribute('disabled')).toBe(false)
   })
@@ -49,8 +71,8 @@ it('starts selected fixes and renders the observed outcome', async () => {
   expect(screen.getByText('#201/g1: applied — Handles missing data.')).toBeTruthy()
   expect(screen.getByText('Left for the author: Update the title')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Open fix thread' })).toBeTruthy()
-  expect(call).toHaveBeenCalledWith(routes.startLayerFix, {
-    body: { stack: 'stack-1', url: layerUrl(201), entries: ['#201/g1'] },
+  expect(call).toHaveBeenCalledWith(routes.startStackFixes, {
+    body: { stack: 'stack-1', groups: [{ url: layerUrl(201), entries: ['#201/g1'] }] },
   })
 })
 
@@ -76,7 +98,7 @@ it('refreshes server availability when polling sees the worker stop', async () =
   })
   await act(() => {
     render(
-      <LayerFixWorker
+      <Worker
         stack="stack-1"
         layer={{ url: layerUrl(201), number: 201, title: 'Layer 201', current: true }}
         fixes={[

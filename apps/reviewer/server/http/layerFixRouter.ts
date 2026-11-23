@@ -8,6 +8,9 @@ export function layerFixRouter({ layerFixJobs }: Services) {
   handle(router, routes.startLayerFix, ({ body }) =>
     layerFixJobs.start(body.stack, body.url, body.entries),
   )
+  handle(router, routes.startStackFixes, ({ body }) =>
+    layerFixJobs.startBatch(body.stack, body.groups),
+  )
   handle(router, routes.latestLayerFix, ({ query: { stack, url, head, base } }) =>
     layerFixJobs.latestForStack(stack, url, head, base),
   )

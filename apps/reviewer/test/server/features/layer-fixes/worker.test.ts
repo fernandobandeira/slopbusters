@@ -394,3 +394,21 @@ it.each([{ commits: [] }, { commits: [commit] }])(
     }
   },
 )
+
+it('validates the full selection before starting and runs queued PRs in order', async () => {
+  const h = harness()
+  h.stack.input!.entries.push(stackEntry(202, 'next'))
+  const first = { url: layerUrl(201), entries: ['#201/g1'] }
+  await expect(
+    h.jobs.startBatch(h.stack.id, [first, { url: layerUrl(202), entries: ['unknown'] }]),
+  ).rejects.toThrow()
+  expect(h.saved.size).toBe(0)
+  const sessions = await h.jobs.startBatch(h.stack.id, [
+    first,
+    { url: layerUrl(202), entries: ['#202/next'] },
+  ])
+  expect(sessions[1]?.progress).toContain('Queued')
+  await settle(h.jobs, sessions[1]!.id)
+  expect(h.jobs.get(sessions[0]!.id).outcome).toBe('done')
+  expect(h.jobs.get(sessions[1]!.id).outcome).toBe('moved')
+})

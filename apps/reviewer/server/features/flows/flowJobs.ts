@@ -62,6 +62,9 @@ export class FlowJobs<S extends FlowSession> {
         if (this.jobs.get(session.id) === job) this.jobs.delete(session.id)
       })
   }
+  finished(id: string): Promise<void> {
+    return this.jobs.get(id)?.done ?? Promise.resolve()
+  }
   abort(id: string): void {
     this.jobs.get(id)?.controller.abort()
   }

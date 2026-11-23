@@ -1,6 +1,7 @@
+import type { StackFixSelection } from './useStackFixSelection'
 import { useState } from 'react'
 import { groundingImpactLabels } from '../../../shared/domain/impact'
-import type { BriefSerious } from '../../../shared/domain/stackBrief'
+import type { BriefSerious, StackBrief } from '../../../shared/domain/stackBrief'
 import { dispositionSummary } from '../../../shared/domain/stackReviewRecords'
 import type { StackDisposition } from '../../../shared/domain/stackReviewRecords'
 import { Button } from '~/components/ui/button'
@@ -8,8 +9,12 @@ import type { StackRecordActions } from './useStackRecords'
 
 export function SeriousClaims({
   items,
+  fixes,
+  selection,
   actions,
 }: {
+  fixes: StackBrief['fixes']
+  selection: StackFixSelection
   items: BriefSerious[]
   actions: StackRecordActions
 }) {
@@ -24,6 +29,27 @@ export function SeriousClaims({
             <p className="stack-brief-detail">
               {groundingImpactLabels[item.impact]} · {item.standing}
             </p>
+            {fixes
+              .flatMap((group) => group.items)
+              .filter(
+                (fix) =>
+                  fix.id === item.id ||
+                  fix.alsoRaised.includes(item.id) ||
+                  fix.decision?.decisionId === item.id,
+              )
+              .map((fix) => (
+                <label key={fix.id}>
+                  <input
+                    type="checkbox"
+                    checked={selection.selected.includes(fix.id)}
+                    disabled={selection.locked || !selection.available.includes(fix.id)}
+                    onChange={(event) => {
+                      selection.select(fix.id, event.target.checked)
+                    }}
+                  />{' '}
+                  Include in selected fixes
+                </label>
+              ))}
             {item.disposition && <p>{dispositionSummary(item.disposition)}</p>}
             <ClaimControl key={item.revision ?? 0} item={item} actions={actions} />
           </li>

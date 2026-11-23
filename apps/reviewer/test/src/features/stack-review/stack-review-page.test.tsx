@@ -1,13 +1,19 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { startStackFixes } from '../../../../shared/api/layerFix'
 import * as recordRoutes from '../../../../shared/api/stackReviewRecords'
 import { projectStackBrief } from '../../../../shared/domain/projectStackBrief'
 import { stackBrief } from '../../../../shared/domain/stackBrief'
 import { stackBriefMarkdown } from '../../../../shared/domain/stackBriefMarkdown'
 import { call } from '../../../../src/lib/api'
 import { enabledButton, renderPage, savedReview } from '../../../fixtures/stackReviewPage'
-import { emptyResult, finishedStackReview, stackEntry } from '../../../fixtures/stackReview'
+import {
+  emptyResult,
+  finishedStackReview,
+  layerUrl,
+  stackEntry,
+} from '../../../fixtures/stackReview'
 
 vi.mock('../../../../src/lib/api', async (original) => ({
   ...(await original<typeof import('../../../../src/lib/api')>()),
@@ -69,12 +75,12 @@ it('filters bands by layer and shows one checkbox, title and plan per fix', asyn
   ])
   expect(within(rail).getByText('Moved').title).toContain('Reviewed base base-20')
   const fixes = screen.getByText('#201 Layer 201 · 1 fix').closest('details')!
-  expect(fixes.open).toBe(false)
+  expect(fixes.open).toBe(true)
   fixes.open = true
   expect(within(fixes).getAllByText('Handle missing data')).toHaveLength(1)
   expect(within(fixes).getByRole('checkbox', { name: 'Handle missing data' })).toBeTruthy()
   expect(within(fixes).getByText('Return an empty list.')).toBeTruthy()
-  expect(within(fixes).getByRole('button', { name: 'Apply 1 fix locally on #201' })).toBeTruthy()
+  expect(await enabledButton('Fix selected (1)')).toBeTruthy()
 
   fireEvent.click(rows[2]!)
   expect(screen.getByRole('heading', { name: 'Needs your answer · 1' })).toBeTruthy()
@@ -95,9 +101,7 @@ it('explains why fixes are disabled on a layer that moved', async () => {
   const fixes = (await screen.findByText('#201 Layer 201 · 1 fix')).closest('details')!
   fixes.open = true
   expect(within(fixes).getByText(/moved since its panel reviewed/)).toBeTruthy()
-  expect(
-    within(fixes).getByRole('button', { name: 'Apply 0 fixes locally on #201' }),
-  ).toHaveProperty('disabled', true)
+  expect(screen.getByRole('button', { name: 'Fix selected (0)' })).toHaveProperty('disabled', true)
 })
 
 it('puts each contested cross-layer question on its card with evidence still closed', async () => {
@@ -217,4 +221,31 @@ it('bulk-applies explicit defaults and allows reopening one answer', async () =>
   fireEvent.click(screen.getAllByRole('button', { name: 'Reopen' })[0]!)
   await screen.findByRole('heading', { name: 'Answered · 1' })
   expect(screen.getByText('A reviewer will probably ask, the models would not · 1')).toBeTruthy()
+})
+
+it('submits only the checked fixes across PRs and shares the serious finding selection', async () => {
+  const session = finishedStackReview([
+    stackEntry(201, 'risk', { impact: 'data', consequence: 'Records disappear.' }),
+    stackEntry(201, 'omit'),
+    stackEntry(202, 'keep'),
+  ])
+  renderPage(session)
+  await enabledButton('Fix selected (3)')
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Include in selected fixes' }))
+  expect(screen.getByRole('checkbox', { name: 'Finding risk on #201' })).toHaveProperty(
+    'checked',
+    false,
+  )
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Finding risk on #201' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Finding omit on #201' }))
+  fireEvent.click(await enabledButton('Fix selected (2)'))
+  expect(call).toHaveBeenCalledWith(startStackFixes, {
+    body: {
+      stack: session.id,
+      groups: [
+        { url: layerUrl(201), entries: ['#201/risk'] },
+        { url: layerUrl(202), entries: ['#202/keep'] },
+      ],
+    },
+  })
 })

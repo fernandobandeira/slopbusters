@@ -59,15 +59,47 @@ export class LayerFixJobs {
     url: string,
     selected?: readonly string[],
   ): Promise<LayerFixSession> {
+    const [session] = await this.startBatch(stackId, [{ url, entries: selected }])
+    if (!session) throw new Error('No fix session was created.')
+    return session
+  }
+
+  async startBatch(stackId: string, groups: { url: string; entries?: readonly string[] }[]) {
     const stack = this.options.stack(stackId)
     const brief = await this.options.brief(stack)
+    this.requireIdle(stack.urls)
+    if (new Set(groups.map(({ url }) => url)).size !== groups.length)
+      throw new UserError('Choose each layer only once.')
+    const sessions = groups.map(({ url, entries }) =>
+      this.prepareSession(stack, brief, url, entries),
+    )
+    let previous = Promise.resolve()
+    for (const session of sessions) {
+      const before = previous
+      session.progress = session === sessions[0] ? session.progress : 'Queued for local fixes.'
+      this.options.store.save(session)
+      this.jobs.launch(session, async (signal) => {
+        await before
+        if (!signal.aborted) await this.run(session, signal)
+      })
+      previous = this.jobs.finished(session.id)
+    }
+    return sessions
+  }
+
+  private prepareSession(
+    stack: StackReviewSession,
+    brief: StackBrief,
+    url: string,
+    selected?: readonly string[],
+  ): LayerFixSession {
+    const stackId = stack.id
     const group = brief.fixes.find((item) => item.layer.url === url)
     if (!group) throw new UserError('Choose fixes from this layer’s brief.')
     const { layer } = group
     const start = layer.currentHead ?? layer.reviewedHead
     const base = layer.currentBase ?? layer.reviewedBase ?? ''
     if (!start) throw new UserError('This layer is no longer current; review it again.')
-    this.requireIdle(stack.urls)
     const { applied, blocked } = this.availability(stackId, url, start)
     const chosen = selectFixes(group, { selected, applied })
     if (blocked) throw new UserError(blocked, 409)
@@ -96,9 +128,6 @@ export class LayerFixJobs {
       results: [],
       left: [],
     }
-    // Reserve synchronously before the first await so simultaneous starts cannot race.
-    this.options.store.save(session)
-    this.jobs.launch(session, (signal) => this.run(session, signal))
     return session
   }
 
