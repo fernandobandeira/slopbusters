@@ -64,9 +64,14 @@ export function parseFile(input: FileInput): ChangedFile {
     .flatMap((hunk) => hunk.lines)
     .filter((line) => line.kind === LineKind.removed).length
   let coverage: ChangedFile['coverage'] = 'complete'
-  if (!parsed) coverage = 'unavailable'
+  if (!parsed && !isPureRename(input)) coverage = 'unavailable'
   else if (added !== input.additions || removed !== input.deletions) coverage = 'partial'
   return { ...input, id, hunks: hunks.flatMap(splitChangeSections), coverage }
+}
+
+/** GitHub sends no patch for a rename that keeps the content, and there is nothing left to show. */
+function isPureRename(input: FileInput) {
+  return input.status === 'renamed' && input.additions === 0 && input.deletions === 0
 }
 
 export function fileGroups(files: ChangedFile[]): ChangeGroup[] {

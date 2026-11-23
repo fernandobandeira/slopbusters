@@ -58,6 +58,17 @@ describe('diff mapping and transfer detection', () => {
       parseFile({ path: 'binary.png', status: 'added', additions: 0, deletions: 0 }).coverage,
     ).toBe('unavailable')
   })
+  it('treats a rename without content changes as complete', () => {
+    const file = parseFile({
+      path: 'next/name.uci',
+      previousPath: 'old/name.uci',
+      status: 'renamed',
+      additions: 0,
+      deletions: 0,
+    })
+    expect(file.coverage).toBe('complete')
+    expect(file.hunks).toEqual([])
+  })
   it('renders groups with dense virtual rows and source coordinates', () => {
     const pr = fixturePull()
     expect(pr.transfers.map((item) => item.kind)).toEqual(
