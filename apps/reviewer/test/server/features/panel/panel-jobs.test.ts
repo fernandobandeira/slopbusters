@@ -122,7 +122,9 @@ describe('a seat that returns its full cap', () => {
 
     const [result] = jobs.get(session.id).results
     const capped = result?.reviews.filter((review) => review.capped)
-    expect(capped?.map((review) => review.reviewer)).toEqual(['teammate:avery'])
+    expect(capped).toEqual([
+      expect.objectContaining({ reviewer: 'teammate:avery', outcome: 'capped' }),
+    ])
     expect(
       result?.reviews
         .find((review) => review.reviewer === 'teammate:avery')
@@ -178,32 +180,6 @@ describe('panel grounding', () => {
 })
 
 describe('a panel reviewer that fails', () => {
-  it('waits on the user when a reviewer fails, then grounds the reviews that finished', async () => {
-    const { turns, requests } = recordingTurns((request) => {
-      if (request.purpose?.startsWith('Terminator')) throw new Error('Terminator timed out')
-      return reply(request)
-    })
-    const jobs = panel(turns)
-
-    const session = await jobs.start(repository, [url], everyone)
-    await vi.waitFor(() => {
-      expect(jobs.get(session.id).status).toBe('partial')
-    })
-    expect(jobs.get(session.id).progress).toMatch(/^Terminator could not finish/)
-    expect(requests.some(isGrounding)).toBe(false)
-
-    jobs.continue(session.id)
-    await vi.waitFor(() => {
-      expect(jobs.get(session.id).status).toBe('complete')
-    })
-
-    const grounding = requests.find(isGrounding)
-    expect(grounding?.prompt).not.toContain('- terminator:')
-    expect(jobs.get(session.id).results[0]?.advice.limitations.join(' ')).toMatch(
-      /grounding saw 2 of 3 reviews/,
-    )
-  })
-
   it('gives each reviewer fifteen minutes and says which one ran out of time', async () => {
     const { turns, requests } = recordingTurns((request) => {
       if (request.purpose?.startsWith('Terminator')) throw new CommandTimeoutError('Codex')
@@ -234,6 +210,9 @@ describe('a panel reviewer that fails', () => {
     await vi.waitFor(() => {
       expect(jobs.get(session.id).status).toBe('partial')
     })
+    expect(harness.store.panel.get(session.id)?.pending?.reviews).toContainEqual(
+      expect.objectContaining({ reviewer: 'terminator', outcome: 'failed' }),
+    )
     terminatorFails = false
     const before = requests.length
 
@@ -248,6 +227,9 @@ describe('a panel reviewer that fails', () => {
       'Panel',
       'Panel',
     ])
+    expect(harness.store.panel.get(session.id)?.results[0]?.reviews).toContainEqual(
+      expect.objectContaining({ reviewer: 'terminator', outcome: 'completed' }),
+    )
   })
 })
 

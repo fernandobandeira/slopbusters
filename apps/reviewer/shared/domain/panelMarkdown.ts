@@ -9,6 +9,7 @@ import {
   type SetAside,
 } from './panel'
 import { anchorLabel, type Anchor } from './anchors'
+import { panelSeatOutcomeLabel, type PanelResult, type PanelReview } from './panelSession'
 
 export function panelFindingMarkdown(finding: PanelFinding, raisedBy?: string): string {
   return [
@@ -34,8 +35,18 @@ function setAsideMarkdown(item: SetAside, raisedBy: string): string {
   return `- **${item.title}**${where} · raised by ${raisedBy}\n  ${item.body}\n  *Set aside:* ${item.reason}`
 }
 
+export function panelReviewerOutcomes(reviews: PanelReview[], reviewers: PanelReviewer[]): string {
+  return reviewers
+    .map((reviewer) => {
+      const review = reviews.find((item) => item.reviewer === reviewer.id)
+      return `${reviewer.name} (${panelSeatOutcomeLabel(review)})`
+    })
+    .join(', ')
+}
+
 /** The judged review, for the clipboard. */
-export function panelReviewMarkdown(advice: JudgeAdvice, reviewers: PanelReviewer[]): string {
+export function panelReviewMarkdown(result: PanelResult, reviewers: PanelReviewer[]): string {
+  const { advice, reviews } = result
   const names = (ids: string[]) =>
     ids.map((id) => reviewers.find((reviewer) => reviewer.id === id)?.name ?? id).join(', ')
   const notes = [
@@ -44,7 +55,7 @@ export function panelReviewMarkdown(advice: JudgeAdvice, reviewers: PanelReviewe
     ['Unresolved disagreements', advice.disagreements],
   ] as const
   return [
-    `## Review panel: ${panelVerdictLabels[advice.verdict]}\n\n${advice.summary}\n\nReviewers: ${names(reviewers.map((reviewer) => reviewer.id))}`,
+    `## Review panel: ${panelVerdictLabels[advice.verdict]}\n\n${advice.summary}\n\nReviewers: ${panelReviewerOutcomes(reviews, reviewers)}`,
     ...advice.findings.map((finding) => panelFindingMarkdown(finding, names(finding.raisedBy))),
     advice.setAside.length
       ? `**Set aside by the judge**\n\n${advice.setAside.map((item) => setAsideMarkdown(item, names(item.raisedBy))).join('\n')}`

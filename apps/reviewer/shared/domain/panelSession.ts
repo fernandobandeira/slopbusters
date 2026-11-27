@@ -15,9 +15,14 @@ import {
 import type { OrganizationPreferences } from './preferences'
 import type { PullRequest, PullReviewBody, ReviewThread } from './types'
 
+export const panelSeatOutcomeSchema = z.enum(['completed', 'failed', 'capped', 'cancelled'])
+type PanelSeatOutcome = z.infer<typeof panelSeatOutcomeSchema>
+
 export interface PanelReview {
   /** The seat that wrote it. */
   reviewer: string
+  /** Absent on reviews saved before outcomes were recorded. */
+  outcome?: PanelSeatOutcome
   advice?: PanelAdvice
   /** Findings whose location the evidence could not place, kept as the seat wrote them. */
   unplaced?: UnplacedFinding[]
@@ -27,6 +32,17 @@ export interface PanelReview {
   skillDigest?: string
   error?: string
 }
+const panelSeatOutcomeLabels: Record<PanelSeatOutcome, string> = {
+  completed: 'Completed',
+  failed: 'Failed',
+  capped: 'Capped',
+  cancelled: 'Cancelled',
+}
+
+export function panelSeatOutcomeLabel(review?: PanelReview): string {
+  return review?.outcome ? panelSeatOutcomeLabels[review.outcome] : 'Unknown'
+}
+
 export interface PanelPending extends PanelSnapshot {
   reviews: PanelReview[]
   /** The grounding debate so far, saved after every valid turn so a retry resumes it. */

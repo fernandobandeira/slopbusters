@@ -6,9 +6,10 @@ import {
   panelFindingPlan,
 } from '../../../shared/domain/panelBrief'
 import type { PanelReviewer } from '../../../shared/domain/panel'
+import { panelReviewMarkdown } from '../../../shared/domain/panelMarkdown'
 import type { PanelResult } from '../../../shared/domain/panelSession'
 import { Provider } from '../../../shared/domain/types'
-import { fixtureJudgeAdvice, fixturePanelFinding } from '../../fixtures/panel'
+import { fixtureJudgeAdvice, fixturePanelAdvice, fixturePanelFinding } from '../../fixtures/panel'
 import { fixturePull } from '../../fixtures/pull'
 
 const pull = fixturePull()
@@ -147,6 +148,26 @@ describe('the panel review copied for an agent', () => {
     expect(brief).toContain(`Reviewed head \`${pull.headSha}\``)
     expect(brief).toContain('## Review panel: ')
   })
+})
+
+it.each([
+  ['agent brief', panelBriefMarkdown],
+  ['clipboard review', panelReviewMarkdown],
+])('lists failed and legacy seats on the reviewers line in the %s', (_format, markdown) => {
+  const review = result([entry('g1', 'f1')], {
+    reviews: [
+      { reviewer: 'terminator', outcome: 'failed', error: 'Terminator failed.' },
+      { reviewer: 'unclebob', advice: fixturePanelAdvice() },
+    ],
+  })
+  const seats: PanelReviewer[] = [
+    { id: 'terminator', name: 'Terminator', maxFindings: 5 },
+    ...reviewers,
+  ]
+
+  const brief = markdown(review, seats)
+
+  expect(brief.split('\n')).toContain('Reviewers: Terminator (Failed), Uncle Bob (Unknown)')
 })
 
 describe('one finding copied for an agent', () => {

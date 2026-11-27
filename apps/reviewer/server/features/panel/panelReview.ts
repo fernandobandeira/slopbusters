@@ -8,7 +8,7 @@ import {
   type PanelReviewer,
   type UnplacedFinding,
 } from '../../../shared/domain/panel'
-import type { ReviewHistory } from '../../../shared/domain/panelSession'
+import type { PanelReview, PanelSession, ReviewHistory } from '../../../shared/domain/panelSession'
 import type { OrganizationPreferences } from '../../../shared/domain/preferences'
 import type { PullRequest } from '../../../shared/domain/types'
 import { CommandTimeoutError } from '../../adapters/process'
@@ -22,6 +22,7 @@ import {
   PANEL_REVIEW_TIMEOUT_MS,
 } from './limits'
 import { reviewEvidence } from '../../reviewSnapshot'
+import type { SeatOutcome } from '../flows/panel'
 import { transferInstructions } from '../transferPrompt'
 import { sourceInstructions, ticketInstructions } from '../reviewPrompts'
 import { pullName } from '../../../shared/domain/pullUrl'
@@ -209,6 +210,29 @@ export interface SeatReview {
   capped: boolean
   unplaced: UnplacedFinding[]
   skillDigest?: string
+}
+
+export function landedPanelReview(
+  reviewer: string,
+  { advice: seat, error }: SeatOutcome<SeatReview>,
+): PanelReview {
+  if (!seat) return { reviewer, outcome: 'failed', error }
+  return {
+    reviewer,
+    outcome: seat.capped ? 'capped' : 'completed',
+    advice: seat.advice,
+    ...(seat.capped ? { capped: true } : {}),
+    ...(seat.unplaced.length ? { unplaced: seat.unplaced } : {}),
+    ...(seat.skillDigest ? { skillDigest: seat.skillDigest } : {}),
+  }
+}
+
+export function cancelPendingSeats({ pending, reviewers }: PanelSession): void {
+  if (!pending) return
+  for (const reviewer of reviewers) {
+    if (!pending.reviews.some((review) => review.reviewer === reviewer.id))
+      pending.reviews.push({ reviewer: reviewer.id, outcome: 'cancelled' })
+  }
 }
 
 /** The reviewed PR, its loaded stack layers and its checkout's files, to place anchors in. */

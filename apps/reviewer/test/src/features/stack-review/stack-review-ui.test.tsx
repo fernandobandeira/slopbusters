@@ -96,7 +96,7 @@ const panel: PanelSession = {
   pending: {
     pull: { ...fixturePull(), url: layerUrl(202), number: 202 },
     fingerprint: 'fingerprint',
-    reviews: [{ reviewer: 'unclebob', advice: fixturePanelAdvice() }],
+    reviews: [{ reviewer: 'unclebob', outcome: 'completed', advice: fixturePanelAdvice() }],
   },
 }
 
@@ -154,7 +154,9 @@ describe('stack review strip', () => {
     fireEvent.click(showLayers)
     const layers = screen.getByRole('list', { name: 'Layers, bottom to top' })
     expect(within(layers).getAllByRole('listitem')).toHaveLength(10)
-    expect(await screen.findByText('1 of 2 reviewers finished · Uncle Bob (Claude)')).toBeTruthy()
+    expect(
+      await screen.findByText('1 of 2 reviewers finished · Uncle Bob (Claude) · Completed'),
+    ).toBeTruthy()
     expect(panelCalls().length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide layers' }))
@@ -215,7 +217,9 @@ async function reviewAndOpen() {
 
   fireEvent.click(await screen.findByRole('button', { name: 'Show layers' }))
   expect(await screen.findByText('Panel seats · Uncle Bob (Claude), Avery (Codex)')).toBeTruthy()
-  expect(screen.getByText('1 of 2 reviewers finished · Uncle Bob (Claude)')).toBeTruthy()
+  expect(
+    screen.getByText('1 of 2 reviewers finished · Uncle Bob (Claude) · Completed'),
+  ).toBeTruthy()
   expect(screen.getByText('Waiting for panels on other PRs to finish…')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
   expect(call).toHaveBeenCalledWith(routes.startStackReview, {

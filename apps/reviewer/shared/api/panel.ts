@@ -14,13 +14,18 @@ import {
 import { groundingStateSchema } from '../domain/grounding'
 import { gateSchema } from '../domain/panelGate'
 import { layerRouteSchema, localRoundSchema, metadataDraftSchema } from '../domain/panelFix'
-import { panelSessionSummarySchema, type PanelSession } from '../domain/panelSession'
+import {
+  panelSeatOutcomeSchema,
+  panelSessionSummarySchema,
+  type PanelSession,
+} from '../domain/panelSession'
 import { organizationSchema } from '../domain/preferences'
 import { defineRoute, idParams, pullUrlSchema, repositoryQuery } from './contract'
 import { pullSchema } from './reviewSchemas'
 
 const review = z.object({
   reviewer: seatIdSchema,
+  outcome: panelSeatOutcomeSchema.optional(),
   advice: panelAdviceSchema.optional(),
   unplaced: z.array(z.object({ finding: panelFindingSchema, problem: z.string() })).optional(),
   capped: z.boolean().optional(),

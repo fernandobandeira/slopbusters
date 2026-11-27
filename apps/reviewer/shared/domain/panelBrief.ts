@@ -13,7 +13,7 @@ import {
 import { groundingImpactLabels, seriousClaim, settleSerious } from './impact'
 import type { JudgedFinding, PanelReviewer } from './panel'
 import { gateItems, type GateItem, type GateRoute } from './panelGate'
-import { panelFindingMarkdown, panelReviewMarkdown } from './panelMarkdown'
+import { panelFindingMarkdown, panelReviewerOutcomes, panelReviewMarkdown } from './panelMarkdown'
 import type { PanelResult } from './panelSession'
 import { pullName } from './pullUrl'
 
@@ -82,7 +82,7 @@ function entryFacts(entry: ResolvedEntry): string[] {
 export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer[]): string {
   const resolved = result.grounding?.resolved
   if (!resolved?.length)
-    return [revisionHeader(result), panelReviewMarkdown(result.advice, reviewers)].join('\n\n')
+    return [revisionHeader(result), panelReviewMarkdown(result, reviewers)].join('\n\n')
   const candidates = result.grounding?.candidates ?? []
   const items = gateItems(resolved, result.gate, result.pull.number)
   const chosen = chosenFixes(items)
@@ -106,6 +106,7 @@ export function panelBriefMarkdown(result: PanelResult, reviewers: PanelReviewer
   return [
     `Panel review of ${pullName(result.pull)}, "${result.pull.title}" (${result.pull.url}). Reviewers raised findings, two models grounded them against the code, and ${result.gate ? 'the author chose which to fix' : 'the panel selected fixes by default'}.`,
     revisionHeader(result),
+    `Reviewers: ${panelReviewerOutcomes(result.reviews, reviewers)}`,
     `## Verdict\n\n${result.advice.summary}`,
     seriousSection(items, chosen, candidates),
     chosen.length

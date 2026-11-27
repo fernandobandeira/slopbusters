@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getPanel } from '../../../shared/api'
 import type { PanelReviewer } from '../../../shared/domain/panel'
-import type { PanelSession } from '../../../shared/domain/panelSession'
+import { panelSeatOutcomeLabel, type PanelSession } from '../../../shared/domain/panelSession'
 import { providerLabel } from '../../../shared/domain/preferences'
 import {
   layerProgress,
@@ -41,14 +41,12 @@ function panelProgress(layer: StackLayer, panel?: PanelSession) {
   if (layer.state !== 'reviewing' || !panel || layer.note) return layerProgress(layer)
   const pending = panel.pending
   if (pending && pending.pull.url !== layer.url) return 'Waiting for its turn in the panel.'
-  const finished = new Set(
-    pending?.reviews.filter((review) => review.advice).map((review) => review.reviewer),
-  )
-  const names = panel.reviewers
-    .filter((seat) => finished.has(seat.id))
-    .map((seat) => seatName(panel, seat))
-  if (names.length)
-    return `${String(names.length)} of ${String(panel.reviewers.length)} reviewers finished · ${names.join(', ')}`
+  const outcomes = panel.reviewers.flatMap((seat) => {
+    const review = pending?.reviews.find((item) => item.reviewer === seat.id)
+    return review ? [`${seatName(panel, seat)} · ${panelSeatOutcomeLabel(review)}`] : []
+  })
+  if (outcomes.length)
+    return `${String(outcomes.length)} of ${String(panel.reviewers.length)} reviewers finished · ${outcomes.join(', ')}`
   return panel.progress.replace(new RegExp(` (?:on )?PR #${String(layer.number)}\\b`), '')
 }
 

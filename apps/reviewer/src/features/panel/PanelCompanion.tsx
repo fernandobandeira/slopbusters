@@ -4,7 +4,11 @@ import { Button } from '~/components/ui/button'
 import * as routes from '../../../shared/api'
 import { anchorLine } from '../../../shared/domain/anchors'
 import { snapshotMatches } from '../../../shared/domain/findings'
-import type { PanelResult, PanelSession } from '../../../shared/domain/panelSession'
+import {
+  panelSeatOutcomeLabel,
+  type PanelResult,
+  type PanelSession,
+} from '../../../shared/domain/panelSession'
 import type { Teammate } from '../../../shared/domain/teammates'
 import { ContinueInT3CodeButton } from '../../components/ContinueInT3CodeButton'
 import { ReviewerFace } from '../../components/ReviewerFace'
@@ -96,12 +100,15 @@ function PanelBody({
   return (
     <>
       {session && (
-        <PanelProgress
-          job={job}
-          session={session}
-          teammates={teammates}
-          hasResult={Boolean(tour.result)}
-        />
+        <>
+          <ReviewerRoster
+            session={session}
+            url={context.pull.url}
+            result={tour.result}
+            teammates={teammates}
+          />
+          <PanelProgress job={job} session={session} hasResult={Boolean(tour.result)} />
+        </>
       )}
       {session && tour.result && (
         <RoundNotice session={session} result={tour.result} context={context} />
@@ -162,23 +169,19 @@ function RoundNotice({
   )
 }
 
-/** While reviewers work: who is done, who failed, and what the user can do about it. */
+/** The panel’s progress and the actions available in its current state. */
 function PanelProgress({
   job,
   session,
-  teammates,
   hasResult,
 }: {
   job: Job
   session: PanelSession
-  teammates?: Teammate[]
   hasResult: boolean
 }) {
   const { busy, act } = job
-  const showRoster = session.status === 'running' || session.status === 'partial'
   return (
     <>
-      {showRoster && <ReviewerRoster session={session} teammates={teammates} />}
       {session.status === 'running' && (
         <div className="linus-working" role="status">
           <LoaderCircle size={15} className="animate-spin" />
@@ -221,30 +224,50 @@ function PanelProgress({
   )
 }
 
-function ReviewerRoster({ session, teammates }: { session: PanelSession; teammates?: Teammate[] }) {
-  const reviews = session.pending?.reviews ?? []
+function ReviewerRoster({
+  session,
+  url,
+  result,
+  teammates,
+}: {
+  session: PanelSession
+  url: string
+  result?: PanelResult
+  teammates?: Teammate[]
+}) {
+  const round = result ?? (session.pending?.pull.url === url ? session.pending : undefined)
+  const reviewing = session.status === 'running' && session.urls[session.results.length] === url
+  if (!round && !reviewing) return null
+  const reviews = round?.reviews ?? []
   return (
     <ul className="panel-roster" aria-label="Reviewers">
       {session.reviewers.map((reviewer) => {
         const review = reviews.find((item) => item.reviewer === reviewer.id)
-        const state = review ? (review.advice ? 'done' : 'failed') : 'working'
+        const outcome = review?.outcome
+        const working = reviewing && !review
         return (
-          <li key={reviewer.id} className={`panel-roster-${state}`} title={review?.error}>
+          <li
+            key={reviewer.id}
+            className={`panel-roster-${outcome ?? 'unknown'}`}
+            title={review?.error}
+          >
             <ReviewerFace
               name={reviewer.name}
               src={reviewerFaceSrc(
                 reviewer.id,
-                state === 'failed' ? 'resigned' : 'thinking',
+                outcome === 'failed' ? 'resigned' : 'thinking',
                 teammates,
               )}
               size={24}
             />
             <span>{reviewer.name}</span>
             <ProviderMark reviewer={reviewer} />
-            {state === 'done' && <Check size={13} aria-label="finished" />}
-            {state === 'failed' && <CircleAlert size={13} aria-label="failed" />}
-            {state === 'working' && session.status === 'running' && (
+            {outcome === 'completed' && <Check size={13} aria-hidden="true" />}
+            {outcome === 'failed' && <CircleAlert size={13} aria-hidden="true" />}
+            {working ? (
               <LoaderCircle size={13} className="animate-spin" aria-label="reviewing" />
+            ) : (
+              <span className="muted">{panelSeatOutcomeLabel(review)}</span>
             )}
           </li>
         )

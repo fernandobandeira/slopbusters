@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as routes from '../../../../shared/api'
@@ -64,7 +64,7 @@ function session(): PanelSession {
         fingerprint: 'f',
         advice,
         reviews: [
-          { reviewer: 'unclebob', advice: fixturePanelAdvice() },
+          { reviewer: 'unclebob', outcome: 'completed', advice: fixturePanelAdvice() },
           {
             reviewer: 'teammate:avery',
             advice: fixturePanelAdvice(),
@@ -118,6 +118,9 @@ describe('the review panel companion', () => {
     expect(
       await screen.findByRole('heading', { name: 'Who may edit archived projects?' }),
     ).toBeTruthy()
+    const roster = within(screen.getByRole('list', { name: 'Reviewers' }))
+    expect(roster.getByText('Uncle Bob').closest('li')?.textContent).toContain('Completed')
+    expect(roster.getByText('Avery').closest('li')?.textContent).toContain('Unknown')
     expect(screen.getByText('Should fix · Question for the author')).toBeTruthy()
     expect(screen.getByRole('img', { name: 'Raised by Avery, Uncle Bob' })).toBeTruthy()
     expect(screen.queryByText('Block archived projects.')).toBeNull()

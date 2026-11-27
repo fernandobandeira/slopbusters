@@ -175,7 +175,7 @@
   border-radius: 999px;
   font-size: 11px;
 }
-.panel-roster-done svg {
+.panel-roster-completed svg {
   color: var(--success);
 }
 .panel-roster-failed svg {

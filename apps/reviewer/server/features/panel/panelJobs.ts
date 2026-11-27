@@ -44,7 +44,7 @@ import {
   stackTop,
 } from './panelPreparation'
 import { groundPanel } from './groundingDebate'
-import { reviewAsPanelist } from './panelReview'
+import { cancelPendingSeats, landedPanelReview, reviewAsPanelist } from './panelReview'
 import { openStackTop, writeLayerFiles, type StackFolders } from './stackFolders'
 
 interface Options extends Pick<
@@ -145,8 +145,10 @@ export class PanelJobs {
     return session
   }
   get(id: string): PanelSession {
-    const session = this.jobs.session(id) ?? this.options.store.get(id)
+    const live = this.jobs.session(id)
+    const session = live ?? this.options.store.get(id)
     if (!session) throw new UserError('This panel review is no longer available.', 404)
+    if (!live && session.status === 'running') cancelPendingSeats(session)
     return this.jobs.recover(
       session,
       'Panel review interrupted when the app stopped. Reviewed PRs are saved.',
@@ -177,6 +179,7 @@ export class PanelJobs {
     this.jobs.abort(id)
     const session = this.get(id)
     if (session.status === 'running' || session.status === 'partial') {
+      cancelPendingSeats(session)
       session.status = 'cancelled'
       session.queued = undefined
       session.progress = 'Panel review cancelled. Reviewed PRs are saved.'
@@ -218,6 +221,7 @@ export class PanelJobs {
         mode = 'fresh'
       }
     }
+    signal.throwIfAborted()
     session.status = 'complete'
     this.progress(
       session,
@@ -319,19 +323,8 @@ export class PanelJobs {
       concurrency: PANEL_REVIEWER_CONCURRENCY,
       review: (reviewer) => this.reviewOne(session, pending, reviewer, run),
       failure: (reviewer) => `${reviewer.name} failed.`,
-      landed: (reviewer, { advice: seat, error }) => {
-        pending.reviews.push({
-          reviewer: reviewer.id,
-          ...(seat
-            ? {
-                advice: seat.advice,
-                ...(seat.capped ? { capped: true } : {}),
-                ...(seat.unplaced.length ? { unplaced: seat.unplaced } : {}),
-                ...(seat.skillDigest ? { skillDigest: seat.skillDigest } : {}),
-              }
-            : {}),
-          ...(error === undefined ? {} : { error }),
-        })
+      landed: (reviewer, outcome) => {
+        pending.reviews.push(landedPanelReview(reviewer.id, outcome))
         this.reportReviewers(session, pending)
       },
     })
